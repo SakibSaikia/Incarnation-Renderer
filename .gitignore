@@ -12,5 +12,6 @@
 *.pch
 
 #Directories
-out
+build
+bin
 .vs

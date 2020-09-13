@@ -24,7 +24,8 @@ string(TIMESTAMP seed %s)
 string(RANDOM LENGTH 6 RANDOM_SEED ${seed} suffix)
 string(CONCAT unique_name ${module_name} "_" ${suffix})
 
-if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND
+    EXISTS ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.pdb)
     # Move PDB file to new location so that we can rebuild while file is locked. VS allows that for locked files.
     add_custom_command(
             TARGET libdemo PRE_BUILD
