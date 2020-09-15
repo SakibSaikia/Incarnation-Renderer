@@ -118,7 +118,7 @@ bool Demo::InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const 
 bool Demo::Initialize(HINSTANCE instanceHandle, HWND& windowHandle, const uint32_t windowId)
 {
 	bool ok = InitializeWindow(instanceHandle, windowHandle, windowId);
-	ok = ok && D3D12::Initialize();
+	ok = ok && D3D12::Initialize(windowHandle);
 
 	return ok;
 }
