@@ -12,10 +12,10 @@ add_compile_definitions(UNICODE _UNICODE LIB_DEMO_NAME=L"libdemo" LIB_DEMO_DIR=L
 
 target_link_directories(demo PUBLIC "${CMAKE_BINARY_DIR}")
 
-if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-	target_link_directories(demo PUBLIC "${CMAKE_SOURCE_DIR}/ext/enkiTS/lib/debug")
-else()
-	target_link_directories(demo PUBLIC "${CMAKE_SOURCE_DIR}/ext/enkiTS/lib/release")
-endif()
-
-target_link_libraries(demo PRIVATE enkiTS.lib)
+#if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+#	target_link_directories(demo PUBLIC "${CMAKE_SOURCE_DIR}/ext/enkiTS/lib/debug")
+#else()
+#	target_link_directories(demo PUBLIC "${CMAKE_SOURCE_DIR}/ext/enkiTS/lib/release")
+#endif()
+#
+#target_link_libraries(demo PRIVATE enkiTS.lib)
