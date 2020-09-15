@@ -1,5 +1,6 @@
 # demo-d3d12
 
 ## Hot Reloading
-* Regenerate CMake cache
-* Build
+* Open VS developer window (_x64 specifically_)
+* Navigate to path with build.ninja file
+* Use `ninja <targetname>` eg. ninja libdemo to build dll

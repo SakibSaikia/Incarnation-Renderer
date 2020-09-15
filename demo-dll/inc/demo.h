@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <string>
 #include <WindowsX.h>
@@ -13,4 +14,4 @@ namespace Demo
 
 	bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32_t windowId);
 	void OnMouseMove(WPARAM btnState, int x, int y);
-};
+}

@@ -1,4 +1,5 @@
 ﻿#include <demo.h>
+#include <d3d12layer.h>
 #include <settings.h>
 #include <sstream>
 
@@ -89,8 +90,8 @@ bool Demo::InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const 
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
-		Settings::k_screenWidth,
-		Settings::k_screenHeight,
+		Demo::Settings::k_screenWidth,
+		Demo::Settings::k_screenHeight,
 		nullptr,
 		nullptr,
 		instanceHandle,
@@ -116,7 +117,10 @@ bool Demo::InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const 
 
 bool Demo::Initialize(HINSTANCE instanceHandle, HWND& windowHandle, const uint32_t windowId)
 {
-	return InitializeWindow(instanceHandle, windowHandle, windowId);
+	bool ok = InitializeWindow(instanceHandle, windowHandle, windowId);
+	ok = ok && D3D12::Initialize();
+
+	return ok;
 }
 
 void Demo::Tick(float dt)

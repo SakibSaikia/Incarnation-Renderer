@@ -1,7 +1,10 @@
 #pragma once
 
-namespace Settings
+namespace Demo
 {
-	constexpr size_t k_screenWidth = 1280;
-	constexpr size_t k_screenHeight = 720;
+	namespace Settings
+	{
+		constexpr size_t k_screenWidth = 1280;
+		constexpr size_t k_screenHeight = 720;
+	}
 }

@@ -7,7 +7,7 @@ set(module_name "libdemo")
 # Target
 add_library(
     ${module_name} MODULE 
-    "src/demo.cpp")
+    "src/demo.cpp" "inc/d3d12layer.h" "src/d3d12layer.cpp")
 
 # Include path
 include_directories(
@@ -40,3 +40,8 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND
                     ${CMAKE_CURRENT_BINARY_DIR}/${unique_name}.pdb
                     ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.pdb)
 endif()
+
+target_link_libraries(
+    libdemo 
+    PRIVATE dxgi.lib
+    PRIVATE d3d12.lib)
