@@ -7,7 +7,9 @@ set(module_name "libdemo")
 # Target
 add_library(
     ${module_name} MODULE 
-    "src/demo.cpp" "inc/d3d12layer.h" "src/d3d12layer.cpp")
+    "src/demo.cpp"
+    "src/d3d12layer.cpp" 
+    "src/renderer.cpp")
 
 # Include path
 include_directories(

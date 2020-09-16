@@ -1,30 +1,18 @@
-#define WIN32_LEAN_AND_MEAN
 #include <d3d12layer.h>
 #include <settings.h>
-#include <windows.h>
-#include <dxgi1_4.h>
-#include <d3d12.h>
-#include <wrl.h>
+#include <ppltasks.h>
 #include <cassert>
 #include <string>
 #include <sstream>
 #include <array>
+#include <list>
 
-using DXGIFactory_t = IDXGIFactory4;
-using DXGIAdapter_t = IDXGIAdapter;
-using DXGISwapChain_t = IDXGISwapChain3;
-using D3DDebug_t = ID3D12Debug;
-using D3DDevice_t = ID3D12Device5;
-using D3DCommandQueue_t = ID3D12CommandQueue;
-using D3DCommandAllocator_t = ID3D12CommandAllocator;
-using D3DDescriptorHeap_t = ID3D12DescriptorHeap;
-using D3DResource_t = ID3D12Resource;
-
-using namespace Demo::D3D12;
-
+// Constants
 constexpr size_t k_bindlessSrvHeapSize = 1000;
 constexpr size_t k_backBufferCount = 2;
 constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+
+using namespace Demo::D3D12;
 
 namespace
 {
@@ -59,6 +47,69 @@ namespace
 	}
 }
 
+class FCommandListPool
+{
+public:
+	FCommandList* GetOrCreate(const D3D12_COMMAND_LIST_TYPE type)
+	{
+		// Reuse CL
+		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
+		{
+			if ((*it)->m_type == type)
+			{
+				m_useList.push_back(std::move(*it));
+				m_freeList.erase(it);
+				
+				FCommandList* cl = m_useList.back().get();
+				cl->m_fenceValue = ++m_fenceCounter;
+				return cl;
+			}
+		}
+
+		// New CL
+		m_useList.emplace_back(std::make_unique<FCommandList>(type, ++m_fenceCounter));
+		return m_useList.back().get();
+	}
+
+	void Retire(FCommandList* cmdList)
+	{
+		auto waitForFenceTask = concurrency::create_task([cmdList, this]()
+		{
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				assert(cmdList->m_fenceValue != 0);
+				cmdList->m_fence->SetEventOnCompletion(cmdList->m_fenceValue, event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		});
+
+		auto addToFreePool = [cmdList, this]()
+		{
+			for (auto it = m_useList.begin(); it != m_useList.end(); ++it)
+			{
+				if (it->get() == cmdList)
+				{
+					m_freeList.push_back(std::move(*it));
+					m_useList.erase(it);
+
+					FCommandList* cl = m_freeList.back().get();
+					cl->m_fenceValue = 0;
+					cl->m_cmdAllocator.Reset();
+					break;
+				}
+			}
+		};
+
+		waitForFenceTask.then(addToFreePool);
+	}
+
+private:
+	std::atomic_size_t m_fenceCounter{ 0 };
+	std::list<std::unique_ptr<FCommandList>> m_freeList;
+	std::list<std::unique_ptr<FCommandList>> m_useList;
+};
+
 
 namespace Demo
 {
@@ -81,23 +132,28 @@ namespace Demo
 		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_graphicsQueue;
 		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_computeQueue;
 		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_copyQueue;
+
+		FCommandListPool s_commandListPool;
 	}
 } 
 
 
 bool Demo::D3D12::Initialize(HWND& windowHandle)
 {
+	UINT dxgiFactoryFlags = 0;
+
 	// Debug layer
 #if defined(DEBUG) || defined(_DEBUG)
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(s_debugController.GetAddressOf()))))
 	{
 		s_debugController->EnableDebugLayer();
+		dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 	}
 #endif
 
 	// DXGI Factory
 	assert(SUCCEEDED(
-		CreateDXGIFactory1(IID_PPV_ARGS(s_dxgiFactory.GetAddressOf()))
+		CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(s_dxgiFactory.GetAddressOf()))
 	));
 
 	// Adapter
@@ -189,7 +245,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	));
 
 	// Back buffers
-	for (auto bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
+	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
 		assert(SUCCEEDED(
 			s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(s_backBuffers[bufferIdx].GetAddressOf()))
@@ -205,4 +261,48 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
 
 	return true;
+}
+
+D3DDevice_t* Demo::D3D12::GetDevice()
+{
+	return s_d3dDevice.Get();
+}
+
+FCommandList* Demo::D3D12::AcquireCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+{
+	return s_commandListPool.GetOrCreate(type);
+}
+
+void Demo::D3D12::ReleaseCommandList(FCommandList* cmdList)
+{
+	s_commandListPool.Retire(cmdList);
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBuffer()
+{
+	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
+	descriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
+		s_currentBufferIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
+
+	return descriptor;
+}
+
+FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue) :
+	m_type{ type },
+	m_fenceValue{ fenceValue }
+{
+	assert(SUCCEEDED(
+		GetDevice()->CreateCommandAllocator(
+			type,
+			IID_PPV_ARGS(m_cmdAllocator.GetAddressOf()))
+	));
+
+	assert(SUCCEEDED(
+		GetDevice()->CreateCommandList(
+			0,
+			type,
+			m_cmdAllocator.Get(),
+			nullptr,
+			IID_PPV_ARGS(m_cmdList.GetAddressOf()))
+	));
 }

@@ -128,11 +128,6 @@ void Demo::Tick(float dt)
 
 }
 
-void Demo::Render()
-{
-
-}
-
 void Demo::Teardown(HWND& windowHandle)
 {
 	if (windowHandle)
