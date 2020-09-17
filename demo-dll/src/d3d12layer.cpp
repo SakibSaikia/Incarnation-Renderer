@@ -9,7 +9,7 @@
 
 // Constants
 constexpr size_t k_bindlessSrvHeapSize = 1000;
-constexpr size_t k_backBufferCount = 2;
+constexpr uint32_t k_backBufferCount = 2;
 constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 
 using namespace Demo::D3D12;
@@ -273,18 +273,71 @@ FCommandList* Demo::D3D12::AcquireCommandlist(const D3D12_COMMAND_LIST_TYPE type
 	return s_commandListPool.GetOrCreate(type);
 }
 
-void Demo::D3D12::ReleaseCommandList(FCommandList* cmdList)
-{
-	s_commandListPool.Retire(cmdList);
-}
-
-D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBuffer()
+D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
 	descriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
 		s_currentBufferIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
 
 	return descriptor;
+}
+
+D3DResource_t* Demo::D3D12::GetBackBufferResource()
+{
+	return s_backBuffers[s_currentBufferIndex].Get();
+}
+
+D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists)
+{
+	std::vector<ID3D12CommandList*> d3dCommandLists;
+	size_t latestFenceValue = 0;
+	D3DFence_t* latestFence = {};
+
+	// Accumulate CLs and keep tab of the latest fence
+	for (FCommandList* cl : commandLists)
+	{
+		D3DCommandList_t* d3dCL = cl->m_cmdList.Get();
+		d3dCL->Close();
+		d3dCommandLists.push_back(d3dCL);
+
+		if (cl->m_fenceValue > latestFenceValue)
+		{
+			latestFenceValue = cl->m_fenceValue;
+			latestFence = cl->m_fence.Get();
+		}
+	}
+
+	// Figure out which command queue to use
+	D3DCommandQueue_t* activeCommandQueue{};
+	switch (commandQueueType)
+	{
+	case D3D12_COMMAND_LIST_TYPE_DIRECT:
+		activeCommandQueue = s_graphicsQueue.Get();
+		break;
+	case D3D12_COMMAND_LIST_TYPE_COMPUTE:
+		activeCommandQueue = s_computeQueue.Get();
+		break;
+	case D3D12_COMMAND_LIST_TYPE_COPY:
+		activeCommandQueue = s_copyQueue.Get();
+		break;
+	}
+
+	// Execute commands, signal the CL fences and retire the CLs
+	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
+	for (FCommandList* cl : commandLists)
+	{
+		activeCommandQueue->Signal(cl->m_fence.Get(), cl->m_fenceValue);
+		s_commandListPool.Retire(cl);
+	}
+
+	// Return the latest fence
+	return latestFence;
+}
+
+void Demo::D3D12::PresentDisplay()
+{
+	s_swapChain->Present(1, 0);
+	s_currentBufferIndex = (s_currentBufferIndex + 1) % k_backBufferCount;
 }
 
 FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue) :
@@ -304,5 +357,12 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fen
 			m_cmdAllocator.Get(),
 			nullptr,
 			IID_PPV_ARGS(m_cmdList.GetAddressOf()))
+	));
+
+	assert(SUCCEEDED(
+		GetDevice()->CreateFence(
+			0,
+			D3D12_FENCE_FLAG_NONE,
+			IID_PPV_ARGS(m_fence.GetAddressOf()))
 	));
 }

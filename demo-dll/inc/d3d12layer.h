@@ -5,6 +5,7 @@
 #include <dxgi1_4.h>
 #include <d3d12.h>
 #include <wrl.h>
+#include <vector>
 
 // Aliased types
 using DXGIFactory_t = IDXGIFactory4;
@@ -16,29 +17,19 @@ using D3DCommandQueue_t = ID3D12CommandQueue;
 using D3DCommandAllocator_t = ID3D12CommandAllocator;
 using D3DDescriptorHeap_t = ID3D12DescriptorHeap;
 using D3DResource_t = ID3D12Resource;
-using D3DCommandList_t = ID3D12CommandList;
-using D3DGraphicsCommandList_t = ID3D12GraphicsCommandList4;
+using D3DCommandList_t = ID3D12GraphicsCommandList4;
 using D3DFence_t = ID3D12Fence1;
 
-class FCommandList
+struct FCommandList
 {
-	friend class FCommandListPool;
-
-public:
 	FCommandList() = delete;
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
 
-	template<typename T> T* Get()
-	{
-		return static_cast<T*>(m_cmdList.Get());
-	}
-
-private:
 	D3D12_COMMAND_LIST_TYPE m_type;
 	size_t m_fenceValue;
 	Microsoft::WRL::ComPtr<D3DCommandList_t> m_cmdList;
 	Microsoft::WRL::ComPtr<D3DCommandAllocator_t> m_cmdAllocator;
-	Microsoft::WRL::ComPtr<ID3D12Fence> m_fence;
+	Microsoft::WRL::ComPtr<D3DFence_t> m_fence;
 };
 
 namespace Demo
@@ -50,8 +41,11 @@ namespace Demo
 		D3DDevice_t* GetDevice();
 
 		FCommandList* AcquireCommandlist(const D3D12_COMMAND_LIST_TYPE type);
-		void ReleaseCommandList(FCommandList* cmdList);
+		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBuffer();
+		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
+		D3DResource_t* GetBackBufferResource();
+
+		void PresentDisplay();
 	}
 }
