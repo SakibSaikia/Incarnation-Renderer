@@ -37,6 +37,7 @@ namespace Demo
 	namespace D3D12
 	{
 		bool Initialize(HWND& windowHandle);
+		void Teardown();
 
 		D3DDevice_t* GetDevice();
 

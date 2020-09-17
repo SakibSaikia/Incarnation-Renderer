@@ -132,6 +132,7 @@ void Demo::Teardown(HWND& windowHandle)
 {
 	if (windowHandle)
 	{
+		D3D12::Teardown();
 		DestroyWindow(windowHandle);
 		windowHandle = {};
 	}

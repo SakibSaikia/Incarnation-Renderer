@@ -1,11 +1,12 @@
 #include <d3d12layer.h>
 #include <settings.h>
 #include <ppltasks.h>
-#include <cassert>
+#include <assert.h>
 #include <string>
 #include <sstream>
 #include <array>
 #include <list>
+#include <system_error>
 
 // Constants
 constexpr size_t k_bindlessSrvHeapSize = 1000;
@@ -16,6 +17,18 @@ using namespace Demo::D3D12;
 
 namespace
 {
+	inline void AssertIfFailed(HRESULT hr)
+	{
+	#if defined _DEBUG
+		if (FAILED(hr))
+		{
+			std::string message = std::system_category().message(hr);
+			OutputDebugStringA(message.c_str());
+			_CrtDbgBreak();
+		}
+	#endif
+	}
+
 	Microsoft::WRL::ComPtr<DXGIAdapter_t> EnumerateAdapters(DXGIFactory_t* dxgiFactory)
 	{
 		Microsoft::WRL::ComPtr<DXGIAdapter_t> bestAdapter;
@@ -52,6 +65,8 @@ class FCommandListPool
 public:
 	FCommandList* GetOrCreate(const D3D12_COMMAND_LIST_TYPE type)
 	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+
 		// Reuse CL
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
@@ -86,17 +101,24 @@ public:
 
 		auto addToFreePool = [cmdList, this]()
 		{
-			for (auto it = m_useList.begin(); it != m_useList.end(); ++it)
+			const std::lock_guard<std::mutex> lock(m_mutex);
+
+			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
 				if (it->get() == cmdList)
 				{
 					m_freeList.push_back(std::move(*it));
-					m_useList.erase(it);
+					it = m_useList.erase(it);
 
 					FCommandList* cl = m_freeList.back().get();
 					cl->m_fenceValue = 0;
-					cl->m_cmdAllocator.Reset();
+					cl->m_cmdAllocator->Reset();
+					cl->m_cmdList->Reset(cl->m_cmdAllocator.Get(), nullptr);
 					break;
+				}
+				else
+				{
+					++it;
 				}
 			}
 		};
@@ -106,6 +128,7 @@ public:
 
 private:
 	std::atomic_size_t m_fenceCounter{ 0 };
+	std::mutex m_mutex;
 	std::list<std::unique_ptr<FCommandList>> m_freeList;
 	std::list<std::unique_ptr<FCommandList>> m_useList;
 };
@@ -143,29 +166,25 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	UINT dxgiFactoryFlags = 0;
 
 	// Debug layer
-#if defined(DEBUG) || defined(_DEBUG)
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(s_debugController.GetAddressOf()))))
-	{
-		s_debugController->EnableDebugLayer();
-		dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-	}
+#if defined(_DEBUG)
+	AssertIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(s_debugController.GetAddressOf())));
+	s_debugController->EnableDebugLayer();
+	dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 
 	// DXGI Factory
-	assert(SUCCEEDED(
-		CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(s_dxgiFactory.GetAddressOf()))
-	));
+	AssertIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(s_dxgiFactory.GetAddressOf())));
 
 	// Adapter
 	Microsoft::WRL::ComPtr<DXGIAdapter_t> adapter = EnumerateAdapters(s_dxgiFactory.Get());
 
 	// Device
-	assert(SUCCEEDED(
+	AssertIfFailed(
 		D3D12CreateDevice(
 			adapter.Get(),
 			D3D_FEATURE_LEVEL_12_1,
 			IID_PPV_ARGS(s_d3dDevice.GetAddressOf()))
-	));
+	);
 
 	// Cache descriptor sizes
 	for (int typeId = 0; typeId < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++typeId)
@@ -177,45 +196,40 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {};
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 	cmdQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	assert(SUCCEEDED(
-		s_d3dDevice->CreateCommandQueue(
-			&cmdQueueDesc,
-			IID_PPV_ARGS(s_graphicsQueue.GetAddressOf()))
-	));
+	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_graphicsQueue.GetAddressOf())));
+	s_graphicsQueue->SetName(L"Graphics Queue");
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
-	assert(SUCCEEDED(
-		s_d3dDevice->CreateCommandQueue(
-			&cmdQueueDesc,
-			IID_PPV_ARGS(s_computeQueue.GetAddressOf()))
-	));
+	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_computeQueue.GetAddressOf())));
+	s_computeQueue->SetName(L"Compute Queue");
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
-	assert(SUCCEEDED(
-		s_d3dDevice->CreateCommandQueue(
-			&cmdQueueDesc,
-			IID_PPV_ARGS(s_copyQueue.GetAddressOf()))
-	));
+	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.GetAddressOf())));
+	s_copyQueue->SetName(L"Copy Queue");
 
 	// Bindless SRV heap
 	D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
 	cbvSrvUavHeapDesc.NumDescriptors = k_bindlessSrvHeapSize;
 	cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	assert(SUCCEEDED(
+	AssertIfFailed(
 		s_d3dDevice->CreateDescriptorHeap(
 			&cbvSrvUavHeapDesc,
 			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetAddressOf()))
-	));
+	);
+	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"Bindless Descriptor Heap");
 
 	// RTV heap
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
 	rtvHeapDesc.NumDescriptors = 20;
 	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	assert(SUCCEEDED(
-		s_d3dDevice->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].GetAddressOf()))
-	));
+	AssertIfFailed(
+		s_d3dDevice->CreateDescriptorHeap(
+			&rtvHeapDesc, 
+			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].GetAddressOf()))
+	);
+	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->SetName(L"RTV Heap");
 
 	// Swap chain
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -230,7 +244,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
 	Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
-	assert(SUCCEEDED(
+	AssertIfFailed(
 		s_dxgiFactory->CreateSwapChainForHwnd(
 			s_graphicsQueue.Get(),
 			windowHandle,
@@ -238,18 +252,17 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 			nullptr,
 			nullptr,
 			swapChain.GetAddressOf())
-	));
+	);
 
-	assert(SUCCEEDED(
+	AssertIfFailed(
 		swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.GetAddressOf()))
-	));
+	);
 
 	// Back buffers
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
-		assert(SUCCEEDED(
-			s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(s_backBuffers[bufferIdx].GetAddressOf()))
-		));
+		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(s_backBuffers[bufferIdx].GetAddressOf())));
+		s_backBuffers[bufferIdx]->SetName(L"Back Buffer");
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor;
 		rtvDescriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -261,6 +274,19 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
 
 	return true;
+}
+
+void Demo::D3D12::Teardown()
+{
+	Microsoft::WRL::ComPtr<D3DFence_t> flushFence;
+	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.GetAddressOf())));
+
+	HANDLE flushEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+
+	s_graphicsQueue->Signal(flushFence.Get(), 0xFF);
+	flushFence->SetEventOnCompletion(0xFF, flushEvent);
+
+	WaitForSingleObject(flushEvent, INFINITE);
 }
 
 D3DDevice_t* Demo::D3D12::GetDevice()
@@ -344,25 +370,22 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fen
 	m_type{ type },
 	m_fenceValue{ fenceValue }
 {
-	assert(SUCCEEDED(
-		GetDevice()->CreateCommandAllocator(
-			type,
-			IID_PPV_ARGS(m_cmdAllocator.GetAddressOf()))
-	));
+	
+	AssertIfFailed(GetDevice()->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.GetAddressOf())));
 
-	assert(SUCCEEDED(
+	AssertIfFailed(
 		GetDevice()->CreateCommandList(
 			0,
 			type,
 			m_cmdAllocator.Get(),
 			nullptr,
 			IID_PPV_ARGS(m_cmdList.GetAddressOf()))
-	));
+	);
 
-	assert(SUCCEEDED(
+	AssertIfFailed(
 		GetDevice()->CreateFence(
 			0,
 			D3D12_FENCE_FLAG_NONE,
 			IID_PPV_ARGS(m_fence.GetAddressOf()))
-	));
+	);
 }

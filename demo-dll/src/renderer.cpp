@@ -11,7 +11,8 @@ namespace
 		return concurrency::create_task([]
 		{
 			FCommandList* cmdList = Demo::D3D12::AcquireCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			auto d3dCmdList = cmdList->m_cmdList;
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
+			d3dCmdList->SetName(L"PreRenderJob CL");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
 			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -30,7 +31,8 @@ namespace
 		return concurrency::create_task([]
 		{
 			FCommandList* cmdList = Demo::D3D12::AcquireCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			auto d3dCmdList = cmdList->m_cmdList;
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
+			d3dCmdList->SetName(L"RenderJob CL");
 
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight };
@@ -52,7 +54,8 @@ namespace
 		return concurrency::create_task([]
 		{
 			FCommandList* cmdList = Demo::D3D12::AcquireCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			auto d3dCmdList = cmdList->m_cmdList;
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
+			d3dCmdList->SetName(L"PresentJob CL");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
 			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
