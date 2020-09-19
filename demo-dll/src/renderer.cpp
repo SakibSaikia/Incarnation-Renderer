@@ -3,10 +3,11 @@
 #include <settings.h>
 #include <ppltasks.h>
 #include <sstream>
+#include <assert.h>
 
-namespace
+namespace Jobs
 {
-	concurrency::task<FCommandList*> PreRenderJob()
+	concurrency::task<FCommandList*> PreRender()
 	{
 		return concurrency::create_task([]
 		{
@@ -26,7 +27,7 @@ namespace
 		});
 	}
 
-	concurrency::task<FCommandList*> RenderJob()
+	concurrency::task<FCommandList*> Render()
 	{
 		return concurrency::create_task([]
 		{
@@ -49,7 +50,7 @@ namespace
 		});
 	}
 
-	concurrency::task<FCommandList*> PresentJob()
+	concurrency::task<FCommandList*> Present()
 	{
 		return concurrency::create_task([]
 		{
@@ -72,9 +73,9 @@ namespace
 
 void Demo::Render()
 {
-	auto preRenderCL = PreRenderJob().get();
-	auto renderCL = RenderJob().get();
-	auto presentCL = PresentJob().get();
+	auto preRenderCL = Jobs::PreRender().get();
+	auto renderCL = Jobs::Render().get();
+	auto presentCL = Jobs::Present().get();
 
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL, presentCL });
 	Demo::D3D12::PresentDisplay();

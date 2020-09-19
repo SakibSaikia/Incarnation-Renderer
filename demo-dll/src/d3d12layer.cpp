@@ -1,11 +1,15 @@
 #include <d3d12layer.h>
 #include <settings.h>
+#include <shadercompiler.h>
 #include <ppltasks.h>
 #include <assert.h>
+#include <spookyhash_api.h>
 #include <string>
 #include <sstream>
+#include <fstream>
 #include <array>
 #include <list>
+#include <unordered_map>
 #include <system_error>
 
 // Constants
@@ -58,6 +62,89 @@ namespace
 
 		return bestAdapter;
 	}
+}
+
+template<>
+struct std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>
+{
+	std::size_t operator()(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& key) const
+	{
+		uint64_t seed1, seed2;
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, key.pRootSignature, sizeof(key.pRootSignature));
+		spookyhash_update(&context, key.VS.pShaderBytecode, key.VS.BytecodeLength);
+		spookyhash_update(&context, key.PS.pShaderBytecode, key.PS.BytecodeLength);
+		spookyhash_update(&context, key.DS.pShaderBytecode, key.DS.BytecodeLength);
+		spookyhash_update(&context, key.HS.pShaderBytecode, key.HS.BytecodeLength);
+		spookyhash_update(&context, key.GS.pShaderBytecode, key.GS.BytecodeLength);
+		spookyhash_update(&context, &key.StreamOutput, sizeof(key.StreamOutput));
+		spookyhash_update(&context, &key.BlendState, sizeof(key.BlendState));
+		spookyhash_update(&context, &key.SampleMask, sizeof(key.SampleMask));
+		spookyhash_update(&context, &key.RasterizerState, sizeof(key.RasterizerState));
+		spookyhash_update(&context, &key.DepthStencilState, sizeof(key.DepthStencilState));
+		spookyhash_update(&context, key.InputLayout.pInputElementDescs, key.InputLayout.NumElements * sizeof(D3D12_INPUT_LAYOUT_DESC));
+		spookyhash_update(&context, &key.IBStripCutValue, sizeof(key.IBStripCutValue));
+		spookyhash_update(&context, &key.PrimitiveTopologyType, sizeof(key.PrimitiveTopologyType));
+		spookyhash_update(&context, &key.NumRenderTargets, sizeof(key.NumRenderTargets));
+		spookyhash_update(&context, key.RTVFormats, sizeof(key.RTVFormats));
+		spookyhash_update(&context, &key.DSVFormat, sizeof(key.DSVFormat));
+		spookyhash_update(&context, &key.SampleDesc, sizeof(key.SampleDesc));
+		spookyhash_update(&context, &key.NodeMask, sizeof(key.NodeMask));
+		spookyhash_update(&context, key.CachedPSO.pCachedBlob, sizeof(key.CachedPSO.CachedBlobSizeInBytes));
+		spookyhash_update(&context, &key.Flags, sizeof(key.Flags));
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+template<>
+struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC >
+{
+	std::size_t operator()(const D3D12_COMPUTE_PIPELINE_STATE_DESC& key) const
+	{
+		uint64_t seed1, seed2;
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, key.pRootSignature, sizeof(key.pRootSignature));
+		spookyhash_update(&context, key.CS.pShaderBytecode, key.CS.BytecodeLength);
+		spookyhash_update(&context, &key.NodeMask, sizeof(key.NodeMask));
+		spookyhash_update(&context, key.CachedPSO.pCachedBlob, sizeof(key.CachedPSO.CachedBlobSizeInBytes));
+		spookyhash_update(&context, &key.Flags, sizeof(key.Flags));
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+template<>
+struct std::hash<FShaderDesc>
+{
+	std::size_t operator()(const FShaderDesc& key) const
+	{
+		uint64_t seed1, seed2;
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());
+		spookyhash_update(&context, key.m_entrypoint.c_str(), key.m_entrypoint.size());
+		spookyhash_update(&context, key.m_defines.c_str(), key.m_defines.size());
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+bool operator==(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& lhs, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& rhs)
+{
+	return memcmp(&lhs, &rhs, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC)) == 0;
+}
+
+bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
+{
+	return lhs.m_filename == rhs.m_filename &&
+		lhs.m_entrypoint == rhs.m_entrypoint &&
+		lhs.m_defines == rhs.m_defines;
 }
 
 class FCommandListPool
@@ -138,7 +225,7 @@ namespace Demo
 {
 	namespace D3D12
 	{
-#if defined(DEBUG) || defined (_DEBUG)
+#if defined (_DEBUG)
 		Microsoft::WRL::ComPtr<D3DDebug_t> s_debugController;
 #endif
 
@@ -157,9 +244,37 @@ namespace Demo
 		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_copyQueue;
 
 		FCommandListPool s_commandListPool;
+
+		std::mutex s_shaderCacheMutex;
+		std::unordered_map<FShaderDesc, Microsoft::WRL::ComPtr<IDxcBlob>> s_shaderCache;
+		std::unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
+		std::unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
 	}
 } 
 
+namespace
+{
+	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
+	{
+		auto search = s_shaderCache.find(shaderDesc);
+		if (search != s_shaderCache.cend())
+		{
+			return search->second.Get();
+		}
+		else
+		{
+			auto& shaderBlob = s_shaderCache[shaderDesc];
+			AssertIfFailed(Demo::ShaderCompiler::CompileShader(
+				shaderDesc.m_filename, 
+				shaderDesc.m_entrypoint, 
+				shaderDesc.m_defines,
+				profile, 
+				shaderBlob.GetAddressOf()));
+
+			return shaderBlob.Get();
+		}
+	}
+}
 
 bool Demo::D3D12::Initialize(HWND& windowHandle)
 {
@@ -297,6 +412,96 @@ D3DDevice_t* Demo::D3D12::GetDevice()
 FCommandList* Demo::D3D12::AcquireCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 {
 	return s_commandListPool.GetOrCreate(type);
+}
+
+D3DPipelineState_t* Demo::D3D12::AcquireGraphicsPipelineState(
+	const FShaderDesc& vs,
+	const FShaderDesc& ps,
+	const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,
+	const DXGI_FORMAT dsvFormat,
+	const uint32_t numRenderTargets,
+	const std::initializer_list<DXGI_FORMAT>& rtvFormats,
+	const std::initializer_list<D3D12_COLOR_WRITE_ENABLE>& colorWriteMask,
+	const bool depthEnable,
+	const D3D12_DEPTH_WRITE_MASK& depthWriteMask,
+	const D3D12_COMPARISON_FUNC& depthFunc)
+{
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+
+	// Primitive Topology
+	desc.PrimitiveTopologyType = primitiveTopology;
+
+	// Rasterizer State
+	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	desc.RasterizerState.FrontCounterClockwise = FALSE;
+	desc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+	desc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+	desc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+	desc.RasterizerState.DepthClipEnable = TRUE;
+	desc.RasterizerState.MultisampleEnable = FALSE;
+	desc.RasterizerState.AntialiasedLineEnable = FALSE;
+	desc.RasterizerState.ForcedSampleCount = 0;
+	desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+	// Blend State
+	desc.BlendState.AlphaToCoverageEnable = FALSE;
+	desc.BlendState.IndependentBlendEnable = FALSE;
+	for (auto& rt : desc.BlendState.RenderTarget)
+	{
+		rt.BlendEnable = FALSE;
+		rt.LogicOpEnable = FALSE;
+		rt.RenderTargetWriteMask = 0;
+	}
+
+	// Depth Stencil State
+	desc.DepthStencilState.DepthEnable = depthEnable;
+	desc.DepthStencilState.DepthWriteMask = depthWriteMask;
+	desc.DepthStencilState.DepthFunc = depthFunc;
+	desc.DepthStencilState.StencilEnable = FALSE;
+	desc.DSVFormat = dsvFormat;
+
+	// Render Target(s) State
+	assert(numRenderTargets == rtvFormats.size());
+	desc.NumRenderTargets = numRenderTargets;
+	int i = 0;
+	for (auto& format : rtvFormats)
+	{
+		desc.RTVFormats[i++] = format;
+	}
+
+	// Multi Sampling State
+	desc.SampleMask = UINT_MAX;
+	desc.SampleDesc.Count = 1;
+
+	const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
+
+	// Shaders
+	IDxcBlob* vsBytecode = CacheShader(vs, L"vs_6_4");
+	IDxcBlob* psBytecode = CacheShader(ps, L"ps_6_4");
+
+	desc.VS.pShaderBytecode = vsBytecode->GetBufferPointer();
+	desc.VS.BytecodeLength = vsBytecode->GetBufferSize();
+	desc.PS.pShaderBytecode = psBytecode->GetBufferPointer();
+	desc.PS.BytecodeLength = psBytecode->GetBufferSize();
+
+	// Create or Reuse
+	auto search = s_graphicsPSOPool.find(desc);
+	if (search != s_graphicsPSOPool.cend())
+	{
+		return search->second.Get();
+	}
+	else
+	{
+		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(s_graphicsPSOPool[desc].GetAddressOf())));
+		return s_graphicsPSOPool[desc].Get();
+	}
+}
+
+D3DPipelineState_t* Demo::D3D12::AcquireComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc)
+{
+	const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
+	return {};
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()

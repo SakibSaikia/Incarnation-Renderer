@@ -9,12 +9,14 @@ add_library(
     ${module_name} MODULE 
     "src/demo.cpp"
     "src/d3d12layer.cpp" 
+    "src/shadercompiler.cpp"
     "src/renderer.cpp")
 
 # Include path
 include_directories(
     "inc"
-    "../ext/enkiTS/inc")
+    "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
+    "${CMAKE_SOURCE_DIR}/ext/dxc/inc")
 
 # Macro defines
 add_compile_definitions(
@@ -43,7 +45,14 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND
                     ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.pdb)
 endif()
 
+target_link_directories(
+    libdemo 
+    PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
+    PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64")
+
 target_link_libraries(
     libdemo 
     PRIVATE dxgi.lib
-    PRIVATE d3d12.lib)
+    PRIVATE d3d12.lib
+    PRIVATE dxcompiler.lib
+    PRIVATE spookyhash.lib)
