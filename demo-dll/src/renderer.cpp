@@ -35,6 +35,17 @@ namespace Jobs
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
 			d3dCmdList->SetName(L"RenderJob CL");
 
+			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(
+				{ L"hello.hlsl", L"vs_main", L"" },
+				{ L"hello.hlsl", L"vs_main", L"" },
+				D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
+				DXGI_FORMAT_UNKNOWN,
+				1,
+				{ Demo::Settings::k_backBufferFormat },
+				{ D3D12_COLOR_WRITE_ENABLE_ALL },
+				false
+			);
+
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight };
 			d3dCmdList->RSSetViewports(1, &viewport);

@@ -64,7 +64,7 @@ namespace Demo
 			const uint32_t numRenderTargets,
 			const std::initializer_list<DXGI_FORMAT>& rtvFormats,
 			const std::initializer_list<D3D12_COLOR_WRITE_ENABLE>& colorWriteMask = { D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL },
-			const bool depthEnable = TRUE,
+			const bool depthEnable = true,
 			const D3D12_DEPTH_WRITE_MASK& depthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
 			const D3D12_COMPARISON_FUNC& depthFunc = D3D12_COMPARISON_FUNC_LESS);
 

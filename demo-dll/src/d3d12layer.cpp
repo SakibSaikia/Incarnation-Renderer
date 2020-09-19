@@ -15,7 +15,6 @@
 // Constants
 constexpr size_t k_bindlessSrvHeapSize = 1000;
 constexpr uint32_t k_backBufferCount = 2;
-constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
 
 using namespace Demo::D3D12;
 
@@ -350,7 +349,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Width = Demo::Settings::k_screenWidth;
 	swapChainDesc.Height = Demo::Settings::k_screenHeight;
-	swapChainDesc.Format = k_backBufferFormat;
+	swapChainDesc.Format = Demo::Settings::k_backBufferFormat;
 	swapChainDesc.Scaling = DXGI_SCALING_NONE;
 	swapChainDesc.SampleDesc.Quality = 0;
 	swapChainDesc.SampleDesc.Count = 1;
