@@ -68,7 +68,7 @@ struct std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>
 {
 	std::size_t operator()(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& key) const
 	{
-		uint64_t seed1, seed2;
+		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
 		spookyhash_update(&context, key.pRootSignature, sizeof(key.pRootSignature));
@@ -122,7 +122,7 @@ struct std::hash<FShaderDesc>
 {
 	std::size_t operator()(const FShaderDesc& key) const
 	{
-		uint64_t seed1, seed2;
+		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
 		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());

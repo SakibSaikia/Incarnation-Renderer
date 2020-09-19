@@ -2,7 +2,7 @@
 
 add_executable (demo "main.cpp")
 
-set_property(TARGET demo PROPERTY CXX_STANDARD 17)
+set_property(TARGET demo PROPERTY CXX_STANDARD 20)
 
 include_directories(
 	"../demo-dll/inc"
@@ -10,7 +10,7 @@ include_directories(
 
 add_compile_definitions(
 	UNICODE 
-	_UNICODE 
+	_UNICODE
 	LIB_DEMO_NAME=L"libdemo" 
 	LIB_DEMO_DIR=L"${CMAKE_BINARY_DIR}/demo-dll" 
 	SPOOKYHASH_BIN_DIR=L"${CMAKE_SOURCE_DIR}/ext/spookyhash/bin"

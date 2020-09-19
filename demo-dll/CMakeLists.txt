@@ -12,6 +12,8 @@ add_library(
     "src/shadercompiler.cpp"
     "src/renderer.cpp")
 
+set_property(TARGET libdemo PROPERTY CXX_STANDARD 20)
+
 # Include path
 include_directories(
     "inc"
@@ -21,7 +23,8 @@ include_directories(
 # Macro defines
 add_compile_definitions(
     UNICODE
-    _UNICODE)
+    _UNICODE
+    SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders")
 
 # Generate a unique name
 string(TIMESTAMP seed %s)

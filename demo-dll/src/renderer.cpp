@@ -37,7 +37,7 @@ namespace Jobs
 
 			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(
 				{ L"hello.hlsl", L"vs_main", L"" },
-				{ L"hello.hlsl", L"vs_main", L"" },
+				{ L"hello.hlsl", L"ps_main", L"" },
 				D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
 				DXGI_FORMAT_UNKNOWN,
 				1,

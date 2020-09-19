@@ -1,6 +1,8 @@
 #include <shadercompiler.h>
+#include <assert.h>
 #include <system_error>
 #include <vector>
+#include <filesystem>
 
 namespace Settings
 {
@@ -25,6 +27,20 @@ namespace
 		}
 	#endif
 	}
+
+	std::filesystem::path SearchShaderDir(const std::wstring& filename)
+	{
+		for (auto& it : std::filesystem::recursive_directory_iterator(SHADER_DIR))
+		{
+			if (it.is_regular_file() && 
+				it.path().filename().wstring() == filename)
+			{
+				return it.path().wstring();
+			}
+		}
+
+		return {};
+	}
 }
 
 HRESULT Demo::ShaderCompiler::CompileShader(
@@ -34,11 +50,14 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 	const std::wstring& profile,
 	IDxcBlob** compiledBytecode)
 {
+	const std::filesystem::path filepath = SearchShaderDir(filename);
+	assert(!filepath.empty() && "Shader source file not found");
+
 	Microsoft::WRL::ComPtr<IDxcLibrary> library;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.GetAddressOf())));
 
 	Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
-	AssertIfFailed(library->CreateBlobFromFile(filename.c_str(), nullptr, source.GetAddressOf()));
+	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.GetAddressOf()));
 
 	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
 	AssertIfFailed(library->CreateIncludeHandler(includeHandler.GetAddressOf()));
