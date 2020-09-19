@@ -30,7 +30,7 @@ bool LoadModule(LPCWSTR modulePath, LPCWSTR moduleName, HMODULE& moduleHnd, Modu
 		return false;
 	}
 
-	HMODULE newModuleHnd = LoadLibrary(uniqueName.str().c_str());
+	HMODULE newModuleHnd = LoadLibraryEx(uniqueName.str().c_str(), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 	if (!newModuleHnd)
 	{
 		return false;
@@ -106,7 +106,10 @@ void CleanTempFiles(LPCWSTR path, LPCWSTR namePrefex)
 
 int WINAPI main(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nShowCmd)
 {
-	SetDllDirectory(LIB_DEMO_DIR);
+	AddDllDirectory(LIB_DEMO_DIR);
+	AddDllDirectory(SPOOKYHASH_BIN_DIR);
+	AddDllDirectory(DXC_BIN_DIR);
+
 	HMODULE demoDll{};
 	ModuleProcs demoProcs{};
 
