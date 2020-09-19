@@ -409,12 +409,12 @@ D3DDevice_t* Demo::D3D12::GetDevice()
 	return s_d3dDevice.Get();
 }
 
-FCommandList* Demo::D3D12::AcquireCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+FCommandList* Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 {
 	return s_commandListPool.GetOrCreate(type);
 }
 
-D3DPipelineState_t* Demo::D3D12::AcquireGraphicsPipelineState(
+D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	const FShaderDesc& vs,
 	const FShaderDesc& ps,
 	const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,
@@ -498,7 +498,7 @@ D3DPipelineState_t* Demo::D3D12::AcquireGraphicsPipelineState(
 	}
 }
 
-D3DPipelineState_t* Demo::D3D12::AcquireComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc)
+D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc)
 {
 	const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
 	return {};

@@ -52,11 +52,11 @@ namespace Demo
 		D3DDevice_t* GetDevice();
 
 		// Command Lists
-		FCommandList* AcquireCommandlist(const D3D12_COMMAND_LIST_TYPE type);
+		FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
 		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 
 		// Pipeline States
-		D3DPipelineState_t* AcquireGraphicsPipelineState(
+		D3DPipelineState_t* FetchGraphicsPipelineState(
 			const FShaderDesc& vs,
 			const FShaderDesc& ps,
 			const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,
@@ -68,7 +68,7 @@ namespace Demo
 			const D3D12_DEPTH_WRITE_MASK& depthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
 			const D3D12_COMPARISON_FUNC& depthFunc = D3D12_COMPARISON_FUNC_LESS);
 
-		D3DPipelineState_t* AcquireComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc);
+		D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc);
 
 		// Swap chain and back buffers
 		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();

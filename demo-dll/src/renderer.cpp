@@ -11,7 +11,7 @@ namespace Jobs
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::AcquireCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
 			d3dCmdList->SetName(L"PreRenderJob CL");
 
@@ -31,7 +31,7 @@ namespace Jobs
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::AcquireCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
 			d3dCmdList->SetName(L"RenderJob CL");
 
@@ -54,7 +54,7 @@ namespace Jobs
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::AcquireCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
 			d3dCmdList->SetName(L"PresentJob CL");
 
