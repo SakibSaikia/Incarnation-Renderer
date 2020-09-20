@@ -41,6 +41,19 @@ struct FShaderDesc
 	std::wstring m_defines;
 };
 
+struct FGraphicsPipelineDesc
+{
+	FShaderDesc m_vs;
+	FShaderDesc m_ps;
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC m_state;
+};
+
+struct FComputePipelineDesc
+{
+	FShaderDesc m_cs;
+	D3D12_COMPUTE_PIPELINE_STATE_DESC m_state;
+};
+
 namespace Demo
 {
 	namespace D3D12

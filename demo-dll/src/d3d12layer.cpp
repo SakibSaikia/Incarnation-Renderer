@@ -64,34 +64,33 @@ namespace
 }
 
 template<>
-struct std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>
+struct std::hash<FGraphicsPipelineDesc>
 {
-	std::size_t operator()(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& key) const
+	std::size_t operator()(const FGraphicsPipelineDesc& key) const
 	{
 		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
-		spookyhash_update(&context, key.pRootSignature, sizeof(key.pRootSignature));
-		spookyhash_update(&context, key.VS.pShaderBytecode, key.VS.BytecodeLength);
-		spookyhash_update(&context, key.PS.pShaderBytecode, key.PS.BytecodeLength);
-		spookyhash_update(&context, key.DS.pShaderBytecode, key.DS.BytecodeLength);
-		spookyhash_update(&context, key.HS.pShaderBytecode, key.HS.BytecodeLength);
-		spookyhash_update(&context, key.GS.pShaderBytecode, key.GS.BytecodeLength);
-		spookyhash_update(&context, &key.StreamOutput, sizeof(key.StreamOutput));
-		spookyhash_update(&context, &key.BlendState, sizeof(key.BlendState));
-		spookyhash_update(&context, &key.SampleMask, sizeof(key.SampleMask));
-		spookyhash_update(&context, &key.RasterizerState, sizeof(key.RasterizerState));
-		spookyhash_update(&context, &key.DepthStencilState, sizeof(key.DepthStencilState));
-		spookyhash_update(&context, key.InputLayout.pInputElementDescs, key.InputLayout.NumElements * sizeof(D3D12_INPUT_LAYOUT_DESC));
-		spookyhash_update(&context, &key.IBStripCutValue, sizeof(key.IBStripCutValue));
-		spookyhash_update(&context, &key.PrimitiveTopologyType, sizeof(key.PrimitiveTopologyType));
-		spookyhash_update(&context, &key.NumRenderTargets, sizeof(key.NumRenderTargets));
-		spookyhash_update(&context, key.RTVFormats, sizeof(key.RTVFormats));
-		spookyhash_update(&context, &key.DSVFormat, sizeof(key.DSVFormat));
-		spookyhash_update(&context, &key.SampleDesc, sizeof(key.SampleDesc));
-		spookyhash_update(&context, &key.NodeMask, sizeof(key.NodeMask));
-		spookyhash_update(&context, key.CachedPSO.pCachedBlob, sizeof(key.CachedPSO.CachedBlobSizeInBytes));
-		spookyhash_update(&context, &key.Flags, sizeof(key.Flags));
+		spookyhash_update(&context, key.m_vs.m_filename.data(), key.m_vs.m_filename.size());
+		spookyhash_update(&context, key.m_vs.m_entrypoint.data(), key.m_vs.m_entrypoint.size());
+		spookyhash_update(&context, key.m_vs.m_defines.data(), key.m_vs.m_defines.size());
+		spookyhash_update(&context, key.m_ps.m_filename.data(), key.m_ps.m_filename.size());
+		spookyhash_update(&context, key.m_ps.m_entrypoint.data(), key.m_ps.m_entrypoint.size());
+		spookyhash_update(&context, key.m_ps.m_defines.data(), key.m_ps.m_defines.size());
+		spookyhash_update(&context, &key.m_state.StreamOutput, sizeof(key.m_state.StreamOutput));
+		spookyhash_update(&context, &key.m_state.BlendState, sizeof(key.m_state.BlendState));
+		spookyhash_update(&context, &key.m_state.SampleMask, sizeof(key.m_state.SampleMask));
+		spookyhash_update(&context, &key.m_state.RasterizerState, sizeof(key.m_state.RasterizerState));
+		spookyhash_update(&context, &key.m_state.DepthStencilState, sizeof(key.m_state.DepthStencilState));
+		spookyhash_update(&context, key.m_state.InputLayout.pInputElementDescs, key.m_state.InputLayout.NumElements * sizeof(D3D12_INPUT_LAYOUT_DESC));
+		spookyhash_update(&context, &key.m_state.IBStripCutValue, sizeof(key.m_state.IBStripCutValue));
+		spookyhash_update(&context, &key.m_state.PrimitiveTopologyType, sizeof(key.m_state.PrimitiveTopologyType));
+		spookyhash_update(&context, &key.m_state.NumRenderTargets, sizeof(key.m_state.NumRenderTargets));
+		spookyhash_update(&context, key.m_state.RTVFormats, sizeof(key.m_state.RTVFormats));
+		spookyhash_update(&context, &key.m_state.DSVFormat, sizeof(key.m_state.DSVFormat));
+		spookyhash_update(&context, &key.m_state.SampleDesc, sizeof(key.m_state.SampleDesc));
+		spookyhash_update(&context, &key.m_state.NodeMask, sizeof(key.m_state.NodeMask));
+		spookyhash_update(&context, &key.m_state.Flags, sizeof(key.m_state.Flags));
 		spookyhash_final(&context, &seed1, &seed2);
 
 		return seed1 ^ (seed2 << 1);
@@ -99,18 +98,18 @@ struct std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>
 };
 
 template<>
-struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC >
+struct std::hash<FComputePipelineDesc >
 {
-	std::size_t operator()(const D3D12_COMPUTE_PIPELINE_STATE_DESC& key) const
+	std::size_t operator()(const FComputePipelineDesc& key) const
 	{
-		uint64_t seed1, seed2;
+		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
-		spookyhash_update(&context, key.pRootSignature, sizeof(key.pRootSignature));
-		spookyhash_update(&context, key.CS.pShaderBytecode, key.CS.BytecodeLength);
-		spookyhash_update(&context, &key.NodeMask, sizeof(key.NodeMask));
-		spookyhash_update(&context, key.CachedPSO.pCachedBlob, sizeof(key.CachedPSO.CachedBlobSizeInBytes));
-		spookyhash_update(&context, &key.Flags, sizeof(key.Flags));
+		spookyhash_update(&context, key.m_cs.m_filename.data(), key.m_cs.m_filename.size());
+		spookyhash_update(&context, key.m_cs.m_entrypoint.data(), key.m_cs.m_entrypoint.size());
+		spookyhash_update(&context, key.m_cs.m_defines.data(), key.m_cs.m_defines.size());
+		spookyhash_update(&context, &key.m_state.NodeMask, sizeof(key.m_state.NodeMask));
+		spookyhash_update(&context, &key.m_state.Flags, sizeof(key.m_state.Flags));
 		spookyhash_final(&context, &seed1, &seed2);
 
 		return seed1 ^ (seed2 << 1);
@@ -134,16 +133,18 @@ struct std::hash<FShaderDesc>
 	}
 };
 
-bool operator==(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& lhs, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& rhs)
-{
-	return memcmp(&lhs, &rhs, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC)) == 0;
-}
-
 bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 {
 	return lhs.m_filename == rhs.m_filename &&
 		lhs.m_entrypoint == rhs.m_entrypoint &&
 		lhs.m_defines == rhs.m_defines;
+}
+
+bool operator==(const FGraphicsPipelineDesc& lhs, const FGraphicsPipelineDesc& rhs)
+{
+	return lhs.m_vs == rhs.m_vs &&
+		lhs.m_ps == rhs.m_ps &&
+		memcmp(&lhs, &rhs, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC)) == 0;
 }
 
 class FCommandListPool
@@ -246,8 +247,8 @@ namespace Demo
 
 		std::mutex s_shaderCacheMutex;
 		std::unordered_map<FShaderDesc, Microsoft::WRL::ComPtr<IDxcBlob>> s_shaderCache;
-		std::unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
-		std::unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
+		std::unordered_map<FGraphicsPipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
+		std::unordered_map<FComputePipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
 	}
 } 
 
@@ -425,28 +426,32 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	const D3D12_DEPTH_WRITE_MASK& depthWriteMask,
 	const D3D12_COMPARISON_FUNC& depthFunc)
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+	FGraphicsPipelineDesc desc = {};
+
+	// Shaders
+	desc.m_vs = vs;
+	desc.m_ps = ps;
 
 	// Primitive Topology
-	desc.PrimitiveTopologyType = primitiveTopology;
+	desc.m_state.PrimitiveTopologyType = primitiveTopology;
 
 	// Rasterizer State
-	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-	desc.RasterizerState.FrontCounterClockwise = FALSE;
-	desc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-	desc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-	desc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-	desc.RasterizerState.DepthClipEnable = TRUE;
-	desc.RasterizerState.MultisampleEnable = FALSE;
-	desc.RasterizerState.AntialiasedLineEnable = FALSE;
-	desc.RasterizerState.ForcedSampleCount = 0;
-	desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+	desc.m_state.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+	desc.m_state.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+	desc.m_state.RasterizerState.FrontCounterClockwise = FALSE;
+	desc.m_state.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+	desc.m_state.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+	desc.m_state.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+	desc.m_state.RasterizerState.DepthClipEnable = TRUE;
+	desc.m_state.RasterizerState.MultisampleEnable = FALSE;
+	desc.m_state.RasterizerState.AntialiasedLineEnable = FALSE;
+	desc.m_state.RasterizerState.ForcedSampleCount = 0;
+	desc.m_state.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
 	// Blend State
-	desc.BlendState.AlphaToCoverageEnable = FALSE;
-	desc.BlendState.IndependentBlendEnable = FALSE;
-	for (auto& rt : desc.BlendState.RenderTarget)
+	desc.m_state.BlendState.AlphaToCoverageEnable = FALSE;
+	desc.m_state.BlendState.IndependentBlendEnable = FALSE;
+	for (auto& rt : desc.m_state.BlendState.RenderTarget)
 	{
 		rt.BlendEnable = FALSE;
 		rt.LogicOpEnable = FALSE;
@@ -454,35 +459,24 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	}
 
 	// Depth Stencil State
-	desc.DepthStencilState.DepthEnable = depthEnable;
-	desc.DepthStencilState.DepthWriteMask = depthWriteMask;
-	desc.DepthStencilState.DepthFunc = depthFunc;
-	desc.DepthStencilState.StencilEnable = FALSE;
-	desc.DSVFormat = dsvFormat;
+	desc.m_state.DepthStencilState.DepthEnable = depthEnable;
+	desc.m_state.DepthStencilState.DepthWriteMask = depthWriteMask;
+	desc.m_state.DepthStencilState.DepthFunc = depthFunc;
+	desc.m_state.DepthStencilState.StencilEnable = FALSE;
+	desc.m_state.DSVFormat = dsvFormat;
 
 	// Render Target(s) State
 	assert(numRenderTargets == rtvFormats.size());
-	desc.NumRenderTargets = numRenderTargets;
+	desc.m_state.NumRenderTargets = numRenderTargets;
 	int i = 0;
 	for (auto& format : rtvFormats)
 	{
-		desc.RTVFormats[i++] = format;
+		desc.m_state.RTVFormats[i++] = format;
 	}
 
 	// Multi Sampling State
-	desc.SampleMask = UINT_MAX;
-	desc.SampleDesc.Count = 1;
-
-	const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
-
-	// Shaders
-	IDxcBlob* vsBytecode = CacheShader(vs, L"vs_6_4");
-	IDxcBlob* psBytecode = CacheShader(ps, L"ps_6_4");
-
-	desc.VS.pShaderBytecode = vsBytecode->GetBufferPointer();
-	desc.VS.BytecodeLength = vsBytecode->GetBufferSize();
-	desc.PS.pShaderBytecode = psBytecode->GetBufferPointer();
-	desc.PS.BytecodeLength = psBytecode->GetBufferSize();
+	desc.m_state.SampleMask = UINT_MAX;
+	desc.m_state.SampleDesc.Count = 1;
 
 	// Create or Reuse
 	auto search = s_graphicsPSOPool.find(desc);
@@ -492,7 +486,17 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	}
 	else
 	{
-		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(s_graphicsPSOPool[desc].GetAddressOf())));
+		const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
+
+		IDxcBlob* vsBytecode = CacheShader(vs, L"vs_6_4");
+		IDxcBlob* psBytecode = CacheShader(ps, L"ps_6_4");
+
+		desc.m_state.VS.pShaderBytecode = vsBytecode->GetBufferPointer();
+		desc.m_state.VS.BytecodeLength = vsBytecode->GetBufferSize();
+		desc.m_state.PS.pShaderBytecode = psBytecode->GetBufferPointer();
+		desc.m_state.PS.BytecodeLength = psBytecode->GetBufferSize();
+
+		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc.m_state, IID_PPV_ARGS(s_graphicsPSOPool[desc].GetAddressOf())));
 		return s_graphicsPSOPool[desc].Get();
 	}
 }
