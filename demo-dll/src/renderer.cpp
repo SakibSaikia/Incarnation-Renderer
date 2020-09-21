@@ -47,6 +47,8 @@ namespace Jobs
 				false
 			);
 
+			d3dCmdList->SetPipelineState(pso);
+
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight };
 			d3dCmdList->RSSetViewports(1, &viewport);

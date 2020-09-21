@@ -168,10 +168,7 @@ bool operator==(const FRootsigDesc& lhs, const FRootsigDesc& rhs)
 
 bool operator==(const FGraphicsPipelineDesc& lhs, const FGraphicsPipelineDesc& rhs)
 {
-	return lhs.m_rootsig == rhs.m_rootsig &&
-		lhs.m_vs == rhs.m_vs &&
-		lhs.m_ps == rhs.m_ps &&
-		memcmp(&lhs, &rhs, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC)) == 0;
+	return std::hash<FGraphicsPipelineDesc>{}(lhs) == std::hash<FGraphicsPipelineDesc>{}(rhs);
 }
 
 class FCommandListPool
