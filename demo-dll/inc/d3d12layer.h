@@ -21,6 +21,7 @@ using D3DResource_t = ID3D12Resource;
 using D3DCommandList_t = ID3D12GraphicsCommandList4;
 using D3DFence_t = ID3D12Fence1;
 using D3DPipelineState_t = ID3D12PipelineState;
+using D3DRootSignature_t = ID3D12RootSignature;
 
 struct FCommandList
 {
@@ -41,8 +42,15 @@ struct FShaderDesc
 	std::wstring m_defines;
 };
 
+struct FRootsigDesc
+{
+	std::wstring m_filename;
+	std::wstring m_entrypoint;
+};
+
 struct FGraphicsPipelineDesc
 {
+	FRootsigDesc m_rootsig;
 	FShaderDesc m_vs;
 	FShaderDesc m_ps;
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC m_state;
@@ -50,6 +58,7 @@ struct FGraphicsPipelineDesc
 
 struct FComputePipelineDesc
 {
+	FRootsigDesc m_rootsig;
 	FShaderDesc m_cs;
 	D3D12_COMPUTE_PIPELINE_STATE_DESC m_state;
 };
@@ -70,6 +79,7 @@ namespace Demo
 
 		// Pipeline States
 		D3DPipelineState_t* FetchGraphicsPipelineState(
+			const FRootsigDesc& rootsig,
 			const FShaderDesc& vs,
 			const FShaderDesc& ps,
 			const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,

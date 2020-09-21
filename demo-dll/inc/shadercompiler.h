@@ -20,6 +20,12 @@ namespace Demo
 			const std::wstring& arguments,
 			const std::wstring& profile,
 			IDxcBlob** compiledBlob);
+
+		HRESULT CompileRootsignature(
+			const std::wstring& filename,
+			const std::wstring& define,
+			const std::wstring& profile,
+			IDxcBlob** compiledBlob);
 	}
 }
 

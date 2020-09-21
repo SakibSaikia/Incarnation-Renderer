@@ -71,6 +71,8 @@ struct std::hash<FGraphicsPipelineDesc>
 		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, key.m_rootsig.m_filename.data(), key.m_rootsig.m_filename.size());
+		spookyhash_update(&context, key.m_rootsig.m_entrypoint.data(), key.m_rootsig.m_entrypoint.size());
 		spookyhash_update(&context, key.m_vs.m_filename.data(), key.m_vs.m_filename.size());
 		spookyhash_update(&context, key.m_vs.m_entrypoint.data(), key.m_vs.m_entrypoint.size());
 		spookyhash_update(&context, key.m_vs.m_defines.data(), key.m_vs.m_defines.size());
@@ -105,6 +107,8 @@ struct std::hash<FComputePipelineDesc >
 		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, key.m_rootsig.m_filename.data(), key.m_rootsig.m_filename.size());
+		spookyhash_update(&context, key.m_rootsig.m_entrypoint.data(), key.m_rootsig.m_entrypoint.size());
 		spookyhash_update(&context, key.m_cs.m_filename.data(), key.m_cs.m_filename.size());
 		spookyhash_update(&context, key.m_cs.m_entrypoint.data(), key.m_cs.m_entrypoint.size());
 		spookyhash_update(&context, key.m_cs.m_defines.data(), key.m_cs.m_defines.size());
@@ -133,6 +137,22 @@ struct std::hash<FShaderDesc>
 	}
 };
 
+template<>
+struct std::hash<FRootsigDesc>
+{
+	std::size_t operator()(const FRootsigDesc& key) const
+	{
+		uint64_t seed1{}, seed2{};
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());
+		spookyhash_update(&context, key.m_entrypoint.c_str(), key.m_entrypoint.size());
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
 bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 {
 	return lhs.m_filename == rhs.m_filename &&
@@ -140,9 +160,16 @@ bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 		lhs.m_defines == rhs.m_defines;
 }
 
+bool operator==(const FRootsigDesc& lhs, const FRootsigDesc& rhs)
+{
+	return lhs.m_filename == rhs.m_filename &&
+		lhs.m_entrypoint == rhs.m_entrypoint;
+}
+
 bool operator==(const FGraphicsPipelineDesc& lhs, const FGraphicsPipelineDesc& rhs)
 {
-	return lhs.m_vs == rhs.m_vs &&
+	return lhs.m_rootsig == rhs.m_rootsig &&
+		lhs.m_vs == rhs.m_vs &&
 		lhs.m_ps == rhs.m_ps &&
 		memcmp(&lhs, &rhs, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC)) == 0;
 }
@@ -244,13 +271,35 @@ namespace Demo::D3D12
 	FCommandListPool s_commandListPool;
 
 	std::mutex s_shaderCacheMutex;
+	std::mutex s_rootsigCacheMutex;
 	std::unordered_map<FShaderDesc, Microsoft::WRL::ComPtr<IDxcBlob>> s_shaderCache;
+	std::unordered_map<FRootsigDesc, Microsoft::WRL::ComPtr<IDxcBlob>> s_rootsigCache;
 	std::unordered_map<FGraphicsPipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
 	std::unordered_map<FComputePipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
 }
 
 namespace
 {
+	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile)
+	{
+		auto search = s_rootsigCache.find(rootsigDesc);
+		if (search != s_rootsigCache.cend())
+		{
+			return search->second.Get();
+		}
+		else
+		{
+			auto& rsBlob = s_rootsigCache[rootsigDesc];
+			AssertIfFailed(Demo::ShaderCompiler::CompileRootsignature(
+				rootsigDesc.m_filename,
+				rootsigDesc.m_entrypoint,
+				profile,
+				rsBlob.GetAddressOf()));
+
+			return rsBlob.Get();
+		}
+	}
+
 	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
 	{
 		auto search = s_shaderCache.find(shaderDesc);
@@ -412,6 +461,7 @@ FCommandList* Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 }
 
 D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
+	const FRootsigDesc& rootsig,
 	const FShaderDesc& vs,
 	const FShaderDesc& ps,
 	const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,
@@ -483,15 +533,28 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	}
 	else
 	{
-		const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
+		IDxcBlob* rsBlob;
+		{
+			const std::lock_guard<std::mutex> lock(s_rootsigCacheMutex);
+			rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
+		}
 
-		IDxcBlob* vsBytecode = CacheShader(vs, L"vs_6_4");
-		IDxcBlob* psBytecode = CacheShader(ps, L"ps_6_4");
+		IDxcBlob* vsBlob;
+		IDxcBlob* psBlob;
+		{
+			const std::lock_guard<std::mutex> lock(s_shaderCacheMutex);
+			vsBlob = CacheShader(vs, L"vs_6_4");
+			psBlob = CacheShader(ps, L"ps_6_4");
+		}
 
-		desc.m_state.VS.pShaderBytecode = vsBytecode->GetBufferPointer();
-		desc.m_state.VS.BytecodeLength = vsBytecode->GetBufferSize();
-		desc.m_state.PS.pShaderBytecode = psBytecode->GetBufferPointer();
-		desc.m_state.PS.BytecodeLength = psBytecode->GetBufferSize();
+		Microsoft::WRL::ComPtr<D3DRootSignature_t> rs;
+		s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.GetAddressOf()));
+		desc.m_state.pRootSignature = rs.Get();
+	
+		desc.m_state.VS.pShaderBytecode = vsBlob->GetBufferPointer();
+		desc.m_state.VS.BytecodeLength = vsBlob->GetBufferSize();
+		desc.m_state.PS.pShaderBytecode = psBlob->GetBufferPointer();
+		desc.m_state.PS.BytecodeLength = psBlob->GetBufferSize();
 
 		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc.m_state, IID_PPV_ARGS(s_graphicsPSOPool[desc].GetAddressOf())));
 		return s_graphicsPSOPool[desc].Get();

@@ -36,6 +36,7 @@ namespace Jobs
 			d3dCmdList->SetName(L"RenderJob CL");
 
 			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(
+				{ L"rootsig.hlsl", L"graphics_rootsig_main"},
 				{ L"hello.hlsl", L"vs_main", L"" },
 				{ L"hello.hlsl", L"ps_main", L"" },
 				D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,

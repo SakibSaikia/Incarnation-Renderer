@@ -3,6 +3,7 @@
 #include <system_error>
 #include <vector>
 #include <filesystem>
+#include <sstream>
 
 namespace Settings
 {
@@ -125,6 +126,63 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 	{
 		Microsoft::WRL::ComPtr<IDxcBlobEncoding> error;
 		result->GetErrorBuffer(error.GetAddressOf());
+
+		Microsoft::WRL::ComPtr<IDxcBlobEncoding> errorMessage;
+		library->GetBlobAsUtf16(error.Get(), errorMessage.GetAddressOf());
+		OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
+
+		return hr;
+	}
+}
+
+HRESULT Demo::ShaderCompiler::CompileRootsignature(
+	const std::wstring& filename,
+	const std::wstring& entrypoint,
+	const std::wstring& profile,
+	IDxcBlob** compiledBlob)
+{
+	const std::filesystem::path filepath = SearchShaderDir(filename);
+	assert(!filepath.empty() && "Rootsignature source file not found");
+
+	Microsoft::WRL::ComPtr<IDxcLibrary> library;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.GetAddressOf())));
+
+	Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
+	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.GetAddressOf()));
+
+	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
+	AssertIfFailed(library->CreateIncludeHandler(includeHandler.GetAddressOf()));
+
+	Microsoft::WRL::ComPtr<IDxcCompiler> compiler;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.GetAddressOf())));
+
+	Microsoft::WRL::ComPtr<IDxcOperationResult> result;
+	AssertIfFailed(compiler->Compile(
+		source.Get(),
+		filename.c_str(),
+		entrypoint.c_str(),
+		profile.c_str(),
+		nullptr, 0,
+		nullptr, 0,
+		includeHandler.Get(),
+		result.GetAddressOf()));
+
+	HRESULT hr;
+	result->GetStatus(&hr);
+	if (SUCCEEDED(hr))
+	{
+		// Compilation result
+		return result->GetResult(compiledBlob);
+	}
+	else
+	{
+		Microsoft::WRL::ComPtr<IDxcBlobEncoding> error;
+		result->GetErrorBuffer(error.GetAddressOf());
+
+		Microsoft::WRL::ComPtr<IDxcBlobEncoding> errorMessage;
+		library->GetBlobAsUtf16(error.Get(), errorMessage.GetAddressOf());
+		OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
+
 		return hr;
 	}
 }
