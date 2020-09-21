@@ -1,5 +1,6 @@
 ﻿#include <demo.h>
 #include <d3d12layer.h>
+#include <shadercompiler.h>
 #include <settings.h>
 #include <sstream>
 
@@ -119,6 +120,7 @@ bool Demo::Initialize(HINSTANCE instanceHandle, HWND& windowHandle, const uint32
 {
 	bool ok = InitializeWindow(instanceHandle, windowHandle, windowId);
 	ok = ok && D3D12::Initialize(windowHandle);
+	ok = ok && ShaderCompiler::Initialize();
 
 	return ok;
 }
@@ -133,6 +135,7 @@ void Demo::Teardown(HWND& windowHandle)
 	if (windowHandle)
 	{
 		D3D12::Teardown();
+		ShaderCompiler::Teardown();
 		DestroyWindow(windowHandle);
 		windowHandle = {};
 	}

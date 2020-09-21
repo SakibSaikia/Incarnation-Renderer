@@ -221,36 +221,33 @@ private:
 };
 
 
-namespace Demo
+namespace Demo::D3D12
 {
-	namespace D3D12
-	{
 #if defined (_DEBUG)
-		Microsoft::WRL::ComPtr<D3DDebug_t> s_debugController;
+	Microsoft::WRL::ComPtr<D3DDebug_t> s_debugController;
 #endif
 
-		Microsoft::WRL::ComPtr<DXGIFactory_t> s_dxgiFactory;
-		Microsoft::WRL::ComPtr<D3DDevice_t> s_d3dDevice;
+	Microsoft::WRL::ComPtr<DXGIFactory_t> s_dxgiFactory;
+	Microsoft::WRL::ComPtr<D3DDevice_t> s_d3dDevice;
 
-		Microsoft::WRL::ComPtr<DXGISwapChain_t> s_swapChain;
-		std::array<Microsoft::WRL::ComPtr<D3DResource_t>, k_backBufferCount> s_backBuffers;
-		uint32_t s_currentBufferIndex;
+	Microsoft::WRL::ComPtr<DXGISwapChain_t> s_swapChain;
+	std::array<Microsoft::WRL::ComPtr<D3DResource_t>, k_backBufferCount> s_backBuffers;
+	uint32_t s_currentBufferIndex;
 
-		std::array<uint32_t, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorSize;
-		std::array< Microsoft::WRL::ComPtr<D3DDescriptorHeap_t>, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorHeaps;
+	std::array<uint32_t, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorSize;
+	std::array< Microsoft::WRL::ComPtr<D3DDescriptorHeap_t>, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorHeaps;
 
-		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_graphicsQueue;
-		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_computeQueue;
-		Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_copyQueue;
+	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_graphicsQueue;
+	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_computeQueue;
+	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_copyQueue;
 
-		FCommandListPool s_commandListPool;
+	FCommandListPool s_commandListPool;
 
-		std::mutex s_shaderCacheMutex;
-		std::unordered_map<FShaderDesc, Microsoft::WRL::ComPtr<IDxcBlob>> s_shaderCache;
-		std::unordered_map<FGraphicsPipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
-		std::unordered_map<FComputePipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
-	}
-} 
+	std::mutex s_shaderCacheMutex;
+	std::unordered_map<FShaderDesc, Microsoft::WRL::ComPtr<IDxcBlob>> s_shaderCache;
+	std::unordered_map<FGraphicsPipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
+	std::unordered_map<FComputePipelineDesc, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
+}
 
 namespace
 {

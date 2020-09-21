@@ -11,12 +11,15 @@ namespace Demo
 {
 	namespace ShaderCompiler
 	{
+		bool Initialize();
+		void Teardown();
+
 		HRESULT CompileShader(
 			const std::wstring& filename, 
 			const std::wstring& entrypoint, 
 			const std::wstring& arguments,
 			const std::wstring& profile,
-			IDxcBlob** compiledBytecode);
+			IDxcBlob** compiledBlob);
 	}
 }
 

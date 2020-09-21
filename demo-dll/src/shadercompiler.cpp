@@ -13,6 +13,11 @@ namespace Settings
 #endif
 }
 
+namespace Demo::ShaderCompiler
+{
+	HMODULE s_validationModule;
+}
+
 namespace
 {
 
@@ -43,12 +48,25 @@ namespace
 	}
 }
 
+bool Demo::ShaderCompiler::Initialize()
+{
+	s_validationModule = LoadLibraryEx(L"dxil.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+	assert(s_validationModule && "Failed to load dxil.dll. Shaders will not be signed!");
+	
+	return s_validationModule != nullptr;
+}
+
+void Demo::ShaderCompiler::Teardown()
+{
+	FreeLibrary(s_validationModule);
+}
+
 HRESULT Demo::ShaderCompiler::CompileShader(
 	const std::wstring& filename, 
 	const std::wstring& entrypoint, 
 	const std::wstring& arguments,
 	const std::wstring& profile,
-	IDxcBlob** compiledBytecode)
+	IDxcBlob** compiledBlob)
 {
 	const std::filesystem::path filepath = SearchShaderDir(filename);
 	assert(!filepath.empty() && "Shader source file not found");
@@ -80,8 +98,28 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 	result->GetStatus(&hr);
 	if (SUCCEEDED(hr)) 
 	{
-		Microsoft::WRL::ComPtr<IDxcBlob> bytecode;
-		return result->GetResult(compiledBytecode);
+		// Compilation result
+		result->GetResult(compiledBlob);
+
+		// Validation
+		DxcCreateInstanceProc dxil_create_func = (DxcCreateInstanceProc)GetProcAddress(s_validationModule, "DxcCreateInstance");
+		Microsoft::WRL::ComPtr<IDxcValidator> validator;
+		AssertIfFailed(dxil_create_func(CLSID_DxcValidator, IID_PPV_ARGS(validator.GetAddressOf())));
+
+		Microsoft::WRL::ComPtr<IDxcOperationResult> signResult;
+		AssertIfFailed(validator->Validate(*compiledBlob, DxcValidatorFlags_InPlaceEdit, signResult.GetAddressOf()));
+
+		signResult->GetStatus(&hr);
+		if (SUCCEEDED(hr))
+		{
+			return signResult->GetResult(compiledBlob);
+		}
+		else
+		{
+			Microsoft::WRL::ComPtr<IDxcBlobEncoding> error;
+			signResult->GetErrorBuffer(error.GetAddressOf());
+			return hr;
+		}
 	}
 	else
 	{
