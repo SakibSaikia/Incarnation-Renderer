@@ -7,6 +7,10 @@ set(module_name "libdemo")
 # Target
 add_library(
     ${module_name} MODULE 
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_demo.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_draw.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
     "src/demo.cpp"
     "src/d3d12layer.cpp" 
     "src/shadercompiler.cpp"
