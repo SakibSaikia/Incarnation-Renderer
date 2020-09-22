@@ -457,6 +457,19 @@ FCommandList* Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 	return s_commandListPool.GetOrCreate(type);
 }
 
+Microsoft::WRL::ComPtr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
+{
+	IDxcBlob* rsBlob;
+	{
+		const std::lock_guard<std::mutex> lock(s_rootsigCacheMutex);
+		rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
+	}
+
+	Microsoft::WRL::ComPtr<D3DRootSignature_t> rs;
+	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.GetAddressOf()));
+	return rs;
+}
+
 D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	const FRootsigDesc& rootsig,
 	const FShaderDesc& vs,
@@ -465,7 +478,7 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	const DXGI_FORMAT dsvFormat,
 	const uint32_t numRenderTargets,
 	const std::initializer_list<DXGI_FORMAT>& rtvFormats,
-	const std::initializer_list<D3D12_COLOR_WRITE_ENABLE>& colorWriteMask,
+	const std::initializer_list<D3D12_COLOR_WRITE_ENABLE>& colorWriteMasks,
 	const bool depthEnable,
 	const D3D12_DEPTH_WRITE_MASK& depthWriteMask,
 	const D3D12_COMPARISON_FUNC& depthFunc)
@@ -495,11 +508,16 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	// Blend State
 	desc.m_state.BlendState.AlphaToCoverageEnable = FALSE;
 	desc.m_state.BlendState.IndependentBlendEnable = FALSE;
-	for (auto& rt : desc.m_state.BlendState.RenderTarget)
+
+	assert(numRenderTargets == colorWriteMasks.size());
+	int i = 0;
+	for (auto& writeMask : colorWriteMasks)
 	{
-		rt.BlendEnable = FALSE;
-		rt.LogicOpEnable = FALSE;
-		rt.RenderTargetWriteMask = 0;
+		desc.m_state.BlendState.RenderTarget[i].BlendEnable = FALSE;
+		desc.m_state.BlendState.RenderTarget[i].LogicOpEnable = FALSE;
+		desc.m_state.BlendState.RenderTarget[i].RenderTargetWriteMask = writeMask;
+
+		i++;
 	}
 
 	// Depth Stencil State
@@ -512,7 +530,7 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	// Render Target(s) State
 	assert(numRenderTargets == rtvFormats.size());
 	desc.m_state.NumRenderTargets = numRenderTargets;
-	int i = 0;
+	i = 0;
 	for (auto& format : rtvFormats)
 	{
 		desc.m_state.RTVFormats[i++] = format;

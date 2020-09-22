@@ -77,6 +77,9 @@ namespace Demo
 		FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
 		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 
+		// Root Signatures
+		Microsoft::WRL::ComPtr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
+
 		// Pipeline States
 		D3DPipelineState_t* FetchGraphicsPipelineState(
 			const FRootsigDesc& rootsig,

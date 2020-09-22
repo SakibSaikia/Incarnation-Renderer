@@ -35,6 +35,9 @@ namespace Jobs
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
 			d3dCmdList->SetName(L"RenderJob CL");
 
+			Microsoft::WRL::ComPtr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig.Get());
+
 			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(
 				{ L"rootsig.hlsl", L"graphics_rootsig_main"},
 				{ L"hello.hlsl", L"vs_main", L"" },
@@ -59,6 +62,9 @@ namespace Jobs
 
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
 			d3dCmdList->ClearRenderTargetView(Demo::D3D12::GetBackBufferDescriptor(), clearColor, 0, nullptr);
+
+			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			d3dCmdList->DrawInstanced(3, 1, 0, 0);
 
 			return cmdList;
 		});
