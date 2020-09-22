@@ -14,6 +14,8 @@ namespace Demo
 		bool Initialize();
 		void Teardown();
 
+		FILETIME GetLastModifiedTime(const std::wstring& filename);
+
 		HRESULT CompileShader(
 			const std::wstring& filename, 
 			const std::wstring& entrypoint, 

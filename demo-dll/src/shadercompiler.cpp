@@ -62,6 +62,16 @@ void Demo::ShaderCompiler::Teardown()
 	FreeLibrary(s_validationModule);
 }
 
+FILETIME Demo::ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
+{
+	const std::filesystem::path filepath = SearchShaderDir(filename);
+	assert(!filepath.empty() && "Shader source file not found");
+
+	_WIN32_FILE_ATTRIBUTE_DATA fileAttributeData{};
+	GetFileAttributesExW(filepath.wstring().c_str(), GetFileExInfoStandard, &fileAttributeData);
+	return fileAttributeData.ftLastWriteTime;
+}
+
 HRESULT Demo::ShaderCompiler::CompileShader(
 	const std::wstring& filename, 
 	const std::wstring& entrypoint, 
