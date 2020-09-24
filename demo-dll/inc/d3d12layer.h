@@ -27,6 +27,7 @@ using D3DRootSignature_t = ID3D12RootSignature;
 using PhysicalAlloc_t = std::vector<uint32_t>;
 
 class FResourceUploadContext;
+struct IDxcBlob;
 
 struct FCommandList
 {
@@ -78,25 +79,16 @@ namespace Demo
 		Microsoft::WRL::ComPtr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
 
 		// Pipeline States
-		D3DPipelineState_t* FetchGraphicsPipelineState(
-			const FRootsigDesc& rootsig,
-			const FShaderDesc& vs,
-			const FShaderDesc& ps,
-			const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,
-			const DXGI_FORMAT dsvFormat,
-			const uint32_t numRenderTargets,
-			const std::initializer_list<DXGI_FORMAT>& rtvFormats,
-			const std::initializer_list<D3D12_COLOR_WRITE_ENABLE>& colorWriteMask = { D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL, D3D12_COLOR_WRITE_ENABLE_ALL },
-			const bool depthEnable = true,
-			const D3D12_DEPTH_WRITE_MASK& depthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
-			const D3D12_COMPARISON_FUNC& depthFunc = D3D12_COMPARISON_FUNC_LESS);
-
-		D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc);
+		D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
+		D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
 
 		// Swap chain and back buffers
 		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
 		D3DResource_t* GetBackBufferResource();
 		void PresentDisplay();
+
+		// Shaders
+		IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile);
 
 		// Resource Management
 		FResource CreateUploadBuffer(

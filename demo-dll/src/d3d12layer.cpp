@@ -163,6 +163,11 @@ bool operator==(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& lhs, const D3D12_GRAPH
 	return std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>{}(lhs) == std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>{}(rhs);
 }
 
+bool operator==(const D3D12_COMPUTE_PIPELINE_STATE_DESC& lhs, const D3D12_COMPUTE_PIPELINE_STATE_DESC& rhs)
+{
+	return std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(lhs) == std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(rhs);
+}
+
 bool operator==(const FILETIME& lhs, const FILETIME& rhs)
 {
 	return lhs.dwLowDateTime == rhs.dwLowDateTime &&
@@ -444,47 +449,6 @@ namespace
 			return rsBlob.m_blob.Get();
 		}
 	}
-
-	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
-	{
-		FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
-
-		auto search = s_shaderCache.find(shaderDesc);
-		if (search != s_shaderCache.cend())
-		{
-			if (search->second.m_timestamp != currentTimestamp &&
-				Demo::ShaderCompiler::CompileShader(
-					shaderDesc.m_filename,
-					shaderDesc.m_entrypoint,
-					shaderDesc.m_defines,
-					profile,
-					search->second.m_blob.GetAddressOf()))
-			{
-				search->second.m_timestamp = currentTimestamp;
-				return search->second.m_blob.Get();
-			}
-			else
-			{
-				// Use pre-cached shader if it is cached and up-to-date or if the current changes fail to compile.
-				// Update timestamp so that we don't retry compilation on a failed shader every frame.
-				search->second.m_timestamp = currentTimestamp;
-				return search->second.m_blob.Get();
-			}
-		}
-		else
-		{
-			FTimestampedBlob& shaderBlob = s_shaderCache[shaderDesc];
-			AssertIfFailed(Demo::ShaderCompiler::CompileShader(
-				shaderDesc.m_filename, 
-				shaderDesc.m_entrypoint, 
-				shaderDesc.m_defines,
-				profile, 
-				shaderBlob.m_blob.GetAddressOf()));
-
-			shaderBlob.m_timestamp = currentTimestamp;
-			return shaderBlob.m_blob.Get();
-		}
-	}
 }
 
 bool Demo::D3D12::Initialize(HWND& windowHandle)
@@ -628,6 +592,47 @@ FCommandList Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 	return s_commandListPool.GetOrCreate(type);
 }
 
+IDxcBlob* Demo::D3D12::CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
+{
+	FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
+
+	auto search = s_shaderCache.find(shaderDesc);
+	if (search != s_shaderCache.cend())
+	{
+		if (search->second.m_timestamp != currentTimestamp &&
+			Demo::ShaderCompiler::CompileShader(
+				shaderDesc.m_filename,
+				shaderDesc.m_entrypoint,
+				shaderDesc.m_defines,
+				profile,
+				search->second.m_blob.GetAddressOf()))
+		{
+			search->second.m_timestamp = currentTimestamp;
+			return search->second.m_blob.Get();
+		}
+		else
+		{
+			// Use pre-cached shader if it is cached and up-to-date or if the current changes fail to compile.
+			// Update timestamp so that we don't retry compilation on a failed shader every frame.
+			search->second.m_timestamp = currentTimestamp;
+			return search->second.m_blob.Get();
+		}
+	}
+	else
+	{
+		FTimestampedBlob& shaderBlob = s_shaderCache[shaderDesc];
+		AssertIfFailed(Demo::ShaderCompiler::CompileShader(
+			shaderDesc.m_filename,
+			shaderDesc.m_entrypoint,
+			shaderDesc.m_defines,
+			profile,
+			shaderBlob.m_blob.GetAddressOf()));
+
+		shaderBlob.m_timestamp = currentTimestamp;
+		return shaderBlob.m_blob.Get();
+	}
+}
+
 Microsoft::WRL::ComPtr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
 {
 	IDxcBlob* rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
@@ -636,81 +641,8 @@ Microsoft::WRL::ComPtr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignatu
 	return rs;
 }
 
-D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
-	const FRootsigDesc& rootsig,
-	const FShaderDesc& vs,
-	const FShaderDesc& ps,
-	const D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopology,
-	const DXGI_FORMAT dsvFormat,
-	const uint32_t numRenderTargets,
-	const std::initializer_list<DXGI_FORMAT>& rtvFormats,
-	const std::initializer_list<D3D12_COLOR_WRITE_ENABLE>& colorWriteMasks,
-	const bool depthEnable,
-	const D3D12_DEPTH_WRITE_MASK& depthWriteMask,
-	const D3D12_COMPARISON_FUNC& depthFunc)
+D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
-
-	// Shaders
-	IDxcBlob* vsBlob = CacheShader(vs, L"vs_6_4");
-	IDxcBlob* psBlob = CacheShader(ps, L"ps_6_4");
-	desc.VS.pShaderBytecode = vsBlob->GetBufferPointer();
-	desc.VS.BytecodeLength = vsBlob->GetBufferSize();
-	desc.PS.pShaderBytecode = psBlob->GetBufferPointer();
-	desc.PS.BytecodeLength = psBlob->GetBufferSize();
-
-	// Primitive Topology
-	desc.PrimitiveTopologyType = primitiveTopology;
-
-	// Rasterizer State
-	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-	desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-	desc.RasterizerState.FrontCounterClockwise = FALSE;
-	desc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-	desc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-	desc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-	desc.RasterizerState.DepthClipEnable = TRUE;
-	desc.RasterizerState.MultisampleEnable = FALSE;
-	desc.RasterizerState.AntialiasedLineEnable = FALSE;
-	desc.RasterizerState.ForcedSampleCount = 0;
-	desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-	// Blend State
-	desc.BlendState.AlphaToCoverageEnable = FALSE;
-	desc.BlendState.IndependentBlendEnable = FALSE;
-
-	assert(numRenderTargets == colorWriteMasks.size());
-	int i = 0;
-	for (auto& writeMask : colorWriteMasks)
-	{
-		desc.BlendState.RenderTarget[i].BlendEnable = FALSE;
-		desc.BlendState.RenderTarget[i].LogicOpEnable = FALSE;
-		desc.BlendState.RenderTarget[i].RenderTargetWriteMask = writeMask;
-
-		i++;
-	}
-
-	// Depth Stencil State
-	desc.DepthStencilState.DepthEnable = depthEnable;
-	desc.DepthStencilState.DepthWriteMask = depthWriteMask;
-	desc.DepthStencilState.DepthFunc = depthFunc;
-	desc.DepthStencilState.StencilEnable = FALSE;
-	desc.DSVFormat = dsvFormat;
-
-	// Render Target(s) State
-	assert(numRenderTargets == rtvFormats.size());
-	desc.NumRenderTargets = numRenderTargets;
-	i = 0;
-	for (auto& format : rtvFormats)
-	{
-		desc.RTVFormats[i++] = format;
-	}
-
-	// Multi Sampling State
-	desc.SampleMask = UINT_MAX;
-	desc.SampleDesc.Count = 1;
-
-	// Create or Reuse
 	auto search = s_graphicsPSOPool.find(desc);
 	if (search != s_graphicsPSOPool.cend())
 	{
@@ -718,19 +650,23 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(
 	}
 	else
 	{
-		IDxcBlob* rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
-		Microsoft::WRL::ComPtr<D3DRootSignature_t> rs;
-		s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.GetAddressOf()));
-		desc.pRootSignature = rs.Get();
-
 		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(s_graphicsPSOPool[desc].GetAddressOf())));
 		return s_graphicsPSOPool[desc].Get();
 	}
 }
 
-D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC  desc)
+D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC& desc)
 {
-	return {};
+	auto search = s_computePSOPool.find(desc);
+	if (search != s_computePSOPool.cend())
+	{
+		return search->second.Get();
+	}
+	else
+	{
+		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(s_computePSOPool[desc].GetAddressOf())));
+		return s_computePSOPool[desc].Get();
+	}
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()

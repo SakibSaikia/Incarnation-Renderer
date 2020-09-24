@@ -22,7 +22,8 @@ set_property(TARGET libdemo PROPERTY CXX_STANDARD 20)
 include_directories(
     "inc"
     "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
-    "${CMAKE_SOURCE_DIR}/ext/dxc/inc")
+    "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
+    "${CMAKE_SOURCE_DIR}/ext/imgui")
 
 # Macro defines
 add_compile_definitions(
