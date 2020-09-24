@@ -7,6 +7,8 @@
 #include <wrl.h>
 #include <vector>
 #include <string>
+#include <functional>
+#include <optional>
 
 // Aliased types
 using DXGIFactory_t = IDXGIFactory4;
@@ -22,10 +24,13 @@ using D3DCommandList_t = ID3D12GraphicsCommandList4;
 using D3DFence_t = ID3D12Fence1;
 using D3DPipelineState_t = ID3D12PipelineState;
 using D3DRootSignature_t = ID3D12RootSignature;
+using PhysicalAlloc_t = std::vector<uint32_t>;
+
+class FResourceUploadContext;
 
 struct FCommandList
 {
-	FCommandList() = delete;
+	FCommandList() = default;
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
 
 	D3D12_COMMAND_LIST_TYPE m_type;
@@ -48,6 +53,13 @@ struct FRootsigDesc
 	std::wstring m_entrypoint;
 };
 
+struct FResource
+{
+	Microsoft::WRL::ComPtr<D3DResource_t> m_resource;
+	D3D12_RESOURCE_DESC m_desc;
+	std::optional<PhysicalAlloc_t> m_physicalPages;
+};
+
 namespace Demo
 {
 	namespace D3D12
@@ -59,8 +71,8 @@ namespace Demo
 		D3DDevice_t* GetDevice();
 
 		// Command Lists
-		FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
-		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
+		FCommandList FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
+		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList> commandLists);
 
 		// Root Signatures
 		Microsoft::WRL::ComPtr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
@@ -85,5 +97,18 @@ namespace Demo
 		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
 		D3DResource_t* GetBackBufferResource();
 		void PresentDisplay();
+
+		// Resource Management
+		FResource CreateUploadBuffer(
+			const std::wstring& name,
+			const size_t size,
+			std::function<void(uint8_t*)> uploadFunc = nullptr);
+
+		FResource CreateDefaultBuffer(
+			const std::wstring& name,
+			const size_t size,
+			D3D12_RESOURCE_STATES state,
+			FResourceUploadContext* uploadContext,
+			std::function<void(uint8_t*)> uploadFunc = nullptr);
 	}
 }

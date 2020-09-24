@@ -12,6 +12,7 @@
 #include <list>
 #include <unordered_map>
 #include <system_error>
+#include <utility>
 
 // Constants
 constexpr size_t k_bindlessSrvHeapSize = 1000;
@@ -168,41 +169,51 @@ bool operator==(const FILETIME& lhs, const FILETIME& rhs)
 		lhs.dwHighDateTime == rhs.dwHighDateTime;
 }
 
+bool operator==(const FCommandList& lhs, const FCommandList& rhs)
+{
+	return lhs.m_cmdList.Get() == rhs.m_cmdList.Get();
+}
+
+bool operator==(const FResource& lhs, const FResource& rhs)
+{
+	return lhs.m_resource.Get() == rhs.m_resource.Get();
+}
+
 class FCommandListPool
 {
 public:
-	FCommandList* GetOrCreate(const D3D12_COMMAND_LIST_TYPE type)
+	FCommandList GetOrCreate(const D3D12_COMMAND_LIST_TYPE type)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
 
 		// Reuse CL
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
-			if ((*it)->m_type == type)
+			if (it->m_type == type)
 			{
-				m_useList.push_back(std::move(*it));
+				m_useList.push_back(*it);
 				m_freeList.erase(it);
 				
-				FCommandList* cl = m_useList.back().get();
-				cl->m_fenceValue = ++m_fenceCounter;
+				FCommandList cl = m_useList.back();
+				cl.m_fenceValue = ++m_fenceCounter;
 				return cl;
 			}
 		}
 
 		// New CL
-		m_useList.emplace_back(std::make_unique<FCommandList>(type, ++m_fenceCounter));
-		return m_useList.back().get();
+		m_useList.emplace_back(type, ++m_fenceCounter);
+		return m_useList.back();
 	}
 
-	void Retire(FCommandList* cmdList)
+	void Retire(FCommandList cmdList)
 	{
 		auto waitForFenceTask = concurrency::create_task([cmdList, this]()
 		{
 			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 			if (event)
 			{
-				assert(cmdList->m_fenceValue != 0);
-				cmdList->m_fence->SetEventOnCompletion(cmdList->m_fenceValue, event);
+				assert(cmdList.m_fenceValue != 0);
+				cmdList.m_fence->SetEventOnCompletion(cmdList.m_fenceValue, event);
 				WaitForSingleObject(event, INFINITE);
 			}
 		});
@@ -213,15 +224,15 @@ public:
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
-				if (it->get() == cmdList)
+				if (*it == cmdList)
 				{
-					m_freeList.push_back(std::move(*it));
+					m_freeList.push_back(*it);
 					it = m_useList.erase(it);
 
-					FCommandList* cl = m_freeList.back().get();
-					cl->m_fenceValue = 0;
-					cl->m_cmdAllocator->Reset();
-					cl->m_cmdList->Reset(cl->m_cmdAllocator.Get(), nullptr);
+					FCommandList cl = m_freeList.back();
+					cl.m_fenceValue = 0;
+					cl.m_cmdAllocator->Reset();
+					cl.m_cmdList->Reset(cl.m_cmdAllocator.Get(), nullptr);
 					break;
 				}
 				else
@@ -237,14 +248,130 @@ public:
 private:
 	std::atomic_size_t m_fenceCounter{ 0 };
 	std::mutex m_mutex;
-	std::list<std::unique_ptr<FCommandList>> m_freeList;
-	std::list<std::unique_ptr<FCommandList>> m_useList;
+	std::list<FCommandList> m_freeList;
+	std::list<FCommandList> m_useList;
+};
+
+class FUploadBufferPool
+{
+public:
+	FResource GetOrCreate(const std::wstring& name, const size_t sizeInBytes)
+	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+
+		// Reuse buffer
+		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
+		{
+			if (it->m_desc.Width >= sizeInBytes)
+			{
+				m_useList.push_back(*it);
+				m_freeList.erase(it);
+
+				FResource buffer = m_useList.back();
+				buffer.m_resource->SetName(name.c_str());
+				return buffer;
+			}
+		}
+
+		// New buffer
+		FResource newBuffer;
+
+		D3D12_HEAP_PROPERTIES heapDesc = {};
+		heapDesc.Type = D3D12_HEAP_TYPE_UPLOAD;
+		heapDesc.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		D3D12_RESOURCE_DESC resourceDesc = {};
+		resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+		resourceDesc.Width = sizeInBytes;
+		resourceDesc.Height = 1;
+		resourceDesc.DepthOrArraySize = 1;
+		resourceDesc.MipLevels = 1;
+		resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
+		resourceDesc.SampleDesc.Count = 1;
+		resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+		AssertIfFailed(GetDevice()->CreateCommittedResource(
+			&heapDesc,
+			D3D12_HEAP_FLAG_NONE,
+			&resourceDesc,
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(newBuffer.m_resource.GetAddressOf())));
+
+		newBuffer.m_resource->SetName(name.c_str());
+		newBuffer.m_desc = resourceDesc;
+
+		m_useList.push_back(newBuffer);
+		return newBuffer;
+	}
+
+	void Retire(FResource buffer, FCommandList dependantCL)
+	{
+		auto waitForFenceTask = concurrency::create_task([buffer, dependantCL, this]()
+		{
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				assert(dependantCL.m_fenceValue != 0);
+				dependantCL.m_fence->SetEventOnCompletion(dependantCL.m_fenceValue, event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		});
+
+		auto addToFreePool = [buffer, this]()
+		{
+			const std::lock_guard<std::mutex> lock(m_mutex);
+
+			for (auto it = m_useList.begin(); it != m_useList.end();)
+			{
+				if (*it == buffer)
+				{
+					it->m_resource->Unmap(0, nullptr);
+					m_freeList.push_back(*it);
+					it = m_useList.erase(it);
+					break;
+				}
+				else
+				{
+					++it;
+				}
+			}
+		};
+
+		waitForFenceTask.then(addToFreePool);
+	}
+
+private:
+	std::atomic_size_t m_fenceCounter{ 0 };
+	std::mutex m_mutex;
+	std::list<FResource> m_freeList;
+	std::list<FResource> m_useList;
 };
 
 struct FTimestampedBlob
 {
 	FILETIME m_timestamp;
 	Microsoft::WRL::ComPtr<IDxcBlob> m_blob;
+};
+
+class FResourceUploadContext
+{
+public:
+	FResourceUploadContext() = delete;
+	explicit FResourceUploadContext(const size_t uploadBufferSizeInBytes);
+
+	std::pair<uint8_t*, size_t> Allocate(const size_t sizeInBytes);
+	void CopyBuffer(D3DResource_t* destResource, const size_t srcOffset, const size_t size);
+	D3DFence_t* SubmitUploads();
+
+private:
+	FResource m_uploadBuffer;
+	FCommandList m_copyCommandlist;
+	uint8_t* m_mappedPtr;
+	size_t m_sizeInBytes;
+	size_t m_currentOffset;
+	size_t m_fenceValue;
+	Microsoft::WRL::ComPtr<D3DFence_t> m_fence;
 };
 
 
@@ -269,6 +396,7 @@ namespace Demo::D3D12
 	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_copyQueue;
 
 	FCommandListPool s_commandListPool;
+	FUploadBufferPool s_uploadBufferPool;
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
@@ -395,15 +523,15 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 	cmdQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_graphicsQueue.GetAddressOf())));
-	s_graphicsQueue->SetName(L"Graphics Queue");
+	s_graphicsQueue->SetName(L"graphics_queue");
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_computeQueue.GetAddressOf())));
-	s_computeQueue->SetName(L"Compute Queue");
+	s_computeQueue->SetName(L"compute_queue");
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.GetAddressOf())));
-	s_copyQueue->SetName(L"Copy Queue");
+	s_copyQueue->SetName(L"copy_queue");
 
 	// Bindless SRV heap
 	D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
@@ -415,7 +543,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 			&cbvSrvUavHeapDesc,
 			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetAddressOf()))
 	);
-	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"Bindless Descriptor Heap");
+	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
 
 	// RTV heap
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
@@ -427,7 +555,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 			&rtvHeapDesc, 
 			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].GetAddressOf()))
 	);
-	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->SetName(L"RTV Heap");
+	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->SetName(L"rtv_heap");
 
 	// Swap chain
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -460,7 +588,10 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
 		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(s_backBuffers[bufferIdx].GetAddressOf())));
-		s_backBuffers[bufferIdx]->SetName(L"Back Buffer");
+
+		std::wstringstream s;
+		s << L"back_buffer_" << bufferIdx;
+		s_backBuffers[bufferIdx]->SetName(s.str().c_str());
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor;
 		rtvDescriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -492,7 +623,7 @@ D3DDevice_t* Demo::D3D12::GetDevice()
 	return s_d3dDevice.Get();
 }
 
-FCommandList* Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+FCommandList Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 {
 	return s_commandListPool.GetOrCreate(type);
 }
@@ -616,23 +747,23 @@ D3DResource_t* Demo::D3D12::GetBackBufferResource()
 	return s_backBuffers[s_currentBufferIndex].Get();
 }
 
-D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists)
+D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList> commandLists)
 {
 	std::vector<ID3D12CommandList*> d3dCommandLists;
 	size_t latestFenceValue = 0;
 	D3DFence_t* latestFence = {};
 
 	// Accumulate CLs and keep tab of the latest fence
-	for (FCommandList* cl : commandLists)
+	for (const FCommandList& cl : commandLists)
 	{
-		D3DCommandList_t* d3dCL = cl->m_cmdList.Get();
+		D3DCommandList_t* d3dCL = cl.m_cmdList.Get();
 		d3dCL->Close();
 		d3dCommandLists.push_back(d3dCL);
 
-		if (cl->m_fenceValue > latestFenceValue)
+		if (cl.m_fenceValue > latestFenceValue)
 		{
-			latestFenceValue = cl->m_fenceValue;
-			latestFence = cl->m_fence.Get();
+			latestFenceValue = cl.m_fenceValue;
+			latestFence = cl.m_fence.Get();
 		}
 	}
 
@@ -653,9 +784,9 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 
 	// Execute commands, signal the CL fences and retire the CLs
 	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
-	for (FCommandList* cl : commandLists)
+	for (const FCommandList& cl : commandLists)
 	{
-		activeCommandQueue->Signal(cl->m_fence.Get(), cl->m_fenceValue);
+		activeCommandQueue->Signal(cl.m_fence.Get(), cl.m_fenceValue);
 		s_commandListPool.Retire(cl);
 	}
 
@@ -674,21 +805,129 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fen
 	m_fenceValue{ fenceValue }
 {
 	
-	AssertIfFailed(GetDevice()->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.GetAddressOf())));
+	AssertIfFailed(s_d3dDevice->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.GetAddressOf())));
 
-	AssertIfFailed(
-		GetDevice()->CreateCommandList(
-			0,
-			type,
-			m_cmdAllocator.Get(),
-			nullptr,
-			IID_PPV_ARGS(m_cmdList.GetAddressOf()))
-	);
+	AssertIfFailed(s_d3dDevice->CreateCommandList(
+		0,
+		type,
+		m_cmdAllocator.Get(),
+		nullptr,
+		IID_PPV_ARGS(m_cmdList.GetAddressOf())));
 
-	AssertIfFailed(
-		GetDevice()->CreateFence(
-			0,
-			D3D12_FENCE_FLAG_NONE,
-			IID_PPV_ARGS(m_fence.GetAddressOf()))
-	);
+	AssertIfFailed(s_d3dDevice->CreateFence(
+		0,
+		D3D12_FENCE_FLAG_NONE,
+		IID_PPV_ARGS(m_fence.GetAddressOf())));
+}
+
+FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
+	m_currentOffset{ 0 }
+{
+	// Round up to power of 2
+	DWORD n = _BitScanForward64(&n, uploadBufferSizeInBytes);
+	m_sizeInBytes = (1 << n);
+
+	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
+
+	m_uploadBuffer = s_uploadBufferPool.GetOrCreate(L"upload_context_buffer", m_sizeInBytes);
+	m_uploadBuffer.m_resource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
+}
+
+std::pair<uint8_t*, size_t> FResourceUploadContext::Allocate(const size_t sizeInBytes)
+{
+	size_t capacity = m_sizeInBytes - m_currentOffset;
+	assert(sizeInBytes <= capacity && L"Upload buffer is too small!");
+
+	uint8_t* pAlloc = m_mappedPtr + m_currentOffset;
+	size_t offset = m_currentOffset;
+	m_currentOffset += sizeInBytes;
+
+	return std::make_pair(pAlloc, offset);
+}
+
+void FResourceUploadContext::CopyBuffer(D3DResource_t* destResource, const size_t srcOffset, const size_t size)
+{
+	m_copyCommandlist.m_cmdList->CopyBufferRegion(
+		destResource,
+		0,
+		m_uploadBuffer.m_resource.Get(),
+		srcOffset,
+		size);
+}
+
+D3DFence_t* FResourceUploadContext::SubmitUploads()
+{
+	D3DFence_t* clFence = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
+
+	s_copyQueue->Signal(m_fence.Get(), m_fenceValue);
+	s_uploadBufferPool.Retire(m_uploadBuffer, m_copyCommandlist);
+
+	return clFence;
+}
+
+FResource Demo::D3D12::CreateUploadBuffer(
+	const std::wstring& name,
+	const size_t sizeInBytes,
+	std::function<void(uint8_t*)> uploadFunc)
+{
+	DWORD n;
+	_BitScanForward64(&n, sizeInBytes);
+	const size_t powOf2Size = (1 << n);
+	FResource buffer = s_uploadBufferPool.GetOrCreate(name, powOf2Size);
+
+	uint8_t* pData;
+	buffer.m_resource->Map(0, nullptr, reinterpret_cast<void**>(&pData));
+
+	if (uploadFunc)
+	{
+		uploadFunc(pData);
+	}
+
+	return buffer;
+}
+
+FResource Demo::D3D12::CreateDefaultBuffer(
+	const std::wstring& name,
+	const size_t size,
+	D3D12_RESOURCE_STATES state,
+	FResourceUploadContext* uploadContext,
+	std::function<void(uint8_t*)> uploadFunc)
+{
+	FResource buffer;
+
+	bool requiresUpload = uploadContext && uploadFunc;
+
+	// Create virtual resource
+	buffer.m_desc = {};
+	buffer.m_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	buffer.m_desc.Width = size;
+	buffer.m_desc.Height = 1;
+	buffer.m_desc.DepthOrArraySize = 1;
+	buffer.m_desc.MipLevels = 1;
+	buffer.m_desc.Format = DXGI_FORMAT_UNKNOWN;
+	buffer.m_desc.SampleDesc.Count = 1;
+	buffer.m_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	AssertIfFailed(s_d3dDevice->CreateReservedResource(
+		&buffer.m_desc,
+		requiresUpload ? D3D12_RESOURCE_STATE_COMMON : state,
+		nullptr,
+		IID_PPV_ARGS(buffer.m_resource.GetAddressOf())));
+
+	//// Allocate pages
+	//uint32_t numPages;
+	//s_d3dDevice->GetResourceTiling(buffer.m_resource.Get(), &numPages, nullptr, nullptr, nullptr, 0, nullptr);
+	//buffer.m_physicalPages = s_resourceHeap.AllocatePages(numPages);
+
+	//// Commit
+	//UpdateTileMappings();
+
+	//if (requiresUpload)
+	//{
+	//	auto&& [pDest, uploadBufferOffset] = uploadContext.Allocate(size);
+	//	uploadFunc(pDest);
+	//	uploadContext.CopyBuffer(buffer.m_resource.Get(), uploadBufferOffset, size);
+	//}
+
+	return buffer;
 }

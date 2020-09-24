@@ -7,13 +7,13 @@
 
 namespace Jobs
 {
-	concurrency::task<FCommandList*> PreRender()
+	concurrency::task<FCommandList> PreRender()
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
-			d3dCmdList->SetName(L"PreRenderJob CL");
+			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			d3dCmdList->SetName(L"pre_render_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
 			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -27,13 +27,13 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList*> Render()
+	concurrency::task<FCommandList> Render()
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
-			d3dCmdList->SetName(L"RenderJob CL");
+			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			d3dCmdList->SetName(L"render_job");
 
 			Microsoft::WRL::ComPtr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.Get());
@@ -70,13 +70,13 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList*> Present()
+	concurrency::task<FCommandList> Present()
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.Get();
-			d3dCmdList->SetName(L"PresentJob CL");
+			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			d3dCmdList->SetName(L"present_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
 			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
