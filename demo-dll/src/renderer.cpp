@@ -140,33 +140,33 @@ namespace Jobs
 				idxBufferSize += imguiCL->IdxBuffer.Size * sizeof(ImDrawIdx);
 			}
 
-			FResource vtxBuffer = Demo::D3D12::CreateUploadBuffer(
+			FResource vtxBuffer = Demo::D3D12::CreateTemporaryUploadBuffer(
 				L"imgui_vb",
 				vtxBufferSize,
 				[drawData](uint8_t* pDest)
-			{
-				ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
-				for (int i = 0; i < drawData->CmdListsCount; ++i)
 				{
-					const ImDrawList* imguiCL = drawData->CmdLists[i];
-					memcpy(vbDest, imguiCL->VtxBuffer.Data, imguiCL->VtxBuffer.Size * sizeof(ImDrawVert));
-					vbDest += imguiCL->VtxBuffer.Size;
-				}
-			});
+					ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
+					for (int i = 0; i < drawData->CmdListsCount; ++i)
+					{
+						const ImDrawList* imguiCL = drawData->CmdLists[i];
+						memcpy(vbDest, imguiCL->VtxBuffer.Data, imguiCL->VtxBuffer.Size * sizeof(ImDrawVert));
+						vbDest += imguiCL->VtxBuffer.Size;
+					}
+				});
 
-			FResource idxBuffer = Demo::D3D12::CreateUploadBuffer(
+			FResource idxBuffer = Demo::D3D12::CreateTemporaryUploadBuffer(
 				L"imgui_ib",
 				idxBufferSize,
 				[drawData](uint8_t* pDest)
-			{
-				ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);
-				for (int i = 0; i < drawData->CmdListsCount; ++i)
 				{
-					const ImDrawList* imguiCL = drawData->CmdLists[i];
-					memcpy(ibDest, imguiCL->IdxBuffer.Data, imguiCL->IdxBuffer.Size * sizeof(ImDrawIdx));
-					ibDest += imguiCL->IdxBuffer.Size;
-				}
-			});
+					ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);
+					for (int i = 0; i < drawData->CmdListsCount; ++i)
+					{
+						const ImDrawList* imguiCL = drawData->CmdLists[i];
+						memcpy(ibDest, imguiCL->IdxBuffer.Data, imguiCL->IdxBuffer.Size * sizeof(ImDrawIdx));
+						ibDest += imguiCL->IdxBuffer.Size;
+					}
+				});
 
 			Microsoft::WRL::ComPtr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.Get());
@@ -238,6 +238,8 @@ namespace Jobs
 
 			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
+
+
 
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight };

@@ -57,8 +57,11 @@ struct FRootsigDesc
 struct FResource
 {
 	Microsoft::WRL::ComPtr<D3DResource_t> m_resource;
-	D3D12_RESOURCE_DESC m_desc;
-	std::optional<PhysicalAlloc_t> m_physicalPages;
+};
+
+struct FShaderResource : public FResource
+{
+	uint32_t m_bindlessDescriptorIndex;
 };
 
 namespace Demo
@@ -91,16 +94,21 @@ namespace Demo
 		IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile);
 
 		// Resource Management
-		FResource CreateUploadBuffer(
+		FResource CreateTemporaryUploadBuffer(
 			const std::wstring& name,
 			const size_t size,
 			std::function<void(uint8_t*)> uploadFunc = nullptr);
 
-		FResource CreateDefaultBuffer(
+		FResource CreateTemporaryDefaultBuffer(
 			const std::wstring& name,
 			const size_t size,
-			D3D12_RESOURCE_STATES state,
-			FResourceUploadContext* uploadContext,
-			std::function<void(uint8_t*)> uploadFunc = nullptr);
+			D3D12_RESOURCE_STATES state);
+
+		FResource CreateTemporaryDefaultTexture(
+			const std::wstring& name,
+			const size_t size,
+			D3D12_RESOURCE_STATES state);
+
+		uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
 	}
 }

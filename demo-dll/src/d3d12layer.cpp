@@ -3,8 +3,10 @@
 #include <shadercompiler.h>
 #include <ppltasks.h>
 #include <concurrent_unordered_map.h>
+#include <concurrent_queue.h>
 #include <assert.h>
 #include <spookyhash_api.h>
+#include <imgui.h>
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -267,7 +269,7 @@ public:
 		// Reuse buffer
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
-			if (it->m_desc.Width >= sizeInBytes)
+			if (it->m_resource->GetDesc().Width >= sizeInBytes)
 			{
 				m_useList.push_back(*it);
 				m_freeList.erase(it);
@@ -304,7 +306,6 @@ public:
 			IID_PPV_ARGS(newBuffer.m_resource.GetAddressOf())));
 
 		newBuffer.m_resource->SetName(name.c_str());
-		newBuffer.m_desc = resourceDesc;
 
 		m_useList.push_back(newBuffer);
 		return newBuffer;
@@ -365,9 +366,14 @@ public:
 	FResourceUploadContext() = delete;
 	explicit FResourceUploadContext(const size_t uploadBufferSizeInBytes);
 
-	std::pair<uint8_t*, size_t> Allocate(const size_t sizeInBytes);
-	void CopyBuffer(D3DResource_t* destResource, const size_t srcOffset, const size_t size);
-	D3DFence_t* SubmitUploads();
+	void UpdateSubresources(
+		D3DResource_t* destinationResource,
+		const uint32_t firstSubresource,
+		const uint32_t numSubresources,
+		D3D12_SUBRESOURCE_DATA* srcData,
+		std::function<void(FCommandList*)> transition);
+
+	D3DFence_t* SubmitUploads(FCommandList* owningCL);
 
 private:
 	FResource m_uploadBuffer;
@@ -377,6 +383,7 @@ private:
 	size_t m_currentOffset;
 	size_t m_fenceValue;
 	Microsoft::WRL::ComPtr<D3DFence_t> m_fence;
+	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };
 
 
@@ -405,8 +412,10 @@ namespace Demo::D3D12
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
+	concurrency::concurrent_unordered_map<std::wstring, FShaderResource> s_textureCache;
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
+	concurrency::concurrent_queue<uint32_t> s_bindlessIndexPool;
 }
 
 namespace
@@ -508,6 +517,11 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetAddressOf()))
 	);
 	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
+
+	for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
+	{
+		s_bindlessIndexPool.push(i);
+	}
 
 	// RTV heap
 	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
@@ -769,39 +783,103 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 	m_uploadBuffer.m_resource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
 }
 
-std::pair<uint8_t*, size_t> FResourceUploadContext::Allocate(const size_t sizeInBytes)
+void FResourceUploadContext::UpdateSubresources(
+	D3DResource_t* destinationResource, 
+	const uint32_t firstSubresource,
+	const uint32_t numSubresources,
+	D3D12_SUBRESOURCE_DATA* srcData,
+	std::function<void(FCommandList*)> transition)
 {
+	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
+	UINT64 totalBytes = 0;
+	auto layouts = std::make_unique<D3D12_PLACED_SUBRESOURCE_FOOTPRINT[]>(numSubresources);
+	auto rowSizeInBytes = std::make_unique<UINT64[]>(numSubresources);
+	auto numRows = std::make_unique<UINT[]>(numSubresources);
+
+	D3D12_RESOURCE_DESC destinationDesc = destinationResource->GetDesc();
+	GetDevice()->GetCopyableFootprints(&destinationDesc, firstSubresource, numSubresources, m_currentOffset, layouts.get(), numRows.get(), rowSizeInBytes.get(), &totalBytes);
+
 	size_t capacity = m_sizeInBytes - m_currentOffset;
-	assert(sizeInBytes <= capacity && L"Upload buffer is too small!");
+	assert(totalBytes <= capacity && L"Upload buffer is too small!");
 
 	uint8_t* pAlloc = m_mappedPtr + m_currentOffset;
-	size_t offset = m_currentOffset;
-	m_currentOffset += sizeInBytes;
 
-	return std::make_pair(pAlloc, offset);
+	for (UINT i = 0; i < numSubresources; ++i)
+	{
+		D3D12_SUBRESOURCE_DATA src;
+		src.pData = srcData[i].pData;
+		src.RowPitch = srcData[i].RowPitch;
+		src.SlicePitch = srcData[i].SlicePitch;
+
+		D3D12_MEMCPY_DEST dest;
+		dest.pData = pAlloc + layouts[i].Offset;
+		dest.RowPitch = layouts[i].Footprint.RowPitch;
+		dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
+
+		UINT numSlices = layouts[i].Footprint.Depth;
+
+		for (UINT z = 0; z < numSlices; ++z)
+		{
+			BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
+			const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
+
+			for (UINT y = 0; y < numRows[i]; ++y)
+			{
+				memcpy(pDestSlice + dest.RowPitch * y,
+					pSrcSlice + src.RowPitch * y,
+					rowSizeInBytes[i]);
+			}
+		}
+	}
+
+	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+	{
+		m_copyCommandlist.m_cmdList->CopyBufferRegion(
+			destinationResource, 
+			0, 
+			m_uploadBuffer.m_resource.Get(), 
+			layouts[0].Offset, 
+			layouts[0].Footprint.Width);
+	}
+	else
+	{
+		for (UINT i = 0; i < numSubresources; ++i)
+		{
+			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+			srcLocation.pResource = m_uploadBuffer.m_resource.Get();
+			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+			srcLocation.PlacedFootprint = layouts[i];
+
+			D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+			dstLocation.pResource = destinationResource;
+			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			dstLocation.SubresourceIndex = i + firstSubresource;
+
+			m_copyCommandlist.m_cmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+		}
+	}
+
+	m_currentOffset += totalBytes;
+	m_pendingTransitions.push_back(transition);
 }
 
-void FResourceUploadContext::CopyBuffer(D3DResource_t* destResource, const size_t srcOffset, const size_t size)
-{
-	m_copyCommandlist.m_cmdList->CopyBufferRegion(
-		destResource,
-		0,
-		m_uploadBuffer.m_resource.Get(),
-		srcOffset,
-		size);
-}
-
-D3DFence_t* FResourceUploadContext::SubmitUploads()
+D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
 {
 	D3DFence_t* clFence = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
 
 	s_copyQueue->Signal(m_fence.Get(), m_fenceValue);
 	s_uploadBufferPool.Retire(m_uploadBuffer, m_copyCommandlist);
 
+	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
+	for (auto& transitionCallback : m_pendingTransitions)
+	{
+		transitionCallback(owningCL);
+	}
+
 	return clFence;
 }
 
-FResource Demo::D3D12::CreateUploadBuffer(
+FResource Demo::D3D12::CreateTemporaryUploadBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	std::function<void(uint8_t*)> uploadFunc)
@@ -822,31 +900,27 @@ FResource Demo::D3D12::CreateUploadBuffer(
 	return buffer;
 }
 
-FResource Demo::D3D12::CreateDefaultBuffer(
+FResource Demo::D3D12::CreateTemporaryDefaultBuffer(
 	const std::wstring& name,
 	const size_t size,
-	D3D12_RESOURCE_STATES state,
-	FResourceUploadContext* uploadContext,
-	std::function<void(uint8_t*)> uploadFunc)
+	D3D12_RESOURCE_STATES state)
 {
 	FResource buffer;
 
-	bool requiresUpload = uploadContext && uploadFunc;
-
 	// Create virtual resource
-	buffer.m_desc = {};
-	buffer.m_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	buffer.m_desc.Width = size;
-	buffer.m_desc.Height = 1;
-	buffer.m_desc.DepthOrArraySize = 1;
-	buffer.m_desc.MipLevels = 1;
-	buffer.m_desc.Format = DXGI_FORMAT_UNKNOWN;
-	buffer.m_desc.SampleDesc.Count = 1;
-	buffer.m_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	desc.Width = size;
+	desc.Height = 1;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = 1;
+	desc.Format = DXGI_FORMAT_UNKNOWN;
+	desc.SampleDesc.Count = 1;
+	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 	AssertIfFailed(s_d3dDevice->CreateReservedResource(
-		&buffer.m_desc,
-		requiresUpload ? D3D12_RESOURCE_STATE_COMMON : state,
+		&desc,
+		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
 		IID_PPV_ARGS(buffer.m_resource.GetAddressOf())));
 
@@ -858,12 +932,99 @@ FResource Demo::D3D12::CreateDefaultBuffer(
 	//// Commit
 	//UpdateTileMappings();
 
-	//if (requiresUpload)
-	//{
-	//	auto&& [pDest, uploadBufferOffset] = uploadContext.Allocate(size);
-	//	uploadFunc(pDest);
-	//	uploadContext.CopyBuffer(buffer.m_resource.Get(), uploadBufferOffset, size);
-	//}
-
 	return buffer;
+}
+
+uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
+{
+	auto search = s_textureCache.find(name);
+	if (search != s_textureCache.cend())
+	{
+		return search->second.m_bindlessDescriptorIndex;
+	}
+	else
+	{
+		FShaderResource& newTexture = s_textureCache[name];
+
+		uint8_t* pixels;
+		int width, height, bpp;
+		uint16_t mipLevels;
+		DXGI_FORMAT format;
+
+		if (name == L"imgui_fonts")
+		{
+			ImGuiIO& io = ImGui::GetIO();
+			io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
+			format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			mipLevels = 1;
+		}
+
+		// Create resource
+		{
+			D3D12_HEAP_PROPERTIES props = {};
+			props.Type = D3D12_HEAP_TYPE_DEFAULT;
+			props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+			props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+			D3D12_RESOURCE_DESC desc = {};
+			desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+			desc.Alignment = 0;
+			desc.Width = width;
+			desc.Height = height;
+			desc.DepthOrArraySize = 1;
+			desc.MipLevels = mipLevels;
+			desc.Format = format;
+			desc.SampleDesc.Count = 1;
+			desc.SampleDesc.Quality = 0;
+			desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+			desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+			GetDevice()->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
+				D3D12_RESOURCE_STATE_COPY_DEST, NULL, IID_PPV_ARGS(newTexture.m_resource.GetAddressOf()));
+		}
+
+		// Upload texture data
+		{
+			D3D12_SUBRESOURCE_DATA srcData;
+			srcData.pData = pixels;
+			srcData.RowPitch = width * bpp;
+			srcData.SlicePitch = height * srcData.RowPitch;
+			uploadContext->UpdateSubresources(
+				newTexture.m_resource.Get(), 
+				0, 
+				1, 
+				&srcData,
+				[resource = newTexture.m_resource.Get()](FCommandList* cmdList)
+				{
+					D3D12_RESOURCE_BARRIER barrier = {};
+					barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+					barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+					barrier.Transition.pResource = resource;
+					barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+					barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+					barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+					cmdList->m_cmdList->ResourceBarrier(1, &barrier);
+				});
+		}
+
+		// Descriptor
+		{
+			bool ok = s_bindlessIndexPool.try_pop(newTexture.m_bindlessDescriptorIndex);
+			assert(ok && "Ran out of bindless descriptors");
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
+				newTexture.m_bindlessDescriptorIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+			ZeroMemory(&srvDesc, sizeof(srvDesc));
+			srvDesc.Format = format;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MipLevels = mipLevels;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			GetDevice()->CreateShaderResourceView(newTexture.m_resource.Get(), &srvDesc, srv);
+		}
+
+		return newTexture.m_bindlessDescriptorIndex;
+	}
 }
