@@ -140,6 +140,7 @@ void Demo::Tick(float dt)
 		uint32_t fontSrvIndex = Demo::D3D12::CacheTexture(L"imgui_fonts", &uploader);
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
 		uploader.SubmitUploads(&cmdList);
+		Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
@@ -179,8 +180,8 @@ void Demo::Teardown(HWND& windowHandle)
 	{
 		D3D12::Teardown();
 		ShaderCompiler::Teardown();
-		ImGui_ImplWin32_Shutdown();
-		ImGui::DestroyContext();
+		//ImGui_ImplWin32_Shutdown();
+		//ImGui::DestroyContext();
 		DestroyWindow(windowHandle);
 		windowHandle = {};
 	}

@@ -58,9 +58,15 @@ struct FResource
 	Microsoft::WRL::ComPtr<D3DResource_t> m_resource;
 };
 
-struct FShaderResource : public FResource
+struct FBindlessShaderResource : public FResource
 {
 	uint32_t m_bindlessDescriptorIndex;
+};
+
+struct FTemporaryBuffer : public FResource
+{
+	~FTemporaryBuffer();
+	FCommandList m_dependentCmdlist;
 };
 
 class FResourceUploadContext
@@ -79,7 +85,7 @@ public:
 	D3DFence_t* SubmitUploads(FCommandList* owningCL);
 
 private:
-	FResource m_uploadBuffer;
+	D3DResource_t* m_uploadBuffer;
 	FCommandList m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_sizeInBytes;
@@ -121,9 +127,10 @@ namespace Demo
 		D3D12_GPU_DESCRIPTOR_HANDLE GetBindlessShaderResourceHeapHandle();
 
 		// Resource Management
-		FResource CreateTemporaryUploadBuffer(
+		FTemporaryBuffer CreateTemporaryBuffer(
 			const std::wstring& name,
 			const size_t size,
+			const FCommandList dependentCL,
 			std::function<void(uint8_t*)> uploadFunc = nullptr);
 
 		FResource CreateTemporaryDefaultBuffer(

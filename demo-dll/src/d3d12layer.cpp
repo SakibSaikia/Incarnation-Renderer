@@ -261,26 +261,26 @@ private:
 class FUploadBufferPool
 {
 public:
-	FResource GetOrCreate(const std::wstring& name, const size_t sizeInBytes)
+	D3DResource_t* GetOrCreate(const std::wstring& name, const size_t sizeInBytes)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
 
 		// Reuse buffer
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
-			if (it->m_resource->GetDesc().Width >= sizeInBytes)
+			if ((*it)->GetDesc().Width >= sizeInBytes)
 			{
 				m_useList.push_back(*it);
 				m_freeList.erase(it);
 
-				FResource buffer = m_useList.back();
-				buffer.m_resource->SetName(name.c_str());
+				D3DResource_t* buffer = m_useList.back().Get();
+				buffer->SetName(name.c_str());
 				return buffer;
 			}
 		}
 
 		// New buffer
-		FResource newBuffer;
+		Microsoft::WRL::ComPtr<D3DResource_t> newBuffer;
 
 		D3D12_HEAP_PROPERTIES heapDesc = {};
 		heapDesc.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -302,15 +302,15 @@ public:
 			&resourceDesc,
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
-			IID_PPV_ARGS(newBuffer.m_resource.GetAddressOf())));
+			IID_PPV_ARGS(newBuffer.GetAddressOf())));
 
-		newBuffer.m_resource->SetName(name.c_str());
+		newBuffer->SetName(name.c_str());
 
 		m_useList.push_back(newBuffer);
-		return newBuffer;
+		return newBuffer.Get();
 	}
 
-	void Retire(FResource buffer, FCommandList dependantCL)
+	void Retire(D3DResource_t* buffer, FCommandList dependantCL)
 	{
 		auto waitForFenceTask = concurrency::create_task([buffer, dependantCL, this]()
 		{
@@ -329,9 +329,8 @@ public:
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
-				if (*it == buffer)
+				if (it->Get() == buffer)
 				{
-					it->m_resource->Unmap(0, nullptr);
 					m_freeList.push_back(*it);
 					it = m_useList.erase(it);
 					break;
@@ -349,8 +348,8 @@ public:
 private:
 	std::atomic_size_t m_fenceCounter{ 0 };
 	std::mutex m_mutex;
-	std::list<FResource> m_freeList;
-	std::list<FResource> m_useList;
+	std::list<Microsoft::WRL::ComPtr<D3DResource_t>> m_freeList;
+	std::list<Microsoft::WRL::ComPtr<D3DResource_t>> m_useList;
 };
 
 struct FTimestampedBlob
@@ -384,7 +383,7 @@ namespace Demo::D3D12
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
-	concurrency::concurrent_unordered_map<std::wstring, FShaderResource> s_textureCache;
+	concurrency::concurrent_unordered_map<std::wstring, FBindlessShaderResource> s_textureCache;
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_bindlessIndexPool;
@@ -771,7 +770,7 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
 
 	m_uploadBuffer = s_uploadBufferPool.GetOrCreate(L"upload_context_buffer", m_sizeInBytes);
-	m_uploadBuffer.m_resource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
+	m_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
 }
 
 void FResourceUploadContext::UpdateSubresources(
@@ -828,7 +827,7 @@ void FResourceUploadContext::UpdateSubresources(
 		m_copyCommandlist.m_cmdList->CopyBufferRegion(
 			destinationResource, 
 			0, 
-			m_uploadBuffer.m_resource.Get(), 
+			m_uploadBuffer, 
 			layouts[0].Offset, 
 			layouts[0].Footprint.Width);
 	}
@@ -837,7 +836,7 @@ void FResourceUploadContext::UpdateSubresources(
 		for (UINT i = 0; i < numSubresources; ++i)
 		{
 			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-			srcLocation.pResource = m_uploadBuffer.m_resource.Get();
+			srcLocation.pResource = m_uploadBuffer;
 			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 			srcLocation.PlacedFootprint = layouts[i];
 
@@ -879,9 +878,10 @@ D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBindlessShaderResourceHeapHandle()
 	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetGPUDescriptorHandleForHeapStart();
 }
 
-FResource Demo::D3D12::CreateTemporaryUploadBuffer(
+FTemporaryBuffer Demo::D3D12::CreateTemporaryBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
+	const FCommandList dependentCL,
 	std::function<void(uint8_t*)> uploadFunc)
 {
 	assert(sizeInBytes != 0);
@@ -889,18 +889,22 @@ FResource Demo::D3D12::CreateTemporaryUploadBuffer(
 	DWORD n;
 	_BitScanReverse64(&n, sizeInBytes);
 	const size_t powOf2Size = (1 << (n + 1));
-	FResource buffer = s_uploadBufferPool.GetOrCreate(name, powOf2Size);
+	D3DResource_t* buffer = s_uploadBufferPool.GetOrCreate(name, powOf2Size);
 
 	uint8_t* pData;
-	buffer.m_resource->Map(0, nullptr, reinterpret_cast<void**>(&pData));
+	buffer->Map(0, nullptr, reinterpret_cast<void**>(&pData));
 
 	if (uploadFunc)
 	{
 		uploadFunc(pData);
-		buffer.m_resource->Unmap(0, nullptr);
+		buffer->Unmap(0, nullptr);
 	}
 
-	return buffer;
+	FTemporaryBuffer tempBuffer;
+	tempBuffer.m_resource = buffer;
+	tempBuffer.m_dependentCmdlist = dependentCL;
+
+	return tempBuffer;
 }
 
 FResource Demo::D3D12::CreateTemporaryDefaultBuffer(
@@ -947,7 +951,7 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 	}
 	else
 	{
-		FShaderResource& newTexture = s_textureCache[name];
+		FBindlessShaderResource& newTexture = s_textureCache[name];
 
 		uint8_t* pixels;
 		int width, height, bpp;
@@ -1029,4 +1033,9 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 
 		return newTexture.m_bindlessDescriptorIndex;
 	}
+}
+
+FTemporaryBuffer::~FTemporaryBuffer()
+{
+	s_uploadBufferPool.Retire(m_resource.Get(), m_dependentCmdlist);
 }

@@ -142,9 +142,10 @@ namespace Jobs
 
 			// Vertex Buffer
 			{
-				FResource vtxBuffer = Demo::D3D12::CreateTemporaryUploadBuffer(
+				FTemporaryBuffer vtxBuffer = Demo::D3D12::CreateTemporaryBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
+					cmdList,
 					[drawData](uint8_t* pDest)
 					{
 						ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
@@ -165,9 +166,10 @@ namespace Jobs
 
 			// Index Buffer
 			{
-				FResource idxBuffer = Demo::D3D12::CreateTemporaryUploadBuffer(
+				FTemporaryBuffer idxBuffer = Demo::D3D12::CreateTemporaryBuffer(
 					L"imgui_ib",
 					idxBufferSize,
+					cmdList,
 					[drawData](uint8_t* pDest)
 					{
 						ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);
