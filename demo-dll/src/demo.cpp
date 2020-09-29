@@ -18,17 +18,6 @@ namespace Demo
 
 namespace
 {
-	void LockCursorToWindow(HWND& windowHandle)
-	{
-		RECT screenRect;
-		GetWindowRect(windowHandle, &screenRect);
-		ClipCursor(&screenRect);
-
-		int windowCenterX = screenRect.left + (screenRect.right - screenRect.left) / 2;
-		int windowCenterY = screenRect.top + (screenRect.bottom - screenRect.top) / 2;
-		SetCursorPos(windowCenterX, windowCenterY);
-	}
-
 	LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
 		switch (msg)
@@ -49,7 +38,6 @@ namespace
 			if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE)
 			{
 				EnableWindow(hWnd, TRUE);
-				LockCursorToWindow(Demo::s_windowHandle);
 			}
 			else if (LOWORD(wParam) == WA_INACTIVE)
 			{
@@ -112,9 +100,6 @@ bool Demo::InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const 
 	ShowWindow(windowHandle, SW_SHOW);
 	UpdateWindow(windowHandle);
 
-	ShowCursor(FALSE);
-
-	LockCursorToWindow(windowHandle);
 	return true;
 }
 
