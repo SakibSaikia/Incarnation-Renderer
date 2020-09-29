@@ -5,6 +5,7 @@
 #include <dxgi1_4.h>
 #include <d3d12.h>
 #include <wrl.h>
+#include <pix3.h>
 #include <vector>
 #include <string>
 #include <functional>

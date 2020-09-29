@@ -24,7 +24,8 @@ include_directories(
     "inc"
     "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
     "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
-    "${CMAKE_SOURCE_DIR}/ext/imgui")
+    "${CMAKE_SOURCE_DIR}/ext/imgui"
+    "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime")
 
 # Macro defines
 add_compile_definitions(
@@ -57,11 +58,13 @@ endif()
 target_link_directories(
     libdemo 
     PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
-    PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64")
+    PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
+    PRIVATE "${CMAKE_SOURCE_DIR}/ext/pix/bin/x64")
 
 target_link_libraries(
     libdemo 
     PRIVATE dxgi.lib
     PRIVATE d3d12.lib
     PRIVATE dxcompiler.lib
-    PRIVATE spookyhash.lib)
+    PRIVATE spookyhash.lib
+    PRIVATE WinPixEventRuntime.lib)

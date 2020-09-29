@@ -109,6 +109,7 @@ int WINAPI main(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, in
 	AddDllDirectory(LIB_DEMO_DIR);
 	AddDllDirectory(SPOOKYHASH_BIN_DIR);
 	AddDllDirectory(DXC_BIN_DIR);
+	AddDllDirectory(PIX_BIN_DIR);
 
 	HMODULE demoDll{};
 	ModuleProcs demoProcs{};

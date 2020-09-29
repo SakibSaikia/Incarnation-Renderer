@@ -36,6 +36,7 @@ namespace Jobs
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
 			d3dCmdList->SetName(L"render_job");
+			PIXBeginEvent(d3dCmdList, 0, L"render_commands");
 
 			Microsoft::WRL::ComPtr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.Get());
@@ -118,6 +119,7 @@ namespace Jobs
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
 
+			PIXEndEvent(d3dCmdList);
 			return cmdList;
 		});
 	}
@@ -129,6 +131,7 @@ namespace Jobs
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
 			d3dCmdList->SetName(L"imgui_job");
+			PIXBeginEvent(d3dCmdList, 0, L"imgui_commands");
 
 			ImDrawData* drawData = ImGui::GetDrawData();
 			size_t vtxBufferSize = 0;
@@ -367,6 +370,7 @@ namespace Jobs
 				indexOffset += imguiCmdList->VtxBuffer.Size;
 			}
 
+			PIXEndEvent(d3dCmdList);
 			return cmdList;
 		});
 	}

@@ -14,7 +14,8 @@ add_compile_definitions(
 	LIB_DEMO_NAME=L"libdemo" 
 	LIB_DEMO_DIR=L"${CMAKE_BINARY_DIR}/demo-dll" 
 	SPOOKYHASH_BIN_DIR=L"${CMAKE_SOURCE_DIR}/ext/spookyhash/bin"
-	DXC_BIN_DIR=L"${CMAKE_SOURCE_DIR}/ext/dxc/bin/x64")
+	DXC_BIN_DIR=L"${CMAKE_SOURCE_DIR}/ext/dxc/bin/x64"
+	PIX_BIN_DIR=L"${CMAKE_SOURCE_DIR}/ext/pix/bin/x64")
 
 target_link_directories(demo PUBLIC "${CMAKE_BINARY_DIR}")
 
