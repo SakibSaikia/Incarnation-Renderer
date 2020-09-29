@@ -371,6 +371,9 @@ namespace Demo::D3D12
 	std::array<Microsoft::WRL::ComPtr<D3DResource_t>, k_backBufferCount> s_backBuffers;
 	uint32_t s_currentBufferIndex;
 
+	Microsoft::WRL::ComPtr<D3DFence_t> s_frameFence;
+	std::array<uint64_t, k_backBufferCount> s_frameFenceValues;
+
 	std::array<uint32_t, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorSize;
 	std::array< Microsoft::WRL::ComPtr<D3DDescriptorHeap_t>, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorHeaps;
 
@@ -449,12 +452,10 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	Microsoft::WRL::ComPtr<DXGIAdapter_t> adapter = EnumerateAdapters(s_dxgiFactory.Get());
 
 	// Device
-	AssertIfFailed(
-		D3D12CreateDevice(
-			adapter.Get(),
-			D3D_FEATURE_LEVEL_12_1,
-			IID_PPV_ARGS(s_d3dDevice.GetAddressOf()))
-	);
+	AssertIfFailed(D3D12CreateDevice(
+		adapter.Get(),
+		D3D_FEATURE_LEVEL_12_1,
+		IID_PPV_ARGS(s_d3dDevice.GetAddressOf())));
 
 	// Cache descriptor sizes
 	for (int typeId = 0; typeId < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++typeId)
@@ -566,6 +567,10 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	}
 
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
+
+	// Frame sync
+	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(s_frameFence.GetAddressOf())));
+	s_frameFenceValues = { 0, 0 };
 
 	return true;
 }
@@ -734,7 +739,26 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 void Demo::D3D12::PresentDisplay()
 {
 	s_swapChain->Present(1, 0);
+
+	// Signal current frame is done
+	auto currentFenceValue = s_frameFenceValues[s_currentBufferIndex];
+	s_graphicsQueue->Signal(s_frameFence.Get(), currentFenceValue);
+
+	// Cycle to next buffer index
 	s_currentBufferIndex = (s_currentBufferIndex + 1) % k_backBufferCount;
+
+	// If the buffer that was swapped in hasn't finished rendering on the GPU (from a previous submit), then wait!
+	if (s_frameFence->GetCompletedValue() < s_frameFenceValues[s_currentBufferIndex])
+	{
+		PIXBeginEvent(0, L"wait_on_previous_frame");
+		HANDLE frameWaitEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+		s_frameFence->SetEventOnCompletion(s_frameFenceValues[s_currentBufferIndex], frameWaitEvent);
+		WaitForSingleObjectEx(frameWaitEvent, INFINITE, FALSE);
+		PIXEndEvent();
+	}
+
+	// Update fence value for the next frame
+	s_frameFenceValues[s_currentBufferIndex] = currentFenceValue + 1;
 }
 
 FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue) :
