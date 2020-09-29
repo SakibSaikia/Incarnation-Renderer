@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required (VERSION 3.8)
 
-add_executable (demo "main.cpp")
+add_executable (demo WIN32 "main.cpp")
 
 set_property(TARGET demo PROPERTY CXX_STANDARD 20)
 

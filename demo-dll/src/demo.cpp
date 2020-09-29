@@ -168,7 +168,6 @@ void Demo::Teardown(HWND& windowHandle)
 		//ImGui_ImplWin32_Shutdown();
 		//ImGui::DestroyContext();
 		DestroyWindow(windowHandle);
-		windowHandle = {};
 	}
 }
 
