@@ -7,6 +7,8 @@
 #include <wrl.h>
 # include <string>
 
+constexpr size_t k_bindlessSrvHeapSize = 1000;
+
 namespace Demo
 {
 	namespace ShaderCompiler

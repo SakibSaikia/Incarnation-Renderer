@@ -17,7 +17,6 @@
 #include <utility>
 
 // Constants
-constexpr size_t k_bindlessSrvHeapSize = 1000;
 constexpr uint32_t k_backBufferCount = 2;
 
 using namespace Demo::D3D12;
@@ -360,33 +359,6 @@ struct FTimestampedBlob
 	Microsoft::WRL::ComPtr<IDxcBlob> m_blob;
 };
 
-class FResourceUploadContext
-{
-public:
-	FResourceUploadContext() = delete;
-	explicit FResourceUploadContext(const size_t uploadBufferSizeInBytes);
-
-	void UpdateSubresources(
-		D3DResource_t* destinationResource,
-		const uint32_t firstSubresource,
-		const uint32_t numSubresources,
-		D3D12_SUBRESOURCE_DATA* srcData,
-		std::function<void(FCommandList*)> transition);
-
-	D3DFence_t* SubmitUploads(FCommandList* owningCL);
-
-private:
-	FResource m_uploadBuffer;
-	FCommandList m_copyCommandlist;
-	uint8_t* m_mappedPtr;
-	size_t m_sizeInBytes;
-	size_t m_currentOffset;
-	size_t m_fenceValue;
-	Microsoft::WRL::ComPtr<D3DFence_t> m_fence;
-	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
-};
-
-
 namespace Demo::D3D12
 {
 #if defined (_DEBUG)
@@ -507,20 +479,36 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	s_copyQueue->SetName(L"copy_queue");
 
 	// Bindless SRV heap
-	D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
-	cbvSrvUavHeapDesc.NumDescriptors = k_bindlessSrvHeapSize;
-	cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	AssertIfFailed(
-		s_d3dDevice->CreateDescriptorHeap(
-			&cbvSrvUavHeapDesc,
-			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetAddressOf()))
-	);
-	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
-
-	for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
 	{
-		s_bindlessIndexPool.push(i);
+		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
+		cbvSrvUavHeapDesc.NumDescriptors = k_bindlessSrvHeapSize;
+		cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		AssertIfFailed(
+			s_d3dDevice->CreateDescriptorHeap(
+				&cbvSrvUavHeapDesc,
+				IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetAddressOf()))
+		);
+		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
+
+		// Initialize with null descriptors
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr + 
+				i * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
+		}
+
+		// Cache available indices
+		for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
+		{
+			s_bindlessIndexPool.push(i);
+		}
 	}
 
 	// RTV heap
@@ -773,9 +761,12 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fen
 FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
 	m_currentOffset{ 0 }
 {
+	assert(uploadBufferSizeInBytes != 0);
+
 	// Round up to power of 2
-	DWORD n = _BitScanForward64(&n, uploadBufferSizeInBytes);
-	m_sizeInBytes = (1 << n);
+	unsigned long n;
+	_BitScanReverse64(&n, uploadBufferSizeInBytes);
+	m_sizeInBytes = (1 << (n + 1));
 
 	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
 
@@ -867,7 +858,6 @@ D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
 {
 	D3DFence_t* clFence = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
 
-	s_copyQueue->Signal(m_fence.Get(), m_fenceValue);
 	s_uploadBufferPool.Retire(m_uploadBuffer, m_copyCommandlist);
 
 	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
@@ -879,14 +869,26 @@ D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
 	return clFence;
 }
 
+D3DDescriptorHeap_t* Demo::D3D12::GetBindlessShaderResourceHeap()
+{
+	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Get();
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBindlessShaderResourceHeapHandle()
+{
+	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetGPUDescriptorHandleForHeapStart();
+}
+
 FResource Demo::D3D12::CreateTemporaryUploadBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	std::function<void(uint8_t*)> uploadFunc)
 {
+	assert(sizeInBytes != 0);
+
 	DWORD n;
-	_BitScanForward64(&n, sizeInBytes);
-	const size_t powOf2Size = (1 << n);
+	_BitScanReverse64(&n, sizeInBytes);
+	const size_t powOf2Size = (1 << (n + 1));
 	FResource buffer = s_uploadBufferPool.GetOrCreate(name, powOf2Size);
 
 	uint8_t* pData;
@@ -895,6 +897,7 @@ FResource Demo::D3D12::CreateTemporaryUploadBuffer(
 	if (uploadFunc)
 	{
 		uploadFunc(pData);
+		buffer.m_resource->Unmap(0, nullptr);
 	}
 
 	return buffer;
@@ -1015,8 +1018,7 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
 				newTexture.m_bindlessDescriptorIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
 
-			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-			ZeroMemory(&srvDesc, sizeof(srvDesc));
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 			srvDesc.Format = format;
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 			srvDesc.Texture2D.MipLevels = mipLevels;

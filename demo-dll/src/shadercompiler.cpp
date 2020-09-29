@@ -166,6 +166,13 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 	Microsoft::WRL::ComPtr<IDxcCompiler> compiler;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.GetAddressOf())));
 
+	std::wstringstream s;
+	s << k_bindlessSrvHeapSize;
+	DxcDefine defines[] = 
+	{ 
+		{L"BINDLESS_DESCRIPTOR_COUNT", s.str().c_str()} 
+	};
+
 	Microsoft::WRL::ComPtr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
 		source.Get(),
@@ -173,7 +180,7 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 		entrypoint.c_str(),
 		profile.c_str(),
 		nullptr, 0,
-		nullptr, 0,
+		defines, std::size(defines),
 		includeHandler.Get(),
 		result.GetAddressOf()));
 

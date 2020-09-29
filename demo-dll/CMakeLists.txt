@@ -11,6 +11,7 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_demo.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_draw.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_impl_win32.cpp"
     "src/demo.cpp"
     "src/d3d12layer.cpp" 
     "src/shadercompiler.cpp"

@@ -26,7 +26,6 @@ using D3DPipelineState_t = ID3D12PipelineState;
 using D3DRootSignature_t = ID3D12RootSignature;
 using PhysicalAlloc_t = std::vector<uint32_t>;
 
-class FResourceUploadContext;
 struct IDxcBlob;
 
 struct FCommandList
@@ -64,6 +63,30 @@ struct FShaderResource : public FResource
 	uint32_t m_bindlessDescriptorIndex;
 };
 
+class FResourceUploadContext
+{
+public:
+	FResourceUploadContext() = delete;
+	explicit FResourceUploadContext(const size_t uploadBufferSizeInBytes);
+
+	void UpdateSubresources(
+		D3DResource_t* destinationResource,
+		const uint32_t firstSubresource,
+		const uint32_t numSubresources,
+		D3D12_SUBRESOURCE_DATA* srcData,
+		std::function<void(FCommandList*)> transition);
+
+	D3DFence_t* SubmitUploads(FCommandList* owningCL);
+
+private:
+	FResource m_uploadBuffer;
+	FCommandList m_copyCommandlist;
+	uint8_t* m_mappedPtr;
+	size_t m_sizeInBytes;
+	size_t m_currentOffset;
+	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
+};
+
 namespace Demo
 {
 	namespace D3D12
@@ -92,6 +115,10 @@ namespace Demo
 
 		// Shaders
 		IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile);
+
+		// Descriptor Management
+		D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();
+		D3D12_GPU_DESCRIPTOR_HANDLE GetBindlessShaderResourceHeapHandle();
 
 		// Resource Management
 		FResource CreateTemporaryUploadBuffer(
