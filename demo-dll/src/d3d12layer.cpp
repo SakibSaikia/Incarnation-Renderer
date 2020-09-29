@@ -878,7 +878,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBindlessShaderResourceHeapHandle()
 	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetGPUDescriptorHandleForHeapStart();
 }
 
-FTemporaryBuffer Demo::D3D12::CreateTemporaryBuffer(
+FTransientBuffer Demo::D3D12::CreateTransientBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	const FCommandList dependentCL,
@@ -900,7 +900,7 @@ FTemporaryBuffer Demo::D3D12::CreateTemporaryBuffer(
 		buffer->Unmap(0, nullptr);
 	}
 
-	FTemporaryBuffer tempBuffer;
+	FTransientBuffer tempBuffer;
 	tempBuffer.m_resource = buffer;
 	tempBuffer.m_dependentCmdlist = dependentCL;
 
@@ -1035,7 +1035,7 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 	}
 }
 
-FTemporaryBuffer::~FTemporaryBuffer()
+FTransientBuffer::~FTransientBuffer()
 {
 	s_uploadBufferPool.Retire(m_resource.Get(), m_dependentCmdlist);
 }

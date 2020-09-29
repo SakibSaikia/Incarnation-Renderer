@@ -142,7 +142,7 @@ namespace Jobs
 
 			// Vertex Buffer
 			{
-				FTemporaryBuffer vtxBuffer = Demo::D3D12::CreateTemporaryBuffer(
+				FTransientBuffer vtxBuffer = Demo::D3D12::CreateTransientBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
 					cmdList,
@@ -166,7 +166,7 @@ namespace Jobs
 
 			// Index Buffer
 			{
-				FTemporaryBuffer idxBuffer = Demo::D3D12::CreateTemporaryBuffer(
+				FTransientBuffer idxBuffer = Demo::D3D12::CreateTransientBuffer(
 					L"imgui_ib",
 					idxBufferSize,
 					cmdList,

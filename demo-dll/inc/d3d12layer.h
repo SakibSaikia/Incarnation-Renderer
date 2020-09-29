@@ -63,9 +63,9 @@ struct FBindlessShaderResource : public FResource
 	uint32_t m_bindlessDescriptorIndex;
 };
 
-struct FTemporaryBuffer : public FResource
+struct FTransientBuffer : public FResource
 {
-	~FTemporaryBuffer();
+	~FTransientBuffer();
 	FCommandList m_dependentCmdlist;
 };
 
@@ -127,7 +127,7 @@ namespace Demo
 		D3D12_GPU_DESCRIPTOR_HANDLE GetBindlessShaderResourceHeapHandle();
 
 		// Resource Management
-		FTemporaryBuffer CreateTemporaryBuffer(
+		FTransientBuffer CreateTransientBuffer(
 			const std::wstring& name,
 			const size_t size,
 			const FCommandList dependentCL,
