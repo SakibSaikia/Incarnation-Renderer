@@ -282,6 +282,7 @@ namespace Jobs
 				D3D12_BLEND_DESC& desc = psoDesc.BlendState;
 				desc.AlphaToCoverageEnable = FALSE;
 				desc.IndependentBlendEnable = FALSE;
+				desc.RenderTarget[0].BlendEnable = TRUE;
 				desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
 				desc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 				desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
