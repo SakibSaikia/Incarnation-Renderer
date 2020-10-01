@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <spookyhash_api.h>
 #include <imgui.h>
+#include <dxgidebug.h>
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -251,6 +252,13 @@ public:
 		waitForFenceTask.then(addToFreePool);
 	}
 
+	void Clear()
+	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+		assert(m_useList.empty() && "All CLs should be retired at this point");
+		m_freeList.clear();
+	}
+
 private:
 	std::atomic_size_t m_fenceCounter{ 0 };
 	std::mutex m_mutex;
@@ -343,6 +351,13 @@ public:
 		};
 
 		waitForFenceTask.then(addToFreePool);
+	}
+
+	void Clear()
+	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+		assert(m_useList.empty() && "All buffers should be retired at this point");
+		m_freeList.clear();
 	}
 
 private:
@@ -579,13 +594,48 @@ void Demo::D3D12::Teardown()
 {
 	Microsoft::WRL::ComPtr<D3DFence_t> flushFence;
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.GetAddressOf())));
-
 	HANDLE flushEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-
 	s_graphicsQueue->Signal(flushFence.Get(), 0xFF);
 	flushFence->SetEventOnCompletion(0xFF, flushEvent);
-
 	WaitForSingleObject(flushEvent, INFINITE);
+
+	s_commandListPool.Clear();
+	s_uploadBufferPool.Clear();
+
+	s_shaderCache.clear();
+	s_rootsigCache.clear();
+	s_textureCache.clear();
+	s_graphicsPSOPool.clear();
+	s_computePSOPool.clear();
+	s_bindlessIndexPool.clear();
+
+	s_graphicsQueue.Reset();
+	s_computeQueue.Reset();
+	s_copyQueue.Reset();
+
+	s_frameFence.Reset();
+
+	for (auto& descriptorHeap : s_descriptorHeaps)
+	{
+		descriptorHeap.Reset();
+	}
+
+	for (auto& backBuffer : s_backBuffers)
+	{
+		backBuffer.Reset();
+	}
+
+	s_dxgiFactory.Reset();
+	s_d3dDevice.Reset();
+
+#if _DEBUG
+	HMODULE dxgiDebugDll = GetModuleHandle(L"Dxgidebug.dll");
+	auto DXGIGetDebugInterfaceProc = reinterpret_cast<decltype(DXGIGetDebugInterface)*>(GetProcAddress(dxgiDebugDll, "DXGIGetDebugInterface"));
+
+	Microsoft::WRL::ComPtr<IDXGIDebug> dxgiDebug;
+	DXGIGetDebugInterfaceProc(IID_PPV_ARGS(dxgiDebug.GetAddressOf()));
+	AssertIfFailed(dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL));
+#endif
 }
 
 D3DDevice_t* Demo::D3D12::GetDevice()

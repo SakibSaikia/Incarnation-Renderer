@@ -64,6 +64,7 @@ target_link_directories(
 target_link_libraries(
     libdemo 
     PRIVATE dxgi.lib
+    PRIVATE dxguid.lib
     PRIVATE d3d12.lib
     PRIVATE dxcompiler.lib
     PRIVATE spookyhash.lib

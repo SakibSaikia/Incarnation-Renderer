@@ -403,7 +403,8 @@ void Demo::Render()
 	auto renderCL = Jobs::Render().get();
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
 
-	if (ImGui::GetDrawData()->CmdListsCount > 0)
+	ImDrawData* imguiDraws = ImGui::GetDrawData();
+	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
 		auto uiCL = Jobs::UI().get();
 		Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { uiCL});
