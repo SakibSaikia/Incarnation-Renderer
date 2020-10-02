@@ -1,4 +1,5 @@
 #include <shadercompiler.h>
+#include <winrt/base.h>
 #include <assert.h>
 #include <system_error>
 #include <vector>
@@ -82,28 +83,28 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 	const std::filesystem::path filepath = SearchShaderDir(filename);
 	assert(!filepath.empty() && "Shader source file not found");
 
-	Microsoft::WRL::ComPtr<IDxcLibrary> library;
-	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.GetAddressOf())));
+	winrt::com_ptr<IDxcLibrary> library;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.put())));
 
-	Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
-	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.GetAddressOf()));
+	winrt::com_ptr<IDxcBlobEncoding> source;
+	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.put()));
 
-	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
-	AssertIfFailed(library->CreateIncludeHandler(includeHandler.GetAddressOf()));
+	winrt::com_ptr<IDxcIncludeHandler> includeHandler;
+	AssertIfFailed(library->CreateIncludeHandler(includeHandler.put()));
 
-	Microsoft::WRL::ComPtr<IDxcCompiler> compiler;
-	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.GetAddressOf())));
+	winrt::com_ptr<IDxcCompiler> compiler;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
 
-	Microsoft::WRL::ComPtr<IDxcOperationResult> result;
+	winrt::com_ptr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
-		source.Get(),
+		source.get(),
 		filename.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
 		Settings::k_compilerArguments.data(), (UINT)Settings::k_compilerArguments.size(),
 		nullptr, 0, 
-		includeHandler.Get(),
-		result.GetAddressOf()));
+		includeHandler.get(),
+		result.put()));
 
 	HRESULT hr;
 	result->GetStatus(&hr);
@@ -114,11 +115,11 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 
 		// Validation
 		DxcCreateInstanceProc dxil_create_func = (DxcCreateInstanceProc)GetProcAddress(s_validationModule, "DxcCreateInstance");
-		Microsoft::WRL::ComPtr<IDxcValidator> validator;
-		AssertIfFailed(dxil_create_func(CLSID_DxcValidator, IID_PPV_ARGS(validator.GetAddressOf())));
+		winrt::com_ptr<IDxcValidator> validator;
+		AssertIfFailed(dxil_create_func(CLSID_DxcValidator, IID_PPV_ARGS(validator.put())));
 
-		Microsoft::WRL::ComPtr<IDxcOperationResult> signResult;
-		AssertIfFailed(validator->Validate(*compiledBlob, DxcValidatorFlags_InPlaceEdit, signResult.GetAddressOf()));
+		winrt::com_ptr<IDxcOperationResult> signResult;
+		AssertIfFailed(validator->Validate(*compiledBlob, DxcValidatorFlags_InPlaceEdit, signResult.put()));
 
 		signResult->GetStatus(&hr);
 		if (SUCCEEDED(hr))
@@ -127,18 +128,18 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 		}
 		else
 		{
-			Microsoft::WRL::ComPtr<IDxcBlobEncoding> error;
-			signResult->GetErrorBuffer(error.GetAddressOf());
+			winrt::com_ptr<IDxcBlobEncoding> error;
+			signResult->GetErrorBuffer(error.put());
 			return hr;
 		}
 	}
 	else
 	{
-		Microsoft::WRL::ComPtr<IDxcBlobEncoding> error;
-		result->GetErrorBuffer(error.GetAddressOf());
+		winrt::com_ptr<IDxcBlobEncoding> error;
+		result->GetErrorBuffer(error.put());
 
-		Microsoft::WRL::ComPtr<IDxcBlobEncoding> errorMessage;
-		library->GetBlobAsUtf16(error.Get(), errorMessage.GetAddressOf());
+		winrt::com_ptr<IDxcBlobEncoding> errorMessage;
+		library->GetBlobAsUtf16(error.get(), errorMessage.put());
 		OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
 
 		return hr;
@@ -154,17 +155,17 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 	const std::filesystem::path filepath = SearchShaderDir(filename);
 	assert(!filepath.empty() && "Rootsignature source file not found");
 
-	Microsoft::WRL::ComPtr<IDxcLibrary> library;
-	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.GetAddressOf())));
+	winrt::com_ptr<IDxcLibrary> library;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.put())));
 
-	Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
-	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.GetAddressOf()));
+	winrt::com_ptr<IDxcBlobEncoding> source;
+	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.put()));
 
-	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler;
-	AssertIfFailed(library->CreateIncludeHandler(includeHandler.GetAddressOf()));
+	winrt::com_ptr<IDxcIncludeHandler> includeHandler;
+	AssertIfFailed(library->CreateIncludeHandler(includeHandler.put()));
 
-	Microsoft::WRL::ComPtr<IDxcCompiler> compiler;
-	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.GetAddressOf())));
+	winrt::com_ptr<IDxcCompiler> compiler;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
 
 	std::wstringstream s;
 	s << k_bindlessSrvHeapSize;
@@ -173,16 +174,16 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 		{L"BINDLESS_DESCRIPTOR_COUNT", s.str().c_str()} 
 	};
 
-	Microsoft::WRL::ComPtr<IDxcOperationResult> result;
+	winrt::com_ptr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
-		source.Get(),
+		source.get(),
 		filename.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
 		nullptr, 0,
 		defines, std::size(defines),
-		includeHandler.Get(),
-		result.GetAddressOf()));
+		includeHandler.get(),
+		result.put()));
 
 	HRESULT hr;
 	result->GetStatus(&hr);
@@ -193,11 +194,11 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 	}
 	else
 	{
-		Microsoft::WRL::ComPtr<IDxcBlobEncoding> error;
-		result->GetErrorBuffer(error.GetAddressOf());
+		winrt::com_ptr<IDxcBlobEncoding> error;
+		result->GetErrorBuffer(error.put());
 
-		Microsoft::WRL::ComPtr<IDxcBlobEncoding> errorMessage;
-		library->GetBlobAsUtf16(error.Get(), errorMessage.GetAddressOf());
+		winrt::com_ptr<IDxcBlobEncoding> errorMessage;
+		library->GetBlobAsUtf16(error.get(), errorMessage.put());
 		OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
 
 		return hr;

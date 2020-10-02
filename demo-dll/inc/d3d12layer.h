@@ -4,7 +4,7 @@
 #include <windows.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
-#include <wrl.h>
+#include <winrt/base.h>
 #include <pix3.h>
 #include <vector>
 #include <string>
@@ -36,9 +36,9 @@ struct FCommandList
 
 	D3D12_COMMAND_LIST_TYPE m_type;
 	size_t m_fenceValue;
-	Microsoft::WRL::ComPtr<D3DCommandList_t> m_cmdList;
-	Microsoft::WRL::ComPtr<D3DCommandAllocator_t> m_cmdAllocator;
-	Microsoft::WRL::ComPtr<D3DFence_t> m_fence;
+	winrt::com_ptr<D3DCommandList_t> m_cmdList;
+	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
+	winrt::com_ptr<D3DFence_t> m_fence;
 };
 
 struct FShaderDesc
@@ -56,7 +56,7 @@ struct FRootsigDesc
 
 struct FResource
 {
-	Microsoft::WRL::ComPtr<D3DResource_t> m_resource;
+	winrt::com_ptr<D3DResource_t> m_resource;
 };
 
 struct FBindlessShaderResource : public FResource
@@ -109,7 +109,7 @@ namespace Demo
 		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList> commandLists);
 
 		// Root Signatures
-		Microsoft::WRL::ComPtr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
+		winrt::com_ptr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
 
 		// Pipeline States
 		D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);

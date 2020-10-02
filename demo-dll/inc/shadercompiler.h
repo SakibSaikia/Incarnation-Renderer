@@ -4,7 +4,6 @@
 #include <windows.h>
 #include <d3d12.h>
 #include <dxcapi.h>
-#include <wrl.h>
 # include <string>
 
 constexpr size_t k_bindlessSrvHeapSize = 1000;

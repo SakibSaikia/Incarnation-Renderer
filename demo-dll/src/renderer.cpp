@@ -14,7 +14,7 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
 			d3dCmdList->SetName(L"pre_render_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
@@ -34,18 +34,18 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
 			d3dCmdList->SetName(L"render_job");
 			PIXBeginEvent(d3dCmdList, 0, L"render_commands");
 
-			Microsoft::WRL::ComPtr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.Get());
+			winrt::com_ptr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.Get();
+			psoDesc.pRootSignature = rootsig.get();
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
@@ -129,7 +129,7 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
 			d3dCmdList->SetName(L"imgui_job");
 			PIXBeginEvent(d3dCmdList, 0, L"imgui_commands");
 
@@ -191,8 +191,8 @@ namespace Jobs
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
 			}
 
-			Microsoft::WRL::ComPtr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.Get());
+			winrt::com_ptr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 			rootsig->SetName(L"imgui_rootsig");
 
 			// Vertex Constant Buffer
@@ -228,7 +228,7 @@ namespace Jobs
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.Get();
+			psoDesc.pRootSignature = rootsig.get();
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
@@ -381,7 +381,7 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.Get();
+			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
 			d3dCmdList->SetName(L"present_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};

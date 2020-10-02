@@ -36,15 +36,15 @@ namespace
 	#endif
 	}
 
-	Microsoft::WRL::ComPtr<DXGIAdapter_t> EnumerateAdapters(DXGIFactory_t* dxgiFactory)
+	winrt::com_ptr<DXGIAdapter_t> EnumerateAdapters(DXGIFactory_t* dxgiFactory)
 	{
-		Microsoft::WRL::ComPtr<DXGIAdapter_t> bestAdapter;
+		winrt::com_ptr<DXGIAdapter_t> bestAdapter;
 		size_t maxVram = 0;
 
-		Microsoft::WRL::ComPtr<DXGIAdapter_t> adapter;
+		winrt::com_ptr<DXGIAdapter_t> adapter;
 		uint32_t i = 0;
 
-		while (dxgiFactory->EnumAdapters(i++, adapter.GetAddressOf()) != DXGI_ERROR_NOT_FOUND)
+		while (dxgiFactory->EnumAdapters(i++, adapter.put()) != DXGI_ERROR_NOT_FOUND)
 		{
 			DXGI_ADAPTER_DESC desc;
 			adapter->GetDesc(&desc);
@@ -52,8 +52,12 @@ namespace
 			if (desc.DedicatedVideoMemory > maxVram)
 			{
 				maxVram = desc.DedicatedVideoMemory;
+
+				bestAdapter = nullptr;
 				bestAdapter = adapter;
 			}
+
+			adapter = nullptr;
 		}
 
 		DXGI_ADAPTER_DESC desc;
@@ -178,12 +182,12 @@ bool operator==(const FILETIME& lhs, const FILETIME& rhs)
 
 bool operator==(const FCommandList& lhs, const FCommandList& rhs)
 {
-	return lhs.m_cmdList.Get() == rhs.m_cmdList.Get();
+	return lhs.m_cmdList.get() == rhs.m_cmdList.get();
 }
 
 bool operator==(const FResource& lhs, const FResource& rhs)
 {
-	return lhs.m_resource.Get() == rhs.m_resource.Get();
+	return lhs.m_resource.get() == rhs.m_resource.get();
 }
 
 class FCommandListPool
@@ -239,7 +243,7 @@ public:
 					FCommandList cl = m_freeList.back();
 					cl.m_fenceValue = 0;
 					cl.m_cmdAllocator->Reset();
-					cl.m_cmdList->Reset(cl.m_cmdAllocator.Get(), nullptr);
+					cl.m_cmdList->Reset(cl.m_cmdAllocator.get(), nullptr);
 					break;
 				}
 				else
@@ -281,14 +285,14 @@ public:
 				m_useList.push_back(*it);
 				m_freeList.erase(it);
 
-				D3DResource_t* buffer = m_useList.back().Get();
+				D3DResource_t* buffer = m_useList.back().get();
 				buffer->SetName(name.c_str());
 				return buffer;
 			}
 		}
 
 		// New buffer
-		Microsoft::WRL::ComPtr<D3DResource_t> newBuffer;
+		winrt::com_ptr<D3DResource_t> newBuffer;
 
 		D3D12_HEAP_PROPERTIES heapDesc = {};
 		heapDesc.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -310,12 +314,12 @@ public:
 			&resourceDesc,
 			D3D12_RESOURCE_STATE_GENERIC_READ,
 			nullptr,
-			IID_PPV_ARGS(newBuffer.GetAddressOf())));
+			IID_PPV_ARGS(newBuffer.put())));
 
 		newBuffer->SetName(name.c_str());
 
 		m_useList.push_back(newBuffer);
-		return newBuffer.Get();
+		return newBuffer.get();
 	}
 
 	void Retire(D3DResource_t* buffer, FCommandList dependantCL)
@@ -337,7 +341,7 @@ public:
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
-				if (it->Get() == buffer)
+				if (it->get() == buffer)
 				{
 					m_freeList.push_back(*it);
 					it = m_useList.erase(it);
@@ -363,38 +367,38 @@ public:
 private:
 	std::atomic_size_t m_fenceCounter{ 0 };
 	std::mutex m_mutex;
-	std::list<Microsoft::WRL::ComPtr<D3DResource_t>> m_freeList;
-	std::list<Microsoft::WRL::ComPtr<D3DResource_t>> m_useList;
+	std::list<winrt::com_ptr<D3DResource_t>> m_freeList;
+	std::list<winrt::com_ptr<D3DResource_t>> m_useList;
 };
 
 struct FTimestampedBlob
 {
 	FILETIME m_timestamp;
-	Microsoft::WRL::ComPtr<IDxcBlob> m_blob;
+	winrt::com_ptr<IDxcBlob> m_blob;
 };
 
 namespace Demo::D3D12
 {
 #if defined (_DEBUG)
-	Microsoft::WRL::ComPtr<D3DDebug_t> s_debugController;
+	winrt::com_ptr<D3DDebug_t> s_debugController;
 #endif
 
-	Microsoft::WRL::ComPtr<DXGIFactory_t> s_dxgiFactory;
-	Microsoft::WRL::ComPtr<D3DDevice_t> s_d3dDevice;
+	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
+	winrt::com_ptr<D3DDevice_t> s_d3dDevice;
 
-	Microsoft::WRL::ComPtr<DXGISwapChain_t> s_swapChain;
-	std::array<Microsoft::WRL::ComPtr<D3DResource_t>, k_backBufferCount> s_backBuffers;
+	winrt::com_ptr<DXGISwapChain_t> s_swapChain;
+	std::array<winrt::com_ptr<D3DResource_t>, k_backBufferCount> s_backBuffers;
 	uint32_t s_currentBufferIndex;
 
-	Microsoft::WRL::ComPtr<D3DFence_t> s_frameFence;
+	winrt::com_ptr<D3DFence_t> s_frameFence;
 	std::array<uint64_t, k_backBufferCount> s_frameFenceValues;
 
 	std::array<uint32_t, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorSize;
-	std::array< Microsoft::WRL::ComPtr<D3DDescriptorHeap_t>, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorHeaps;
+	std::array< winrt::com_ptr<D3DDescriptorHeap_t>, D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES> s_descriptorHeaps;
 
-	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_graphicsQueue;
-	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_computeQueue;
-	Microsoft::WRL::ComPtr<D3DCommandQueue_t> s_copyQueue;
+	winrt::com_ptr<D3DCommandQueue_t> s_graphicsQueue;
+	winrt::com_ptr<D3DCommandQueue_t> s_computeQueue;
+	winrt::com_ptr<D3DCommandQueue_t> s_copyQueue;
 
 	FCommandListPool s_commandListPool;
 	FUploadBufferPool s_uploadBufferPool;
@@ -402,8 +406,8 @@ namespace Demo::D3D12
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
 	concurrency::concurrent_unordered_map<std::wstring, FBindlessShaderResource> s_textureCache;
-	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_graphicsPSOPool;
-	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, Microsoft::WRL::ComPtr<D3DPipelineState_t>> s_computePSOPool;
+	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
+	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_bindlessIndexPool;
 }
 
@@ -421,17 +425,17 @@ namespace
 					rootsigDesc.m_filename,
 					rootsigDesc.m_entrypoint,
 					profile,
-					search->second.m_blob.GetAddressOf()))
+					search->second.m_blob.put()))
 			{
 				search->second.m_timestamp = currentTimestamp;
-				return search->second.m_blob.Get();
+				return search->second.m_blob.get();
 			}
 			else
 			{
 				// Use pre-cached rootsig if it is cached and up-to-date or if the current changes fail to compile.
 				// Update timestamp so that we don't retry compilation on failure every frame.
 				search->second.m_timestamp = currentTimestamp;
-				return search->second.m_blob.Get();
+				return search->second.m_blob.get();
 			}
 		}
 		else
@@ -441,10 +445,10 @@ namespace
 				rootsigDesc.m_filename,
 				rootsigDesc.m_entrypoint,
 				profile,
-				rsBlob.m_blob.GetAddressOf()));
+				rsBlob.m_blob.put()));
 
 			rsBlob.m_timestamp = currentTimestamp;
-			return rsBlob.m_blob.Get();
+			return rsBlob.m_blob.get();
 		}
 	}
 }
@@ -455,22 +459,22 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 
 	// Debug layer
 #if defined(_DEBUG)
-	AssertIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(s_debugController.GetAddressOf())));
+	AssertIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(s_debugController.put())));
 	s_debugController->EnableDebugLayer();
 	dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 #endif
 
 	// DXGI Factory
-	AssertIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(s_dxgiFactory.GetAddressOf())));
+	AssertIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(s_dxgiFactory.put())));
 
 	// Adapter
-	Microsoft::WRL::ComPtr<DXGIAdapter_t> adapter = EnumerateAdapters(s_dxgiFactory.Get());
+	winrt::com_ptr<DXGIAdapter_t> adapter = EnumerateAdapters(s_dxgiFactory.get());
 
 	// Device
 	AssertIfFailed(D3D12CreateDevice(
-		adapter.Get(),
+		adapter.get(),
 		D3D_FEATURE_LEVEL_12_1,
-		IID_PPV_ARGS(s_d3dDevice.GetAddressOf())));
+		IID_PPV_ARGS(s_d3dDevice.put())));
 
 	// Cache descriptor sizes
 	for (int typeId = 0; typeId < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++typeId)
@@ -482,15 +486,15 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	D3D12_COMMAND_QUEUE_DESC cmdQueueDesc = {};
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 	cmdQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_graphicsQueue.GetAddressOf())));
+	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_graphicsQueue.put())));
 	s_graphicsQueue->SetName(L"graphics_queue");
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
-	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_computeQueue.GetAddressOf())));
+	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_computeQueue.put())));
 	s_computeQueue->SetName(L"compute_queue");
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
-	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.GetAddressOf())));
+	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.put())));
 	s_copyQueue->SetName(L"copy_queue");
 
 	// Bindless SRV heap
@@ -502,7 +506,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 		AssertIfFailed(
 			s_d3dDevice->CreateDescriptorHeap(
 				&cbvSrvUavHeapDesc,
-				IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].GetAddressOf()))
+				IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].put()))
 		);
 		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
 
@@ -534,7 +538,7 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	AssertIfFailed(
 		s_d3dDevice->CreateDescriptorHeap(
 			&rtvHeapDesc, 
-			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].GetAddressOf()))
+			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].put()))
 	);
 	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->SetName(L"rtv_heap");
 
@@ -550,25 +554,25 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 	swapChainDesc.BufferCount = k_backBufferCount;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-	Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
+	winrt::com_ptr<IDXGISwapChain1> swapChain;
 	AssertIfFailed(
 		s_dxgiFactory->CreateSwapChainForHwnd(
-			s_graphicsQueue.Get(),
+			s_graphicsQueue.get(),
 			windowHandle,
 			&swapChainDesc,
 			nullptr,
 			nullptr,
-			swapChain.GetAddressOf())
+			swapChain.put())
 	);
 
 	AssertIfFailed(
-		swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.GetAddressOf()))
+		swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put()))
 	);
 
 	// Back buffers
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
-		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(s_backBuffers[bufferIdx].GetAddressOf())));
+		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(s_backBuffers[bufferIdx].put())));
 
 		std::wstringstream s;
 		s << L"back_buffer_" << bufferIdx;
@@ -578,13 +582,13 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 		rtvDescriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
 			bufferIdx * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
 
-		s_d3dDevice->CreateRenderTargetView(s_backBuffers[bufferIdx].Get(), nullptr, rtvDescriptor);
+		s_d3dDevice->CreateRenderTargetView(s_backBuffers[bufferIdx].get(), nullptr, rtvDescriptor);
 	}
 
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
 
 	// Frame sync
-	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(s_frameFence.GetAddressOf())));
+	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(s_frameFence.put())));
 	s_frameFenceValues = { 0, 0 };
 
 	return true;
@@ -592,10 +596,10 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 
 void Demo::D3D12::Teardown()
 {
-	Microsoft::WRL::ComPtr<D3DFence_t> flushFence;
-	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.GetAddressOf())));
+	winrt::com_ptr<D3DFence_t> flushFence;
+	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.put())));
 	HANDLE flushEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-	s_graphicsQueue->Signal(flushFence.Get(), 0xFF);
+	s_graphicsQueue->Signal(flushFence.get(), 0xFF);
 	flushFence->SetEventOnCompletion(0xFF, flushEvent);
 	WaitForSingleObject(flushEvent, INFINITE);
 
@@ -609,38 +613,41 @@ void Demo::D3D12::Teardown()
 	s_computePSOPool.clear();
 	s_bindlessIndexPool.clear();
 
-	s_graphicsQueue.Reset();
-	s_computeQueue.Reset();
-	s_copyQueue.Reset();
+	s_graphicsQueue.get()->Release();
+	s_computeQueue.get()->Release();
+	s_copyQueue.get()->Release();
 
-	s_frameFence.Reset();
+	s_frameFence.get()->Release();
 
 	for (auto& descriptorHeap : s_descriptorHeaps)
 	{
-		descriptorHeap.Reset();
+		if (descriptorHeap)
+		{
+			descriptorHeap.get()->Release();
+		}
 	}
 
 	for (auto& backBuffer : s_backBuffers)
 	{
-		backBuffer.Reset();
+		backBuffer.get()->Release();
 	}
 
-	s_dxgiFactory.Reset();
-	s_d3dDevice.Reset();
+	s_dxgiFactory.get()->Release();
+	s_d3dDevice.get()->Release();
 
 #if _DEBUG
 	HMODULE dxgiDebugDll = GetModuleHandle(L"Dxgidebug.dll");
 	auto DXGIGetDebugInterfaceProc = reinterpret_cast<decltype(DXGIGetDebugInterface)*>(GetProcAddress(dxgiDebugDll, "DXGIGetDebugInterface"));
 
-	Microsoft::WRL::ComPtr<IDXGIDebug> dxgiDebug;
-	DXGIGetDebugInterfaceProc(IID_PPV_ARGS(dxgiDebug.GetAddressOf()));
-	AssertIfFailed(dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL));
+	winrt::com_ptr<IDXGIDebug> dxgiDebug;
+	DXGIGetDebugInterfaceProc(IID_PPV_ARGS(dxgiDebug.put()));
+	AssertIfFailed(dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL));
 #endif
 }
 
 D3DDevice_t* Demo::D3D12::GetDevice()
 {
-	return s_d3dDevice.Get();
+	return s_d3dDevice.get();
 }
 
 FCommandList Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
@@ -661,17 +668,17 @@ IDxcBlob* Demo::D3D12::CacheShader(const FShaderDesc& shaderDesc, const std::wst
 				shaderDesc.m_entrypoint,
 				shaderDesc.m_defines,
 				profile,
-				search->second.m_blob.GetAddressOf()))
+				search->second.m_blob.put()))
 		{
 			search->second.m_timestamp = currentTimestamp;
-			return search->second.m_blob.Get();
+			return search->second.m_blob.get();
 		}
 		else
 		{
 			// Use pre-cached shader if it is cached and up-to-date or if the current changes fail to compile.
 			// Update timestamp so that we don't retry compilation on a failed shader every frame.
 			search->second.m_timestamp = currentTimestamp;
-			return search->second.m_blob.Get();
+			return search->second.m_blob.get();
 		}
 	}
 	else
@@ -682,18 +689,18 @@ IDxcBlob* Demo::D3D12::CacheShader(const FShaderDesc& shaderDesc, const std::wst
 			shaderDesc.m_entrypoint,
 			shaderDesc.m_defines,
 			profile,
-			shaderBlob.m_blob.GetAddressOf()));
+			shaderBlob.m_blob.put()));
 
 		shaderBlob.m_timestamp = currentTimestamp;
-		return shaderBlob.m_blob.Get();
+		return shaderBlob.m_blob.get();
 	}
 }
 
-Microsoft::WRL::ComPtr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
+winrt::com_ptr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
 {
 	IDxcBlob* rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
-	Microsoft::WRL::ComPtr<D3DRootSignature_t> rs;
-	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.GetAddressOf()));
+	winrt::com_ptr<D3DRootSignature_t> rs;
+	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
 	return rs;
 }
 
@@ -702,12 +709,12 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(const D3D12_GRAPHICS
 	auto search = s_graphicsPSOPool.find(desc);
 	if (search != s_graphicsPSOPool.cend())
 	{
-		return search->second.Get();
+		return search->second.get();
 	}
 	else
 	{
-		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(s_graphicsPSOPool[desc].GetAddressOf())));
-		return s_graphicsPSOPool[desc].Get();
+		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(s_graphicsPSOPool[desc].put())));
+		return s_graphicsPSOPool[desc].get();
 	}
 }
 
@@ -716,12 +723,12 @@ D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_P
 	auto search = s_computePSOPool.find(desc);
 	if (search != s_computePSOPool.cend())
 	{
-		return search->second.Get();
+		return search->second.get();
 	}
 	else
 	{
-		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(s_computePSOPool[desc].GetAddressOf())));
-		return s_computePSOPool[desc].Get();
+		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(s_computePSOPool[desc].put())));
+		return s_computePSOPool[desc].get();
 	}
 }
 
@@ -736,7 +743,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()
 
 D3DResource_t* Demo::D3D12::GetBackBufferResource()
 {
-	return s_backBuffers[s_currentBufferIndex].Get();
+	return s_backBuffers[s_currentBufferIndex].get();
 }
 
 D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList> commandLists)
@@ -748,14 +755,14 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 	// Accumulate CLs and keep tab of the latest fence
 	for (const FCommandList& cl : commandLists)
 	{
-		D3DCommandList_t* d3dCL = cl.m_cmdList.Get();
+		D3DCommandList_t* d3dCL = cl.m_cmdList.get();
 		d3dCL->Close();
 		d3dCommandLists.push_back(d3dCL);
 
 		if (cl.m_fenceValue > latestFenceValue)
 		{
 			latestFenceValue = cl.m_fenceValue;
-			latestFence = cl.m_fence.Get();
+			latestFence = cl.m_fence.get();
 		}
 	}
 
@@ -764,13 +771,13 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 	switch (commandQueueType)
 	{
 	case D3D12_COMMAND_LIST_TYPE_DIRECT:
-		activeCommandQueue = s_graphicsQueue.Get();
+		activeCommandQueue = s_graphicsQueue.get();
 		break;
 	case D3D12_COMMAND_LIST_TYPE_COMPUTE:
-		activeCommandQueue = s_computeQueue.Get();
+		activeCommandQueue = s_computeQueue.get();
 		break;
 	case D3D12_COMMAND_LIST_TYPE_COPY:
-		activeCommandQueue = s_copyQueue.Get();
+		activeCommandQueue = s_copyQueue.get();
 		break;
 	}
 
@@ -778,7 +785,7 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
 	for (const FCommandList& cl : commandLists)
 	{
-		activeCommandQueue->Signal(cl.m_fence.Get(), cl.m_fenceValue);
+		activeCommandQueue->Signal(cl.m_fence.get(), cl.m_fenceValue);
 		s_commandListPool.Retire(cl);
 	}
 
@@ -792,7 +799,7 @@ void Demo::D3D12::PresentDisplay()
 
 	// Signal current frame is done
 	auto currentFenceValue = s_frameFenceValues[s_currentBufferIndex];
-	s_graphicsQueue->Signal(s_frameFence.Get(), currentFenceValue);
+	s_graphicsQueue->Signal(s_frameFence.get(), currentFenceValue);
 
 	// Cycle to next buffer index
 	s_currentBufferIndex = (s_currentBufferIndex + 1) % k_backBufferCount;
@@ -816,19 +823,19 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fen
 	m_fenceValue{ fenceValue }
 {
 	
-	AssertIfFailed(s_d3dDevice->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.GetAddressOf())));
+	AssertIfFailed(s_d3dDevice->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.put())));
 
 	AssertIfFailed(s_d3dDevice->CreateCommandList(
 		0,
 		type,
-		m_cmdAllocator.Get(),
+		m_cmdAllocator.get(),
 		nullptr,
-		IID_PPV_ARGS(m_cmdList.GetAddressOf())));
+		IID_PPV_ARGS(m_cmdList.put())));
 
 	AssertIfFailed(s_d3dDevice->CreateFence(
 		0,
 		D3D12_FENCE_FLAG_NONE,
-		IID_PPV_ARGS(m_fence.GetAddressOf())));
+		IID_PPV_ARGS(m_fence.put())));
 }
 
 FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
@@ -944,7 +951,7 @@ D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
 
 D3DDescriptorHeap_t* Demo::D3D12::GetBindlessShaderResourceHeap()
 {
-	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].Get();
+	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].get();
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBindlessShaderResourceHeapHandle()
@@ -975,7 +982,7 @@ FTransientBuffer Demo::D3D12::CreateTransientBuffer(
 	}
 
 	FTransientBuffer tempBuffer;
-	tempBuffer.m_resource = buffer;
+	tempBuffer.m_resource.copy_from(buffer);
 	tempBuffer.m_dependentCmdlist = dependentCL;
 
 	return tempBuffer;
@@ -1003,11 +1010,11 @@ FResource Demo::D3D12::CreateTemporaryDefaultBuffer(
 		&desc,
 		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
-		IID_PPV_ARGS(buffer.m_resource.GetAddressOf())));
+		IID_PPV_ARGS(buffer.m_resource.put())));
 
 	//// Allocate pages
 	//uint32_t numPages;
-	//s_d3dDevice->GetResourceTiling(buffer.m_resource.Get(), &numPages, nullptr, nullptr, nullptr, 0, nullptr);
+	//s_d3dDevice->GetResourceTiling(buffer.m_resource.get(), &numPages, nullptr, nullptr, nullptr, 0, nullptr);
 	//buffer.m_physicalPages = s_resourceHeap.AllocatePages(numPages);
 
 	//// Commit
@@ -1061,7 +1068,7 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 			desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 			GetDevice()->CreateCommittedResource(&props, D3D12_HEAP_FLAG_NONE, &desc,
-				D3D12_RESOURCE_STATE_COPY_DEST, NULL, IID_PPV_ARGS(newTexture.m_resource.GetAddressOf()));
+				D3D12_RESOURCE_STATE_COPY_DEST, NULL, IID_PPV_ARGS(newTexture.m_resource.put()));
 		}
 
 		// Upload texture data
@@ -1071,11 +1078,11 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 			srcData.RowPitch = width * bpp;
 			srcData.SlicePitch = height * srcData.RowPitch;
 			uploadContext->UpdateSubresources(
-				newTexture.m_resource.Get(), 
+				newTexture.m_resource.get(), 
 				0, 
 				1, 
 				&srcData,
-				[resource = newTexture.m_resource.Get()](FCommandList* cmdList)
+				[resource = newTexture.m_resource.get()](FCommandList* cmdList)
 				{
 					D3D12_RESOURCE_BARRIER barrier = {};
 					barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -1102,7 +1109,7 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 			srvDesc.Texture2D.MipLevels = mipLevels;
 			srvDesc.Texture2D.MostDetailedMip = 0;
 			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			GetDevice()->CreateShaderResourceView(newTexture.m_resource.Get(), &srvDesc, srv);
+			GetDevice()->CreateShaderResourceView(newTexture.m_resource.get(), &srvDesc, srv);
 		}
 
 		return newTexture.m_bindlessDescriptorIndex;
@@ -1111,5 +1118,5 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 
 FTransientBuffer::~FTransientBuffer()
 {
-	s_uploadBufferPool.Retire(m_resource.Get(), m_dependentCmdlist);
+	s_uploadBufferPool.Retire(m_resource.get(), m_dependentCmdlist);
 }
