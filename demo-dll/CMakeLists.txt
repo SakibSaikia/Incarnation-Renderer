@@ -12,6 +12,7 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_draw.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_impl_win32.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/microprofile/microprofile.cpp"
     "src/demo.cpp"
     "src/d3d12layer.cpp" 
     "src/shadercompiler.cpp"
@@ -22,15 +23,18 @@ set_property(TARGET libdemo PROPERTY CXX_STANDARD 20)
 # Include path
 include_directories(
     "inc"
+    "${CMAKE_SOURCE_DIR}/ext"
     "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
     "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
     "${CMAKE_SOURCE_DIR}/ext/imgui"
+    "${CMAKE_SOURCE_DIR}/ext/microprofile"
     "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime")
 
 # Macro defines
 add_compile_definitions(
     UNICODE
     _UNICODE
+    MICROPROFILE_GPU_TIMERS_D3D12
     SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders")
 
 # Generate a unique name
@@ -66,6 +70,7 @@ target_link_libraries(
     PRIVATE dxgi.lib
     PRIVATE dxguid.lib
     PRIVATE d3d12.lib
+    PRIVATE Ws2_32.lib
     PRIVATE dxcompiler.lib
     PRIVATE spookyhash.lib
     PRIVATE WinPixEventRuntime.lib)

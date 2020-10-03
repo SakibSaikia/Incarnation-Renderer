@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <imgui.h>
 #include <dxcapi.h>
+#include <microprofile.h>
 
 namespace Jobs
 {
@@ -399,6 +400,7 @@ namespace Jobs
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
+	MICROPROFILE_SCOPEI("Render", "Render", MP_YELLOW);
 	auto preRenderCL = Jobs::PreRender().get();
 	auto renderCL = Jobs::Render(resX, resY).get();
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
@@ -414,4 +416,5 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { presentCL });
 
 	Demo::D3D12::PresentDisplay();
+	MicroProfileFlip(nullptr);
 }
