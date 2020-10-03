@@ -453,7 +453,7 @@ namespace
 	}
 }
 
-bool Demo::D3D12::Initialize(HWND& windowHandle)
+bool Demo::D3D12::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
 {
 	UINT dxgiFactoryFlags = 0;
 
@@ -544,8 +544,8 @@ bool Demo::D3D12::Initialize(HWND& windowHandle)
 
 	// Swap chain
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-	swapChainDesc.Width = Demo::Settings::k_screenWidth;
-	swapChainDesc.Height = Demo::Settings::k_screenHeight;
+	swapChainDesc.Width = resX;
+	swapChainDesc.Height = resY;
 	swapChainDesc.Format = Demo::Settings::k_backBufferFormat;
 	swapChainDesc.Scaling = DXGI_SCALING_NONE;
 	swapChainDesc.SampleDesc.Quality = 0;
@@ -599,6 +599,15 @@ void Demo::D3D12::Teardown()
 	winrt::com_ptr<D3DFence_t> flushFence;
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.put())));
 	HANDLE flushEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+
+	s_copyQueue->Signal(flushFence.get(), 0xFD);
+	flushFence->SetEventOnCompletion(0xFD, flushEvent);
+	WaitForSingleObject(flushEvent, INFINITE);
+
+	s_computeQueue->Signal(flushFence.get(), 0xFE);
+	flushFence->SetEventOnCompletion(0xFE, flushEvent);
+	WaitForSingleObject(flushEvent, INFINITE);
+
 	s_graphicsQueue->Signal(flushFence.get(), 0xFF);
 	flushFence->SetEventOnCompletion(0xFF, flushEvent);
 	WaitForSingleObject(flushEvent, INFINITE);
@@ -612,10 +621,6 @@ void Demo::D3D12::Teardown()
 	s_graphicsPSOPool.clear();
 	s_computePSOPool.clear();
 	s_bindlessIndexPool.clear();
-
-	s_graphicsQueue.get()->Release();
-	s_computeQueue.get()->Release();
-	s_copyQueue.get()->Release();
 
 	s_frameFence.get()->Release();
 
@@ -632,6 +637,7 @@ void Demo::D3D12::Teardown()
 		backBuffer.get()->Release();
 	}
 
+	s_swapChain.get()->Release();
 	s_dxgiFactory.get()->Release();
 	s_d3dDevice.get()->Release();
 

@@ -11,7 +11,10 @@ struct ModuleProcs
 	decltype(Demo::Teardown)* teardown;
 	decltype(Demo::Tick)* tick;
 	decltype(Demo::Render)* render;
+	decltype(Demo::OnMouseMove)* mouseMove;
 };
+
+static ModuleProcs s_demoProcs = {};
 
 bool LoadModule(LPCWSTR modulePath, LPCWSTR moduleName, HMODULE& moduleHnd, ModuleProcs& exportedProcs)
 {
@@ -34,11 +37,6 @@ bool LoadModule(LPCWSTR modulePath, LPCWSTR moduleName, HMODULE& moduleHnd, Modu
 	if (!newModuleHnd)
 	{
 		return false;
-	}
-
-	if (moduleHnd)
-	{
-		FreeLibrary(moduleHnd);
 	}
 
 	moduleHnd = newModuleHnd;
@@ -104,6 +102,90 @@ void CleanTempFiles(LPCWSTR path, LPCWSTR namePrefex)
 	}
 }
 
+LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch (msg)
+	{
+	case WM_KEYDOWN:
+		if (wParam == VK_ESCAPE)
+		{
+			if (s_demoProcs.teardown)
+			{
+				s_demoProcs.teardown(hWnd);
+			}
+		}
+		return 0;
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	case WM_MOUSEMOVE:
+		if (s_demoProcs.mouseMove)
+		{
+			s_demoProcs.mouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		}
+		return 0;
+	case WM_ACTIVATE:
+		if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE)
+		{
+			EnableWindow(hWnd, TRUE);
+		}
+		else if (LOWORD(wParam) == WA_INACTIVE)
+		{
+			EnableWindow(hWnd, FALSE);
+		}
+		return 0;
+	}
+
+	return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32_t resX, const uint32_t resY)
+{
+	WNDCLASS desc;
+	desc.style = CS_HREDRAW | CS_VREDRAW;
+	desc.lpfnWndProc = WndProc;
+	desc.cbClsExtra = 0;
+	desc.cbWndExtra = 0;
+	desc.hInstance = instanceHandle;
+	desc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+	desc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	desc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW);
+	desc.lpszMenuName = nullptr;
+	desc.lpszClassName = L"demo_window";
+
+	if (!RegisterClass(&desc))
+	{
+		MessageBox(nullptr, TEXT("Failed to register window"), nullptr, 0);
+		return false;
+	}
+
+	windowHandle = CreateWindowEx(
+		WS_EX_APPWINDOW,
+		L"demo_window",
+		TEXT("demo"),
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		resX,
+		resY,
+		nullptr,
+		nullptr,
+		instanceHandle,
+		nullptr
+	);
+
+	if (windowHandle == nullptr)
+	{
+		MessageBox(nullptr, TEXT("Failed to create window"), nullptr, 0);
+		return false;
+	}
+
+	ShowWindow(windowHandle, SW_SHOW);
+	UpdateWindow(windowHandle);
+
+	return true;
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nShowCmd)
 {
 	AddDllDirectory(LIB_DEMO_DIR);
@@ -111,16 +193,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	AddDllDirectory(DXC_BIN_DIR);
 	AddDllDirectory(PIX_BIN_DIR);
 
-	HMODULE demoDll{};
-	ModuleProcs demoProcs{};
+	const uint32_t windowWidth = 1280;
+	const uint32_t windowHeight = 720;
 
-	FILETIME lastWriteTimestamp{};
-
+	HMODULE demoDll = {};
+	FILETIME lastWriteTimestamp = {};
 	MSG msg = {};
-
-	uint32_t windowId = 0;
 	HWND windowHandle = {};
 
+	InitializeWindow(hInstance, windowHandle, windowWidth, windowHeight);
 	CleanTempFiles(LIB_DEMO_DIR, LIB_DEMO_NAME L"_");
 
 	while (msg.wParam != VK_ESCAPE)
@@ -131,17 +212,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 			if (currentWriteTimestamp.dwLowDateTime != lastWriteTimestamp.dwLowDateTime ||
 				currentWriteTimestamp.dwHighDateTime != lastWriteTimestamp.dwHighDateTime)
 			{
-				if (demoProcs.teardown)
+				if (s_demoProcs.teardown)
 				{
-					demoProcs.teardown(windowHandle);
+					s_demoProcs.teardown(windowHandle);
 				}
 
-				if (!LoadModule(LIB_DEMO_DIR, LIB_DEMO_NAME, demoDll, demoProcs))
+				if (!LoadModule(LIB_DEMO_DIR, LIB_DEMO_NAME, demoDll, s_demoProcs))
 				{
 					ErrorExit(L"LoadModule");
 				}
 				
-				demoProcs.init(hInstance, windowHandle, windowId++);
+				s_demoProcs.init(windowHandle, windowWidth, windowHeight);
 				lastWriteTimestamp = currentWriteTimestamp;
 			}
 		}
@@ -158,10 +239,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 		}
 		else
 		{
-			demoProcs.tick(0.0166f);
-			demoProcs.render();
+			s_demoProcs.tick(0.0166f);
+			s_demoProcs.render(windowWidth, windowHeight);
 		}
 	}
+
+	DestroyWindow(windowHandle);
 
 	return static_cast<int>(msg.wParam);
 }

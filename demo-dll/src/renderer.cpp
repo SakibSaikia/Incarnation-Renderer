@@ -29,9 +29,9 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList> Render()
+	concurrency::task<FCommandList> Render(const uint32_t resX, const uint32_t resY)
 	{
-		return concurrency::create_task([]
+		return concurrency::create_task([resX, resY]
 		{
 			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
@@ -105,8 +105,8 @@ namespace Jobs
 			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			D3D12_VIEWPORT viewport{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight, 0.f, 1.f };
-			D3D12_RECT screenRect{ 0.f, 0.f, Demo::Settings::k_screenWidth, Demo::Settings::k_screenHeight };
+			D3D12_VIEWPORT viewport{ 0.f, 0.f, resX, resY, 0.f, 1.f };
+			D3D12_RECT screenRect{ 0.f, 0.f, resX, resY };
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
@@ -397,10 +397,10 @@ namespace Jobs
 	}
 }
 
-void Demo::Render()
+void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	auto preRenderCL = Jobs::PreRender().get();
-	auto renderCL = Jobs::Render().get();
+	auto renderCL = Jobs::Render(resX, resY).get();
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
 
 	ImDrawData* imguiDraws = ImGui::GetDrawData();

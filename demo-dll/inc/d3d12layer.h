@@ -98,7 +98,7 @@ namespace Demo
 {
 	namespace D3D12
 	{
-		bool Initialize(HWND& windowHandle);
+		bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY);
 		void Teardown();
 
 		// Device
