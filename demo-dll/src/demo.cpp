@@ -85,3 +85,9 @@ void Demo::OnMouseMove(WPARAM btnState, int x, int y)
 	s_mouseButtonState = btnState;
 	s_currentMousePos = { x, y };
 }
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT Demo::WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	return ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
+}

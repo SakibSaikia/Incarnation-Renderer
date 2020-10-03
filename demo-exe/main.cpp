@@ -12,6 +12,7 @@ struct ModuleProcs
 	decltype(Demo::Tick)* tick;
 	decltype(Demo::Render)* render;
 	decltype(Demo::OnMouseMove)* mouseMove;
+	decltype(Demo::WndProcHandler)* wndProc;
 };
 
 static ModuleProcs s_demoProcs = {};
@@ -44,6 +45,8 @@ bool LoadModule(LPCWSTR modulePath, LPCWSTR moduleName, HMODULE& moduleHnd, Modu
 	exportedProcs.teardown = reinterpret_cast<decltype(Demo::Teardown)*>(GetProcAddress(moduleHnd, "Teardown"));
 	exportedProcs.tick = reinterpret_cast<decltype(Demo::Tick)*>(GetProcAddress(moduleHnd, "Tick"));
 	exportedProcs.render = reinterpret_cast<decltype(Demo::Render)*>(GetProcAddress(moduleHnd, "Render"));
+	exportedProcs.mouseMove = reinterpret_cast<decltype(Demo::OnMouseMove)*>(GetProcAddress(moduleHnd, "OnMouseMove"));
+	exportedProcs.wndProc = reinterpret_cast<decltype(Demo::WndProcHandler)*>(GetProcAddress(moduleHnd, "WndProcHandler"));
 
 	return true;
 
@@ -104,6 +107,12 @@ void CleanTempFiles(LPCWSTR path, LPCWSTR namePrefex)
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	if(s_demoProcs.wndProc &&
+		s_demoProcs.wndProc(hWnd, msg, wParam, lParam))
+	{
+		return true;
+	}
+
 	switch (msg)
 	{
 	case WM_KEYDOWN:

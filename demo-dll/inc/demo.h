@@ -12,4 +12,5 @@ namespace Demo
 	extern "C" __declspec(dllexport) void WINAPI Tick(float dt);
 	extern "C" __declspec(dllexport) void WINAPI Render(const uint32_t resX, const uint32_t resY);
 	extern "C" __declspec(dllexport) void WINAPI OnMouseMove(WPARAM btnState, int x, int y);
+	extern "C" __declspec(dllexport) LRESULT WINAPI WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 }
