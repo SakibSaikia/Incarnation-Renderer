@@ -598,19 +598,19 @@ void Demo::D3D12::Teardown()
 {
 	winrt::com_ptr<D3DFence_t> flushFence;
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.put())));
-	HANDLE flushEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+
+	HANDLE flushEvents[3];
+	flushEvents[0] = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+	flushEvents[1] = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+	flushEvents[2] = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 
 	s_copyQueue->Signal(flushFence.get(), 0xFD);
-	flushFence->SetEventOnCompletion(0xFD, flushEvent);
-	WaitForSingleObject(flushEvent, INFINITE);
-
+	flushFence->SetEventOnCompletion(0xFD, flushEvents[0]);
 	s_computeQueue->Signal(flushFence.get(), 0xFE);
-	flushFence->SetEventOnCompletion(0xFE, flushEvent);
-	WaitForSingleObject(flushEvent, INFINITE);
-
+	flushFence->SetEventOnCompletion(0xFE, flushEvents[1]);
 	s_graphicsQueue->Signal(flushFence.get(), 0xFF);
-	flushFence->SetEventOnCompletion(0xFF, flushEvent);
-	WaitForSingleObject(flushEvent, INFINITE);
+	flushFence->SetEventOnCompletion(0xFF, flushEvents[2]);
+	WaitForMultipleObjects(3, flushEvents, TRUE, INFINITE);
 
 	s_commandListPool.Clear();
 	s_uploadBufferPool.Clear();

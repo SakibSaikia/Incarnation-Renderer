@@ -75,8 +75,8 @@ void Demo::Teardown(HWND& windowHandle)
 	{
 		D3D12::Teardown();
 		ShaderCompiler::Teardown();
-		//ImGui_ImplWin32_Shutdown();
-		//ImGui::DestroyContext();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
 	}
 }
 
