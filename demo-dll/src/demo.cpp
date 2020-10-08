@@ -1,4 +1,5 @@
 ﻿#include <demo.h>
+#include <profiling.h>
 #include <d3d12layer.h>
 #include <shadercompiler.h>
 #include <imgui.h>
@@ -16,6 +17,8 @@ namespace Demo
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
 {
+	Profiling::Initialize();
+
 	bool ok = D3D12::Initialize(windowHandle, resX, resY);
 	ok = ok && ShaderCompiler::Initialize();
 
@@ -30,11 +33,11 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 void Demo::Tick(float dt)
 {
 	{
-		FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
 		uint32_t fontSrvIndex = Demo::D3D12::CacheTexture(L"imgui_fonts", &uploader);
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
-		uploader.SubmitUploads(&cmdList);
+		uploader.SubmitUploads(cmdList);
 		Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 		ImGui_ImplWin32_NewFrame();

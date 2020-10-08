@@ -16,7 +16,8 @@ add_library(
     "src/demo.cpp"
     "src/d3d12layer.cpp" 
     "src/shadercompiler.cpp"
-    "src/renderer.cpp")
+    "src/renderer.cpp" 
+    "src/profiling.cpp")
 
 set_property(TARGET libdemo PROPERTY CXX_STANDARD 20)
 

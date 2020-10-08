@@ -39,6 +39,7 @@ struct FCommandList
 	winrt::com_ptr<D3DCommandList_t> m_cmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
 	winrt::com_ptr<D3DFence_t> m_fence;
+	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
 };
 
 struct FShaderDesc
@@ -67,7 +68,7 @@ struct FBindlessShaderResource : public FResource
 struct FTransientBuffer : public FResource
 {
 	~FTransientBuffer();
-	FCommandList m_dependentCmdlist;
+	const FCommandList* m_dependentCmdlist;
 };
 
 class FResourceUploadContext
@@ -87,7 +88,7 @@ public:
 
 private:
 	D3DResource_t* m_uploadBuffer;
-	FCommandList m_copyCommandlist;
+	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_sizeInBytes;
 	size_t m_currentOffset;
@@ -105,8 +106,8 @@ namespace Demo
 		D3DDevice_t* GetDevice();
 
 		// Command Lists
-		FCommandList FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
-		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList> commandLists);
+		FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
+		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
 
 		// Root Signatures
 		winrt::com_ptr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
@@ -116,6 +117,7 @@ namespace Demo
 		D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
 
 		// Swap chain and back buffers
+		uint32_t GetBackBufferIndex();
 		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
 		D3DResource_t* GetBackBufferResource();
 		void PresentDisplay();
@@ -131,7 +133,7 @@ namespace Demo
 		FTransientBuffer CreateTransientBuffer(
 			const std::wstring& name,
 			const size_t size,
-			const FCommandList dependentCL,
+			const FCommandList* dependentCL,
 			std::function<void(uint8_t*)> uploadFunc = nullptr);
 
 		FResource CreateTemporaryDefaultBuffer(

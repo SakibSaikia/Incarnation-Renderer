@@ -6,6 +6,7 @@
 #include <concurrent_queue.h>
 #include <assert.h>
 #include <spookyhash_api.h>
+#include <microprofile.h>
 #include <imgui.h>
 #include <dxgidebug.h>
 #include <string>
@@ -180,11 +181,6 @@ bool operator==(const FILETIME& lhs, const FILETIME& rhs)
 		lhs.dwHighDateTime == rhs.dwHighDateTime;
 }
 
-bool operator==(const FCommandList& lhs, const FCommandList& rhs)
-{
-	return lhs.m_cmdList.get() == rhs.m_cmdList.get();
-}
-
 bool operator==(const FResource& lhs, const FResource& rhs)
 {
 	return lhs.m_resource.get() == rhs.m_resource.get();
@@ -193,38 +189,38 @@ bool operator==(const FResource& lhs, const FResource& rhs)
 class FCommandListPool
 {
 public:
-	FCommandList GetOrCreate(const D3D12_COMMAND_LIST_TYPE type)
+	FCommandList* GetOrCreate(const D3D12_COMMAND_LIST_TYPE type)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
 
 		// Reuse CL
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
-			if (it->m_type == type)
+			if (it->get()->m_type == type)
 			{
-				m_useList.push_back(*it);
+				m_useList.push_back(std::move(*it));
 				m_freeList.erase(it);
 				
-				FCommandList cl = m_useList.back();
-				cl.m_fenceValue = ++m_fenceCounter;
+				FCommandList* cl = m_useList.back().get();
+				cl->m_fenceValue = ++m_fenceCounter;
 				return cl;
 			}
 		}
 
 		// New CL
-		m_useList.emplace_back(type, ++m_fenceCounter);
-		return m_useList.back();
+		m_useList.push_back(std::make_unique<FCommandList>(type, ++m_fenceCounter));
+		return m_useList.back().get();
 	}
 
-	void Retire(FCommandList cmdList)
+	void Retire(FCommandList* cmdList)
 	{
 		auto waitForFenceTask = concurrency::create_task([cmdList, this]()
 		{
 			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 			if (event)
 			{
-				assert(cmdList.m_fenceValue != 0);
-				cmdList.m_fence->SetEventOnCompletion(cmdList.m_fenceValue, event);
+				assert(cmdList->m_fenceValue != 0);
+				cmdList->m_fence->SetEventOnCompletion(cmdList->m_fenceValue, event);
 				WaitForSingleObject(event, INFINITE);
 			}
 		});
@@ -235,15 +231,15 @@ public:
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
-				if (*it == cmdList)
+				if (it->get() == cmdList)
 				{
-					m_freeList.push_back(*it);
+					m_freeList.push_back(std::move(*it));
 					it = m_useList.erase(it);
 
-					FCommandList cl = m_freeList.back();
-					cl.m_fenceValue = 0;
-					cl.m_cmdAllocator->Reset();
-					cl.m_cmdList->Reset(cl.m_cmdAllocator.get(), nullptr);
+					FCommandList* cl = m_freeList.back().get();
+					cl->m_fenceValue = 0;
+					cl->m_cmdAllocator->Reset();
+					cl->m_cmdList->Reset(cl->m_cmdAllocator.get(), nullptr);
 					break;
 				}
 				else
@@ -266,8 +262,8 @@ public:
 private:
 	std::atomic_size_t m_fenceCounter{ 0 };
 	std::mutex m_mutex;
-	std::list<FCommandList> m_freeList;
-	std::list<FCommandList> m_useList;
+	std::list<std::unique_ptr<FCommandList>> m_freeList;
+	std::list<std::unique_ptr<FCommandList>> m_useList;
 };
 
 class FUploadBufferPool
@@ -322,15 +318,14 @@ public:
 		return newBuffer.get();
 	}
 
-	void Retire(D3DResource_t* buffer, FCommandList dependantCL)
+	void Retire(D3DResource_t* buffer, const FCommandList* dependantCL)
 	{
 		auto waitForFenceTask = concurrency::create_task([buffer, dependantCL, this]()
 		{
 			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 			if (event)
-			{
-				assert(dependantCL.m_fenceValue != 0);
-				dependantCL.m_fence->SetEventOnCompletion(dependantCL.m_fenceValue, event);
+			{		
+				dependantCL->m_fence->SetEventOnCompletion(dependantCL->m_fenceValue, event);
 				WaitForSingleObject(event, INFINITE);
 			}
 		});
@@ -591,6 +586,10 @@ bool Demo::D3D12::Initialize(const HWND& windowHandle, const uint32_t resX, cons
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(s_frameFence.put())));
 	s_frameFenceValues = { 0, 0 };
 
+	void* cmdQueues[] = { s_graphicsQueue.get() };
+	MicroProfileGpuInitD3D12(GetDevice(), 1, cmdQueues);
+	MicroProfileSetCurrentNodeD3D12(0);
+
 	return true;
 }
 
@@ -611,6 +610,8 @@ void Demo::D3D12::Teardown()
 	s_graphicsQueue->Signal(flushFence.get(), 0xFF);
 	flushFence->SetEventOnCompletion(0xFF, flushEvents[2]);
 	WaitForMultipleObjects(3, flushEvents, TRUE, INFINITE);
+
+	MicroProfileGpuShutdown();
 
 	s_commandListPool.Clear();
 	s_uploadBufferPool.Clear();
@@ -656,7 +657,7 @@ D3DDevice_t* Demo::D3D12::GetDevice()
 	return s_d3dDevice.get();
 }
 
-FCommandList Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+FCommandList* Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 {
 	return s_commandListPool.GetOrCreate(type);
 }
@@ -738,6 +739,11 @@ D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_P
 	}
 }
 
+uint32_t Demo::D3D12::GetBackBufferIndex()
+{
+	return s_currentBufferIndex;
+}
+
 D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
@@ -752,23 +758,23 @@ D3DResource_t* Demo::D3D12::GetBackBufferResource()
 	return s_backBuffers[s_currentBufferIndex].get();
 }
 
-D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList> commandLists)
+D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists)
 {
 	std::vector<ID3D12CommandList*> d3dCommandLists;
 	size_t latestFenceValue = 0;
 	D3DFence_t* latestFence = {};
 
 	// Accumulate CLs and keep tab of the latest fence
-	for (const FCommandList& cl : commandLists)
+	for (const FCommandList* cl : commandLists)
 	{
-		D3DCommandList_t* d3dCL = cl.m_cmdList.get();
+		D3DCommandList_t* d3dCL = cl->m_cmdList.get();
 		d3dCL->Close();
 		d3dCommandLists.push_back(d3dCL);
 
-		if (cl.m_fenceValue > latestFenceValue)
+		if (cl->m_fenceValue > latestFenceValue)
 		{
-			latestFenceValue = cl.m_fenceValue;
-			latestFence = cl.m_fence.get();
+			latestFenceValue = cl->m_fenceValue;
+			latestFence = cl->m_fence.get();
 		}
 	}
 
@@ -789,9 +795,14 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 
 	// Execute commands, signal the CL fences and retire the CLs
 	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
-	for (const FCommandList& cl : commandLists)
+	for (FCommandList* cl : commandLists)
 	{
-		activeCommandQueue->Signal(cl.m_fence.get(), cl.m_fenceValue);
+		for (auto& callbackProc : cl->m_postExecuteCallbacks)
+		{
+			callbackProc();
+		}
+
+		activeCommandQueue->Signal(cl->m_fence.get(), cl->m_fenceValue);
 		s_commandListPool.Retire(cl);
 	}
 
@@ -911,7 +922,7 @@ void FResourceUploadContext::UpdateSubresources(
 
 	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
-		m_copyCommandlist.m_cmdList->CopyBufferRegion(
+		m_copyCommandlist->m_cmdList->CopyBufferRegion(
 			destinationResource, 
 			0, 
 			m_uploadBuffer, 
@@ -932,7 +943,7 @@ void FResourceUploadContext::UpdateSubresources(
 			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 			dstLocation.SubresourceIndex = i + firstSubresource;
 
-			m_copyCommandlist.m_cmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+			m_copyCommandlist->m_cmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 		}
 	}
 
@@ -968,7 +979,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBindlessShaderResourceHeapHandle()
 FTransientBuffer Demo::D3D12::CreateTransientBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
-	const FCommandList dependentCL,
+	const FCommandList* dependentCL,
 	std::function<void(uint8_t*)> uploadFunc)
 {
 	assert(sizeInBytes != 0);

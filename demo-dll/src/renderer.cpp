@@ -1,5 +1,6 @@
 #include <demo.h>
 #include <d3d12layer.h>
+#include <profiling.h>
 #include <settings.h>
 #include <ppltasks.h>
 #include <sstream>
@@ -10,12 +11,12 @@
 
 namespace Jobs
 {
-	concurrency::task<FCommandList> PreRender()
+	concurrency::task<FCommandList*> PreRender()
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"pre_render_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
@@ -30,14 +31,15 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList> Render(const uint32_t resX, const uint32_t resY)
+	concurrency::task<FCommandList*> Render(const uint32_t resX, const uint32_t resY)
 	{
 		return concurrency::create_task([resX, resY]
 		{
-			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"render_job");
-			PIXBeginEvent(d3dCmdList, 0, L"render_commands");
+
+			SCOPED_GPU_EVENT(cmdList, L"render_commands", 0);
 
 			winrt::com_ptr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
@@ -119,20 +121,19 @@ namespace Jobs
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
-
-			PIXEndEvent(d3dCmdList);
+	
 			return cmdList;
 		});
 	}
 
-	concurrency::task<FCommandList> UI()
+	concurrency::task<FCommandList*> UI()
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"imgui_job");
-			PIXBeginEvent(d3dCmdList, 0, L"imgui_commands");
+			SCOPED_GPU_EVENT(cmdList, L"imgui_commands", 0);
 
 			ImDrawData* drawData = ImGui::GetDrawData();
 			size_t vtxBufferSize = 0;
@@ -372,17 +373,16 @@ namespace Jobs
 				indexOffset += imguiCmdList->VtxBuffer.Size;
 			}
 
-			PIXEndEvent(d3dCmdList);
 			return cmdList;
 		});
 	}
 
-	concurrency::task<FCommandList> Present()
+	concurrency::task<FCommandList*> Present()
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList.m_cmdList.get();
+			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"present_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
@@ -400,7 +400,7 @@ namespace Jobs
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	MICROPROFILE_SCOPEI("Render", "Render", MP_YELLOW);
+	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
 	auto preRenderCL = Jobs::PreRender().get();
 	auto renderCL = Jobs::Render(resX, resY).get();
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
@@ -416,5 +416,5 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { presentCL });
 
 	Demo::D3D12::PresentDisplay();
-	MicroProfileFlip(nullptr);
+	Profiling::Flip();
 }
