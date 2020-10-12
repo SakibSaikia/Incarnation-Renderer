@@ -20,6 +20,8 @@
 
 // Constants
 constexpr uint32_t k_backBufferCount = 2;
+constexpr size_t k_rtvHeapSize = 32;
+constexpr size_t k_renderTextureMemory = 32 * 1024 * 1024;
 
 using namespace Demo::D3D12;
 
@@ -320,7 +322,7 @@ public:
 
 	void Retire(D3DResource_t* buffer, const FCommandList* dependantCL)
 	{
-		auto waitForFenceTask = concurrency::create_task([buffer, dependantCL, this]()
+		auto waitForFenceTask = concurrency::create_task([dependantCL, this]()
 		{
 			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 			if (event)
@@ -366,6 +368,150 @@ private:
 	std::list<winrt::com_ptr<D3DResource_t>> m_useList;
 };
 
+class FRenderTexturePool
+{
+public:
+	void Initialize(size_t sizeInBytes)
+	{
+		constexpr size_t k_tileSize = 64 * 1024;
+
+		// align to 64k
+		sizeInBytes = (sizeInBytes + k_tileSize - 1) & ~(k_tileSize - 1);
+
+		D3D12_HEAP_DESC desc
+		{
+			.SizeInBytes = sizeInBytes,
+			.Properties
+			{
+				.Type = D3D12_HEAP_TYPE_DEFAULT,
+				.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+				.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
+			},
+			.Alignment = 0,
+			.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES
+		};
+
+		AssertIfFailed(GetDevice()->CreateHeap(&desc, IID_PPV_ARGS(m_heap.put())));
+
+		size_t numTiles = sizeInBytes / k_tileSize;
+		for (int i = 0; i < numTiles; ++i)
+		{
+			m_tilePool.push(i);
+		}
+
+		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put())));
+	}
+
+	D3DResource_t* GetOrCreate(
+		const std::wstring& name, 
+		const DXGI_FORMAT format,
+		const size_t width,
+		const size_t height,
+		const size_t mipLevels,
+		const size_t depth)
+	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+
+		// Reuse buffer
+		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
+		{
+			const D3D12_RESOURCE_DESC& desc = (*it)->GetDesc();
+
+			if (desc.Format == format &&
+				desc.Width == width &&
+				desc.Height == height &&
+				desc.MipLevels == mipLevels &&
+				desc.DepthOrArraySize == depth)
+			{
+				m_useList.push_back(*it);
+				m_freeList.erase(it);
+
+				D3DResource_t* rt = m_useList.back().get();
+				rt->SetName(name.c_str());
+				return rt;
+			}
+		}
+
+		// New render texture
+		winrt::com_ptr<D3DResource_t> newRt;
+
+		D3D12_RESOURCE_DESC rtDesc = {};
+		rtDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		rtDesc.Width = width;
+		rtDesc.Height = (UINT)height;
+		rtDesc.DepthOrArraySize = (UINT16)depth;
+		rtDesc.MipLevels = (UINT16)mipLevels;
+		rtDesc.Format = format;
+		rtDesc.SampleDesc.Count = 1;
+		rtDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+		rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+		D3D12_CLEAR_VALUE optClear = {};
+		optClear.Format = format;
+
+		AssertIfFailed(GetDevice()->CreateReservedResource(
+			&rtDesc,
+			D3D12_RESOURCE_STATE_RENDER_TARGET,
+			&optClear,
+			IID_PPV_ARGS(newRt.put())));
+
+		newRt->SetName(name.c_str());
+
+		m_useList.push_back(newRt);
+		return newRt.get();
+	}
+
+	void Retire(D3DResource_t* rt);
+
+	std::vector<uint32_t> AllocateTiles(const size_t numTiles)
+	{
+		std::vector<uint32_t> tileList;
+		size_t remainingAllocation = numTiles;
+		while (remainingAllocation > 0)
+		{
+			uint32_t tileIndex;
+			bool result = m_tilePool.try_pop(tileIndex);
+			assert(result && "Ran out of tiles");
+			tileList.push_back(tileIndex);
+			remainingAllocation--;
+		}
+
+		return tileList;
+	}
+
+	void ReturnTiles(std::vector<uint32_t>&& tileList)
+	{
+		for (uint32_t tileIndex : tileList)
+		{
+			m_tilePool.push(tileIndex);
+		}
+
+		tileList.clear();
+	}
+
+	D3DHeap_t* GetHeap()
+	{
+		return m_heap.get();
+	}
+
+	void Clear()
+	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+		assert(m_useList.empty() && "All render textures should be retired at this point");
+		m_freeList.clear();
+		m_tilePool.clear();
+	}
+
+private:
+	std::mutex m_mutex;
+	winrt::com_ptr<D3DHeap_t> m_heap;
+	winrt::com_ptr<D3DFence_t> m_fence;
+	size_t m_fenceValue = 0;
+	std::list<winrt::com_ptr<D3DResource_t>> m_freeList;
+	std::list<winrt::com_ptr<D3DResource_t>> m_useList;
+	concurrency::concurrent_queue<uint32_t> m_tilePool;
+};
+
 struct FTimestampedBlob
 {
 	FILETIME m_timestamp;
@@ -397,6 +543,7 @@ namespace Demo::D3D12
 
 	FCommandListPool s_commandListPool;
 	FUploadBufferPool s_uploadBufferPool;
+	FRenderTexturePool s_renderTexturePool;
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
@@ -404,6 +551,7 @@ namespace Demo::D3D12
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_bindlessIndexPool;
+	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 }
 
 namespace
@@ -526,16 +674,24 @@ bool Demo::D3D12::Initialize(const HWND& windowHandle, const uint32_t resX, cons
 	}
 
 	// RTV heap
-	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-	rtvHeapDesc.NumDescriptors = 20;
-	rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	AssertIfFailed(
-		s_d3dDevice->CreateDescriptorHeap(
-			&rtvHeapDesc, 
-			IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].put()))
-	);
-	s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->SetName(L"rtv_heap");
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+		rtvHeapDesc.NumDescriptors = k_rtvHeapSize;
+		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		AssertIfFailed(
+			s_d3dDevice->CreateDescriptorHeap(
+				&rtvHeapDesc,
+				IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV].put()))
+		);
+		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->SetName(L"rtv_heap");
+
+		// Cache available indices
+		for (int i = 0; i < k_rtvHeapSize; ++i)
+		{
+			s_rtvIndexPool.push(i);
+		}
+	}
 
 	// Swap chain
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -573,14 +729,21 @@ bool Demo::D3D12::Initialize(const HWND& windowHandle, const uint32_t resX, cons
 		s << L"back_buffer_" << bufferIdx;
 		s_backBuffers[bufferIdx]->SetName(s.str().c_str());
 
+		uint32_t rtvIndex;
+		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
+		assert(ok && "Ran out of RTV descriptors");
+
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor;
 		rtvDescriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
-			bufferIdx * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
+			rtvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
 
 		s_d3dDevice->CreateRenderTargetView(s_backBuffers[bufferIdx].get(), nullptr, rtvDescriptor);
 	}
 
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
+
+	// Render texture memory
+	s_renderTexturePool.Initialize(k_renderTextureMemory);
 
 	// Frame sync
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(s_frameFence.put())));
@@ -615,6 +778,7 @@ void Demo::D3D12::Teardown()
 
 	s_commandListPool.Clear();
 	s_uploadBufferPool.Clear();
+	s_renderTexturePool.Clear();
 
 	s_shaderCache.clear();
 	s_rootsigCache.clear();
@@ -622,6 +786,7 @@ void Demo::D3D12::Teardown()
 	s_graphicsPSOPool.clear();
 	s_computePSOPool.clear();
 	s_bindlessIndexPool.clear();
+	s_rtvIndexPool.clear();
 
 	s_frameFence.get()->Release();
 
@@ -971,9 +1136,22 @@ D3DDescriptorHeap_t* Demo::D3D12::GetBindlessShaderResourceHeap()
 	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].get();
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBindlessShaderResourceHeapHandle()
+D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
 {
-	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetGPUDescriptorHandleForHeapStart();
+	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
+	descriptor.ptr = s_descriptorHeaps[type]->GetCPUDescriptorHandleForHeapStart().ptr +
+		descriptorIndex * s_descriptorSize[type];
+
+	return descriptor;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE descriptor;
+	descriptor.ptr = s_descriptorHeaps[type]->GetGPUDescriptorHandleForHeapStart().ptr +
+		descriptorIndex * s_descriptorSize[type];
+
+	return descriptor;
 }
 
 FTransientBuffer Demo::D3D12::CreateTransientBuffer(
@@ -1038,6 +1216,100 @@ FResource Demo::D3D12::CreateTemporaryDefaultBuffer(
 	//UpdateTileMappings();
 
 	return buffer;
+}
+
+FRenderTexture Demo::D3D12::CreateRenderTexture(
+	const std::wstring& name,
+	const DXGI_FORMAT format,
+	const size_t width,
+	const size_t height,
+	const size_t mipLevels,
+	const size_t depth)
+{
+
+	D3DResource_t* rtResource = s_renderTexturePool.GetOrCreate(name, format, width, height, mipLevels, depth);
+
+	uint32_t numTiles;
+	GetDevice()->GetResourceTiling(rtResource, &numTiles, nullptr, nullptr, nullptr, 0, nullptr);
+	std::vector<uint32_t> tileList = s_renderTexturePool.AllocateTiles(numTiles);
+
+	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NONE);
+	std::vector<UINT> rangeTileCounts(numTiles, 1);
+
+	s_graphicsQueue->UpdateTileMappings(
+		rtResource,
+		1,
+		nullptr,
+		nullptr,
+		s_renderTexturePool.GetHeap(),
+		numTiles,
+		rangeFlags.data(),
+		tileList.data(),
+		rangeTileCounts.data(),
+		D3D12_TILE_MAPPING_FLAG_NONE);
+
+	// RTV Descriptor
+	std::vector<uint32_t> rtvIndices;
+	for(int mip = 0; mip < mipLevels; ++mip)
+	{
+		uint32_t rtvIndex;
+		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
+		assert(ok && "Ran out of RTV descriptors");
+		D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+		rtv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
+			rtvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
+
+		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = format;
+		if (depth == 1)
+		{
+			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+			rtvDesc.Texture2D.MipSlice = mip;
+		}
+		else
+		{
+			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+			rtvDesc.Texture3D.MipSlice = mip;
+		}
+
+		GetDevice()->CreateRenderTargetView(rtResource, &rtvDesc, rtv);
+		rtvIndices.push_back(rtvIndex);
+	}
+
+	// SRV Descriptor
+	/*uint32_t srvIndex = ~0;
+	{
+		bool ok = s_bindlessIndexPool.try_pop(srvIndex);
+		assert(ok && "Ran out of bindless descriptors");
+		D3D12_CPU_DESCRIPTOR_HANDLE srv;
+		srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
+			srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = format;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		if (depth == 1)
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MipLevels = mipLevels;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+		}
+		else
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+			srvDesc.Texture3D.MipLevels = mipLevels;
+			srvDesc.Texture3D.MostDetailedMip = 0;
+		}
+		GetDevice()->CreateShaderResourceView(rtResource, &srvDesc, srv);
+	}*/
+
+	FRenderTexture rt;
+	rt.m_resource.copy_from(rtResource);
+	rt.m_tileList = std::move(tileList);
+	rt.m_rtvIndices = std::move(rtvIndices);
+	//rt.m_srvIndex = srvIndex;
+
+	return rt;
 }
 
 uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
@@ -1136,4 +1408,66 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 FTransientBuffer::~FTransientBuffer()
 {
 	s_uploadBufferPool.Retire(m_resource.get(), m_dependentCmdlist);
+}
+
+FRenderTexture::~FRenderTexture()
+{
+	const size_t numTiles = m_tileList.size();
+	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NULL);
+	std::vector<UINT> rangeTileCounts(numTiles, 1);
+
+	s_graphicsQueue->UpdateTileMappings(
+		m_resource.get(),
+		1,
+		nullptr,
+		nullptr,
+		s_renderTexturePool.GetHeap(),
+		numTiles,
+		rangeFlags.data(),
+		m_tileList.data(),
+		rangeTileCounts.data(),
+		D3D12_TILE_MAPPING_FLAG_NONE);
+
+	s_renderTexturePool.ReturnTiles(std::move(m_tileList));
+	s_renderTexturePool.Retire(m_resource.get());
+	//s_bindlessIndexPool.push(m_srvIndex);
+	for (uint32_t rtvIndex : m_rtvIndices)
+	{
+		s_rtvIndexPool.push(rtvIndex);
+	}
+}
+
+void FRenderTexturePool::Retire(D3DResource_t* rt)
+{
+	auto waitForFenceTask = concurrency::create_task([this]() mutable
+	{
+		s_graphicsQueue->Signal(m_fence.get(), ++m_fenceValue);
+		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+		if (event)
+		{
+			m_fence->SetEventOnCompletion(m_fenceValue, event);
+			WaitForSingleObject(event, INFINITE);
+		}
+	});
+
+	auto addToFreePool = [rt, this]()
+	{
+		const std::lock_guard<std::mutex> lock(m_mutex);
+
+		for (auto it = m_useList.begin(); it != m_useList.end();)
+		{
+			if (it->get() == rt)
+			{
+				m_freeList.push_back(*it);
+				it = m_useList.erase(it);
+				break;
+			}
+			else
+			{
+				++it;
+			}
+		}
+	};
+
+	waitForFenceTask.then(addToFreePool);
 }

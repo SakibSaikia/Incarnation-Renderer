@@ -20,6 +20,7 @@ using D3DDevice_t = ID3D12Device5;
 using D3DCommandQueue_t = ID3D12CommandQueue;
 using D3DCommandAllocator_t = ID3D12CommandAllocator;
 using D3DDescriptorHeap_t = ID3D12DescriptorHeap;
+using D3DHeap_t = ID3D12Heap;
 using D3DResource_t = ID3D12Resource;
 using D3DCommandList_t = ID3D12GraphicsCommandList4;
 using D3DFence_t = ID3D12Fence1;
@@ -69,6 +70,14 @@ struct FTransientBuffer : public FResource
 {
 	~FTransientBuffer();
 	const FCommandList* m_dependentCmdlist;
+};
+
+struct FRenderTexture : public FResource
+{
+	~FRenderTexture();
+	std::vector<uint32_t> m_tileList;
+	std::vector<uint32_t> m_rtvIndices; // one for each mip level
+	//uint32_t m_srvIndex;
 };
 
 class FResourceUploadContext
@@ -127,7 +136,8 @@ namespace Demo
 
 		// Descriptor Management
 		D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();
-		D3D12_GPU_DESCRIPTOR_HANDLE GetBindlessShaderResourceHeapHandle();
+		D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
+		D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
 
 		// Resource Management
 		FTransientBuffer CreateTransientBuffer(
@@ -145,6 +155,14 @@ namespace Demo
 			const std::wstring& name,
 			const size_t size,
 			D3D12_RESOURCE_STATES state);
+
+		FRenderTexture CreateRenderTexture(
+			const std::wstring& name,
+			const DXGI_FORMAT format,
+			const size_t width,
+			const size_t height,
+			const size_t mipLevels,
+			const size_t depth);
 
 		uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
 	}

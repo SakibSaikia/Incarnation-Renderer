@@ -31,9 +31,9 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList*> Render(const uint32_t resX, const uint32_t resY)
+	concurrency::task<FCommandList*> Render(const FRenderTexture* rt, const uint32_t resX, const uint32_t resY)
 	{
-		return concurrency::create_task([resX, resY]
+		return concurrency::create_task([rt, resX, resY]
 		{
 			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
@@ -113,11 +113,12 @@ namespace Jobs
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { Demo::D3D12::GetBackBufferDescriptor() };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtv = Demo::D3D12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rt->m_rtvIndices[0]);
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { rtv };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
-			d3dCmdList->ClearRenderTargetView(Demo::D3D12::GetBackBufferDescriptor(), clearColor, 0, nullptr);
+			d3dCmdList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
@@ -324,7 +325,7 @@ namespace Jobs
 
 			D3DDescriptorHeap_t* descriptorHeaps[] = { Demo::D3D12::GetBindlessShaderResourceHeap() };
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-			d3dCmdList->SetGraphicsRootDescriptorTable(2, Demo::D3D12::GetBindlessShaderResourceHeapHandle());
+			d3dCmdList->SetGraphicsRootDescriptorTable(2, Demo::D3D12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 			// Render commands
@@ -401,8 +402,11 @@ namespace Jobs
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
+
+	FRenderTexture rt = Demo::D3D12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
+
 	auto preRenderCL = Jobs::PreRender().get();
-	auto renderCL = Jobs::Render(resX, resY).get();
+	auto renderCL = Jobs::Render(&rt, resX, resY).get();
 	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
 
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
