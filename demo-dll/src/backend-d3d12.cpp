@@ -1,4 +1,4 @@
-#include <d3d12layer.h>
+#include <backend-d3d12.h>
 #include <settings.h>
 #include <shadercompiler.h>
 #include <ppltasks.h>
@@ -18,12 +18,36 @@
 #include <system_error>
 #include <utility>
 
-// Constants
+using namespace RenderBackend12;
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Constants
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 constexpr uint32_t k_backBufferCount = 2;
 constexpr size_t k_rtvHeapSize = 32;
 constexpr size_t k_renderTextureMemory = 32 * 1024 * 1024;
 
-using namespace Demo::D3D12;
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Forward Declarations
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+class FUploadBufferPool;
+class FRenderTexturePool;
+
+namespace
+{
+	D3DDevice_t* GetDevice();
+	D3DCommandQueue_t* GetGraphicsQueue();
+	D3DCommandQueue_t* GetComputeQueue();
+	D3DCommandQueue_t* GetCopyQueue();
+	FUploadBufferPool* GetUploadBufferPool();
+	FRenderTexturePool* GetRenderTexturePool();
+	concurrency::concurrent_queue<uint32_t>& GetBindlessIndexPool();
+	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool();
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Common
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 
 namespace
 {
@@ -73,6 +97,10 @@ namespace
 		return bestAdapter;
 	}
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														User defined overrides
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 
 template<>
 struct std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>
@@ -188,6 +216,10 @@ bool operator==(const FResource& lhs, const FResource& rhs)
 	return lhs.m_resource.get() == rhs.m_resource.get();
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Command Lists
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 class FCommandListPool
 {
 public:
@@ -267,6 +299,30 @@ private:
 	std::list<std::unique_ptr<FCommandList>> m_freeList;
 	std::list<std::unique_ptr<FCommandList>> m_useList;
 };
+
+FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue) :
+	m_type{ type },
+	m_fenceValue{ fenceValue }
+{
+
+	AssertIfFailed(GetDevice()->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.put())));
+
+	AssertIfFailed(GetDevice()->CreateCommandList(
+		0,
+		type,
+		m_cmdAllocator.get(),
+		nullptr,
+		IID_PPV_ARGS(m_cmdList.put())));
+
+	AssertIfFailed(GetDevice()->CreateFence(
+		0,
+		D3D12_FENCE_FLAG_NONE,
+		IID_PPV_ARGS(m_fence.put())));
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Resource Upload
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 
 class FUploadBufferPool
 {
@@ -368,6 +424,121 @@ private:
 	std::list<winrt::com_ptr<D3DResource_t>> m_useList;
 };
 
+FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
+	m_currentOffset{ 0 }
+{
+	assert(uploadBufferSizeInBytes != 0);
+
+	// Round up to power of 2
+	unsigned long n;
+	_BitScanReverse64(&n, uploadBufferSizeInBytes);
+	m_sizeInBytes = (1 << (n + 1));
+
+	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
+
+	m_uploadBuffer = GetUploadBufferPool()->GetOrCreate(L"upload_context_buffer", m_sizeInBytes);
+	m_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
+}
+
+void FResourceUploadContext::UpdateSubresources(
+	D3DResource_t* destinationResource,
+	const uint32_t firstSubresource,
+	const uint32_t numSubresources,
+	D3D12_SUBRESOURCE_DATA* srcData,
+	std::function<void(FCommandList*)> transition)
+{
+	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
+	UINT64 totalBytes = 0;
+	auto layouts = std::make_unique<D3D12_PLACED_SUBRESOURCE_FOOTPRINT[]>(numSubresources);
+	auto rowSizeInBytes = std::make_unique<UINT64[]>(numSubresources);
+	auto numRows = std::make_unique<UINT[]>(numSubresources);
+
+	D3D12_RESOURCE_DESC destinationDesc = destinationResource->GetDesc();
+	GetDevice()->GetCopyableFootprints(&destinationDesc, firstSubresource, numSubresources, m_currentOffset, layouts.get(), numRows.get(), rowSizeInBytes.get(), &totalBytes);
+
+	size_t capacity = m_sizeInBytes - m_currentOffset;
+	assert(totalBytes <= capacity && L"Upload buffer is too small!");
+
+	uint8_t* pAlloc = m_mappedPtr + m_currentOffset;
+
+	for (UINT i = 0; i < numSubresources; ++i)
+	{
+		D3D12_SUBRESOURCE_DATA src;
+		src.pData = srcData[i].pData;
+		src.RowPitch = srcData[i].RowPitch;
+		src.SlicePitch = srcData[i].SlicePitch;
+
+		D3D12_MEMCPY_DEST dest;
+		dest.pData = pAlloc + layouts[i].Offset;
+		dest.RowPitch = layouts[i].Footprint.RowPitch;
+		dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
+
+		UINT numSlices = layouts[i].Footprint.Depth;
+
+		for (UINT z = 0; z < numSlices; ++z)
+		{
+			BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
+			const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
+
+			for (UINT y = 0; y < numRows[i]; ++y)
+			{
+				memcpy(pDestSlice + dest.RowPitch * y,
+					pSrcSlice + src.RowPitch * y,
+					rowSizeInBytes[i]);
+			}
+		}
+	}
+
+	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+	{
+		m_copyCommandlist->m_cmdList->CopyBufferRegion(
+			destinationResource,
+			0,
+			m_uploadBuffer,
+			layouts[0].Offset,
+			layouts[0].Footprint.Width);
+	}
+	else
+	{
+		for (UINT i = 0; i < numSubresources; ++i)
+		{
+			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+			srcLocation.pResource = m_uploadBuffer;
+			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+			srcLocation.PlacedFootprint = layouts[i];
+
+			D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+			dstLocation.pResource = destinationResource;
+			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+			dstLocation.SubresourceIndex = i + firstSubresource;
+
+			m_copyCommandlist->m_cmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+		}
+	}
+
+	m_currentOffset += totalBytes;
+	m_pendingTransitions.push_back(transition);
+}
+
+D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
+{
+	D3DFence_t* clFence = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
+
+	GetUploadBufferPool()->Retire(m_uploadBuffer, m_copyCommandlist);
+
+	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
+	for (auto& transitionCallback : m_pendingTransitions)
+	{
+		transitionCallback(owningCL);
+	}
+
+	return clFence;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Render Textures
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 class FRenderTexturePool
 {
 public:
@@ -461,7 +632,40 @@ public:
 		return newRt.get();
 	}
 
-	void Retire(D3DResource_t* rt);
+	void Retire(D3DResource_t* rt)
+	{
+		auto waitForFenceTask = concurrency::create_task([this]() mutable
+		{
+			GetGraphicsQueue()->Signal(m_fence.get(), ++m_fenceValue);
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				m_fence->SetEventOnCompletion(m_fenceValue, event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		});
+
+		auto addToFreePool = [rt, this]()
+		{
+			const std::lock_guard<std::mutex> lock(m_mutex);
+
+			for (auto it = m_useList.begin(); it != m_useList.end();)
+			{
+				if (it->get() == rt)
+				{
+					m_freeList.push_back(*it);
+					it = m_useList.erase(it);
+					break;
+				}
+				else
+				{
+					++it;
+				}
+			}
+		};
+
+		waitForFenceTask.then(addToFreePool);
+	}
 
 	std::vector<uint32_t> AllocateTiles(const size_t numTiles)
 	{
@@ -512,13 +716,44 @@ private:
 	concurrency::concurrent_queue<uint32_t> m_tilePool;
 };
 
+FRenderTexture::~FRenderTexture()
+{
+	const size_t numTiles = m_tileList.size();
+	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NULL);
+	std::vector<UINT> rangeTileCounts(numTiles, 1);
+
+	GetGraphicsQueue()->UpdateTileMappings(
+		m_resource.get(),
+		1,
+		nullptr,
+		nullptr,
+		GetRenderTexturePool()->GetHeap(),
+		numTiles,
+		rangeFlags.data(),
+		m_tileList.data(),
+		rangeTileCounts.data(),
+		D3D12_TILE_MAPPING_FLAG_NONE);
+
+	GetRenderTexturePool()->ReturnTiles(std::move(m_tileList));
+	GetRenderTexturePool()->Retire(m_resource.get());
+	//s_bindlessIndexPool.push(m_srvIndex);
+	for (uint32_t rtvIndex : m_rtvIndices)
+	{
+		GetRTVIndexPool().push(rtvIndex);
+	}
+}
+
 struct FTimestampedBlob
 {
 	FILETIME m_timestamp;
 	winrt::com_ptr<IDxcBlob> m_blob;
 };
 
-namespace Demo::D3D12
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														RenderBackend12
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
+namespace RenderBackend12
 {
 #if defined (_DEBUG)
 	winrt::com_ptr<D3DDebug_t> s_debugController;
@@ -554,49 +789,50 @@ namespace Demo::D3D12
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 }
 
-namespace
+namespace 
 {
-	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile)
+	D3DDevice_t* GetDevice()
 	{
-		FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
+		return RenderBackend12::s_d3dDevice.get();
+	}
 
-		auto search = s_rootsigCache.find(rootsigDesc);
-		if (search != s_rootsigCache.cend())
-		{
-			if (search->second.m_timestamp != currentTimestamp &&
-				Demo::ShaderCompiler::CompileRootsignature(
-					rootsigDesc.m_filename,
-					rootsigDesc.m_entrypoint,
-					profile,
-					search->second.m_blob.put()))
-			{
-				search->second.m_timestamp = currentTimestamp;
-				return search->second.m_blob.get();
-			}
-			else
-			{
-				// Use pre-cached rootsig if it is cached and up-to-date or if the current changes fail to compile.
-				// Update timestamp so that we don't retry compilation on failure every frame.
-				search->second.m_timestamp = currentTimestamp;
-				return search->second.m_blob.get();
-			}
-		}
-		else
-		{
-			FTimestampedBlob& rsBlob = s_rootsigCache[rootsigDesc];
-			AssertIfFailed(Demo::ShaderCompiler::CompileRootsignature(
-				rootsigDesc.m_filename,
-				rootsigDesc.m_entrypoint,
-				profile,
-				rsBlob.m_blob.put()));
+	D3DCommandQueue_t* GetGraphicsQueue()
+	{
+		return RenderBackend12::s_graphicsQueue.get();
+	}
 
-			rsBlob.m_timestamp = currentTimestamp;
-			return rsBlob.m_blob.get();
-		}
+	D3DCommandQueue_t* GetComputeQueue()
+	{
+		return RenderBackend12::s_computeQueue.get();
+	}
+
+	D3DCommandQueue_t* GetCopyQueue()
+	{
+		return RenderBackend12::s_copyQueue.get();
+	}
+
+	FUploadBufferPool* GetUploadBufferPool()
+	{
+		return &RenderBackend12::s_uploadBufferPool;
+	}
+
+	FRenderTexturePool* GetRenderTexturePool()
+	{
+		return &RenderBackend12::s_renderTexturePool;
+	}
+
+	concurrency::concurrent_queue<uint32_t>& GetBindlessIndexPool()
+	{
+		return RenderBackend12::s_bindlessIndexPool;
+	}
+
+	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool()
+	{
+		return RenderBackend12::s_rtvIndexPool;
 	}
 }
 
-bool Demo::D3D12::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
+bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
 {
 	UINT dxgiFactoryFlags = 0;
 
@@ -756,7 +992,7 @@ bool Demo::D3D12::Initialize(const HWND& windowHandle, const uint32_t resX, cons
 	return true;
 }
 
-void Demo::D3D12::Teardown()
+void RenderBackend12::Teardown()
 {
 	winrt::com_ptr<D3DFence_t> flushFence;
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.put())));
@@ -817,17 +1053,12 @@ void Demo::D3D12::Teardown()
 #endif
 }
 
-D3DDevice_t* Demo::D3D12::GetDevice()
-{
-	return s_d3dDevice.get();
-}
-
-FCommandList* Demo::D3D12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+FCommandList* RenderBackend12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 {
 	return s_commandListPool.GetOrCreate(type);
 }
 
-IDxcBlob* Demo::D3D12::CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
+IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
 {
 	FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
 
@@ -868,7 +1099,46 @@ IDxcBlob* Demo::D3D12::CacheShader(const FShaderDesc& shaderDesc, const std::wst
 	}
 }
 
-winrt::com_ptr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
+IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile)
+{
+	FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
+
+	auto search = s_rootsigCache.find(rootsigDesc);
+	if (search != s_rootsigCache.cend())
+	{
+		if (search->second.m_timestamp != currentTimestamp &&
+			Demo::ShaderCompiler::CompileRootsignature(
+				rootsigDesc.m_filename,
+				rootsigDesc.m_entrypoint,
+				profile,
+				search->second.m_blob.put()))
+		{
+			search->second.m_timestamp = currentTimestamp;
+			return search->second.m_blob.get();
+		}
+		else
+		{
+			// Use pre-cached rootsig if it is cached and up-to-date or if the current changes fail to compile.
+			// Update timestamp so that we don't retry compilation on failure every frame.
+			search->second.m_timestamp = currentTimestamp;
+			return search->second.m_blob.get();
+		}
+	}
+	else
+	{
+		FTimestampedBlob& rsBlob = s_rootsigCache[rootsigDesc];
+		AssertIfFailed(Demo::ShaderCompiler::CompileRootsignature(
+			rootsigDesc.m_filename,
+			rootsigDesc.m_entrypoint,
+			profile,
+			rsBlob.m_blob.put()));
+
+		rsBlob.m_timestamp = currentTimestamp;
+		return rsBlob.m_blob.get();
+	}
+}
+
+winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
 {
 	IDxcBlob* rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
 	winrt::com_ptr<D3DRootSignature_t> rs;
@@ -876,7 +1146,7 @@ winrt::com_ptr<D3DRootSignature_t> Demo::D3D12::FetchGraphicsRootSignature(const
 	return rs;
 }
 
-D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
+D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
 	auto search = s_graphicsPSOPool.find(desc);
 	if (search != s_graphicsPSOPool.cend())
@@ -890,7 +1160,7 @@ D3DPipelineState_t* Demo::D3D12::FetchGraphicsPipelineState(const D3D12_GRAPHICS
 	}
 }
 
-D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC& desc)
+D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC& desc)
 {
 	auto search = s_computePSOPool.find(desc);
 	if (search != s_computePSOPool.cend())
@@ -904,12 +1174,12 @@ D3DPipelineState_t* Demo::D3D12::FetchComputePipelineState(const D3D12_COMPUTE_P
 	}
 }
 
-uint32_t Demo::D3D12::GetBackBufferIndex()
+uint32_t RenderBackend12::GetBackBufferIndex()
 {
 	return s_currentBufferIndex;
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()
+D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetBackBufferDescriptor()
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
 	descriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -918,12 +1188,12 @@ D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetBackBufferDescriptor()
 	return descriptor;
 }
 
-D3DResource_t* Demo::D3D12::GetBackBufferResource()
+D3DResource_t* RenderBackend12::GetBackBufferResource()
 {
 	return s_backBuffers[s_currentBufferIndex].get();
 }
 
-D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists)
+D3DFence_t* RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists)
 {
 	std::vector<ID3D12CommandList*> d3dCommandLists;
 	size_t latestFenceValue = 0;
@@ -975,7 +1245,7 @@ D3DFence_t* Demo::D3D12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE comma
 	return latestFence;
 }
 
-void Demo::D3D12::PresentDisplay()
+void RenderBackend12::PresentDisplay()
 {
 	s_swapChain->Present(1, 0);
 
@@ -1000,143 +1270,12 @@ void Demo::D3D12::PresentDisplay()
 	s_frameFenceValues[s_currentBufferIndex] = currentFenceValue + 1;
 }
 
-FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue) :
-	m_type{ type },
-	m_fenceValue{ fenceValue }
-{
-	
-	AssertIfFailed(s_d3dDevice->CreateCommandAllocator(type, IID_PPV_ARGS(m_cmdAllocator.put())));
-
-	AssertIfFailed(s_d3dDevice->CreateCommandList(
-		0,
-		type,
-		m_cmdAllocator.get(),
-		nullptr,
-		IID_PPV_ARGS(m_cmdList.put())));
-
-	AssertIfFailed(s_d3dDevice->CreateFence(
-		0,
-		D3D12_FENCE_FLAG_NONE,
-		IID_PPV_ARGS(m_fence.put())));
-}
-
-FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
-	m_currentOffset{ 0 }
-{
-	assert(uploadBufferSizeInBytes != 0);
-
-	// Round up to power of 2
-	unsigned long n;
-	_BitScanReverse64(&n, uploadBufferSizeInBytes);
-	m_sizeInBytes = (1 << (n + 1));
-
-	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
-
-	m_uploadBuffer = s_uploadBufferPool.GetOrCreate(L"upload_context_buffer", m_sizeInBytes);
-	m_uploadBuffer->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
-}
-
-void FResourceUploadContext::UpdateSubresources(
-	D3DResource_t* destinationResource, 
-	const uint32_t firstSubresource,
-	const uint32_t numSubresources,
-	D3D12_SUBRESOURCE_DATA* srcData,
-	std::function<void(FCommandList*)> transition)
-{
-	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
-	UINT64 totalBytes = 0;
-	auto layouts = std::make_unique<D3D12_PLACED_SUBRESOURCE_FOOTPRINT[]>(numSubresources);
-	auto rowSizeInBytes = std::make_unique<UINT64[]>(numSubresources);
-	auto numRows = std::make_unique<UINT[]>(numSubresources);
-
-	D3D12_RESOURCE_DESC destinationDesc = destinationResource->GetDesc();
-	GetDevice()->GetCopyableFootprints(&destinationDesc, firstSubresource, numSubresources, m_currentOffset, layouts.get(), numRows.get(), rowSizeInBytes.get(), &totalBytes);
-
-	size_t capacity = m_sizeInBytes - m_currentOffset;
-	assert(totalBytes <= capacity && L"Upload buffer is too small!");
-
-	uint8_t* pAlloc = m_mappedPtr + m_currentOffset;
-
-	for (UINT i = 0; i < numSubresources; ++i)
-	{
-		D3D12_SUBRESOURCE_DATA src;
-		src.pData = srcData[i].pData;
-		src.RowPitch = srcData[i].RowPitch;
-		src.SlicePitch = srcData[i].SlicePitch;
-
-		D3D12_MEMCPY_DEST dest;
-		dest.pData = pAlloc + layouts[i].Offset;
-		dest.RowPitch = layouts[i].Footprint.RowPitch;
-		dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
-
-		UINT numSlices = layouts[i].Footprint.Depth;
-
-		for (UINT z = 0; z < numSlices; ++z)
-		{
-			BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
-			const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
-
-			for (UINT y = 0; y < numRows[i]; ++y)
-			{
-				memcpy(pDestSlice + dest.RowPitch * y,
-					pSrcSlice + src.RowPitch * y,
-					rowSizeInBytes[i]);
-			}
-		}
-	}
-
-	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
-	{
-		m_copyCommandlist->m_cmdList->CopyBufferRegion(
-			destinationResource, 
-			0, 
-			m_uploadBuffer, 
-			layouts[0].Offset, 
-			layouts[0].Footprint.Width);
-	}
-	else
-	{
-		for (UINT i = 0; i < numSubresources; ++i)
-		{
-			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-			srcLocation.pResource = m_uploadBuffer;
-			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-			srcLocation.PlacedFootprint = layouts[i];
-
-			D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
-			dstLocation.pResource = destinationResource;
-			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-			dstLocation.SubresourceIndex = i + firstSubresource;
-
-			m_copyCommandlist->m_cmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
-		}
-	}
-
-	m_currentOffset += totalBytes;
-	m_pendingTransitions.push_back(transition);
-}
-
-D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
-{
-	D3DFence_t* clFence = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
-
-	s_uploadBufferPool.Retire(m_uploadBuffer, m_copyCommandlist);
-
-	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
-	for (auto& transitionCallback : m_pendingTransitions)
-	{
-		transitionCallback(owningCL);
-	}
-
-	return clFence;
-}
-
-D3DDescriptorHeap_t* Demo::D3D12::GetBindlessShaderResourceHeap()
+D3DDescriptorHeap_t* RenderBackend12::GetBindlessShaderResourceHeap()
 {
 	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].get();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
+D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
 	descriptor.ptr = s_descriptorHeaps[type]->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -1145,7 +1284,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE Demo::D3D12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_
 	return descriptor;
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
+D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
 {
 	D3D12_GPU_DESCRIPTOR_HANDLE descriptor;
 	descriptor.ptr = s_descriptorHeaps[type]->GetGPUDescriptorHandleForHeapStart().ptr +
@@ -1154,7 +1293,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE Demo::D3D12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_
 	return descriptor;
 }
 
-FTransientBuffer Demo::D3D12::CreateTransientBuffer(
+FTransientBuffer RenderBackend12::CreateTransientBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	const FCommandList* dependentCL,
@@ -1183,7 +1322,7 @@ FTransientBuffer Demo::D3D12::CreateTransientBuffer(
 	return tempBuffer;
 }
 
-FResource Demo::D3D12::CreateTemporaryDefaultBuffer(
+FResource RenderBackend12::CreateTemporaryDefaultBuffer(
 	const std::wstring& name,
 	const size_t size,
 	D3D12_RESOURCE_STATES state)
@@ -1218,7 +1357,7 @@ FResource Demo::D3D12::CreateTemporaryDefaultBuffer(
 	return buffer;
 }
 
-FRenderTexture Demo::D3D12::CreateRenderTexture(
+FRenderTexture RenderBackend12::CreateRenderTexture(
 	const std::wstring& name,
 	const DXGI_FORMAT format,
 	const size_t width,
@@ -1312,7 +1451,7 @@ FRenderTexture Demo::D3D12::CreateRenderTexture(
 	return rt;
 }
 
-uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
+uint32_t RenderBackend12::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
 {
 	auto search = s_textureCache.find(name);
 	if (search != s_textureCache.cend())
@@ -1408,66 +1547,4 @@ uint32_t Demo::D3D12::CacheTexture(const std::wstring& name, FResourceUploadCont
 FTransientBuffer::~FTransientBuffer()
 {
 	s_uploadBufferPool.Retire(m_resource.get(), m_dependentCmdlist);
-}
-
-FRenderTexture::~FRenderTexture()
-{
-	const size_t numTiles = m_tileList.size();
-	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NULL);
-	std::vector<UINT> rangeTileCounts(numTiles, 1);
-
-	s_graphicsQueue->UpdateTileMappings(
-		m_resource.get(),
-		1,
-		nullptr,
-		nullptr,
-		s_renderTexturePool.GetHeap(),
-		numTiles,
-		rangeFlags.data(),
-		m_tileList.data(),
-		rangeTileCounts.data(),
-		D3D12_TILE_MAPPING_FLAG_NONE);
-
-	s_renderTexturePool.ReturnTiles(std::move(m_tileList));
-	s_renderTexturePool.Retire(m_resource.get());
-	//s_bindlessIndexPool.push(m_srvIndex);
-	for (uint32_t rtvIndex : m_rtvIndices)
-	{
-		s_rtvIndexPool.push(rtvIndex);
-	}
-}
-
-void FRenderTexturePool::Retire(D3DResource_t* rt)
-{
-	auto waitForFenceTask = concurrency::create_task([this]() mutable
-	{
-		s_graphicsQueue->Signal(m_fence.get(), ++m_fenceValue);
-		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-		if (event)
-		{
-			m_fence->SetEventOnCompletion(m_fenceValue, event);
-			WaitForSingleObject(event, INFINITE);
-		}
-	});
-
-	auto addToFreePool = [rt, this]()
-	{
-		const std::lock_guard<std::mutex> lock(m_mutex);
-
-		for (auto it = m_useList.begin(); it != m_useList.end();)
-		{
-			if (it->get() == rt)
-			{
-				m_freeList.push_back(*it);
-				it = m_useList.erase(it);
-				break;
-			}
-			else
-			{
-				++it;
-			}
-		}
-	};
-
-	waitForFenceTask.then(addToFreePool);
 }

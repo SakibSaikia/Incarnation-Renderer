@@ -104,66 +104,65 @@ private:
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };
 
-namespace Demo
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														RenderBackend12
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
+namespace RenderBackend12
 {
-	namespace D3D12
-	{
-		bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY);
-		void Teardown();
+	bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY);
+	void Teardown();
 
-		// Device
-		D3DDevice_t* GetDevice();
+	// Command Lists
+	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
+	D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
 
-		// Command Lists
-		FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
-		D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
+	// Root Signatures
+	winrt::com_ptr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
 
-		// Root Signatures
-		winrt::com_ptr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
+	// Pipeline States
+	D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
+	D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
 
-		// Pipeline States
-		D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
-		D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
+	// Swap chain and back buffers
+	uint32_t GetBackBufferIndex();
+	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
+	D3DResource_t* GetBackBufferResource();
+	void PresentDisplay();
 
-		// Swap chain and back buffers
-		uint32_t GetBackBufferIndex();
-		D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
-		D3DResource_t* GetBackBufferResource();
-		void PresentDisplay();
+	// Shaders
+	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile);
+	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile);
 
-		// Shaders
-		IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile);
+	// Descriptor Management
+	D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();
+	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
 
-		// Descriptor Management
-		D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();
-		D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
-		D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
+	// Resource Management
+	FTransientBuffer CreateTransientBuffer(
+		const std::wstring& name,
+		const size_t size,
+		const FCommandList* dependentCL,
+		std::function<void(uint8_t*)> uploadFunc = nullptr);
 
-		// Resource Management
-		FTransientBuffer CreateTransientBuffer(
-			const std::wstring& name,
-			const size_t size,
-			const FCommandList* dependentCL,
-			std::function<void(uint8_t*)> uploadFunc = nullptr);
+	FResource CreateTemporaryDefaultBuffer(
+		const std::wstring& name,
+		const size_t size,
+		D3D12_RESOURCE_STATES state);
 
-		FResource CreateTemporaryDefaultBuffer(
-			const std::wstring& name,
-			const size_t size,
-			D3D12_RESOURCE_STATES state);
+	FResource CreateTemporaryDefaultTexture(
+		const std::wstring& name,
+		const size_t size,
+		D3D12_RESOURCE_STATES state);
 
-		FResource CreateTemporaryDefaultTexture(
-			const std::wstring& name,
-			const size_t size,
-			D3D12_RESOURCE_STATES state);
+	FRenderTexture CreateRenderTexture(
+		const std::wstring& name,
+		const DXGI_FORMAT format,
+		const size_t width,
+		const size_t height,
+		const size_t mipLevels,
+		const size_t depth);
 
-		FRenderTexture CreateRenderTexture(
-			const std::wstring& name,
-			const DXGI_FORMAT format,
-			const size_t width,
-			const size_t height,
-			const size_t mipLevels,
-			const size_t depth);
-
-		uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
-	}
+	uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
 }

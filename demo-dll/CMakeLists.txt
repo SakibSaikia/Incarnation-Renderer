@@ -14,7 +14,7 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_impl_win32.cpp"
     "${CMAKE_SOURCE_DIR}/ext/microprofile/microprofile.cpp"
     "src/demo.cpp"
-    "src/d3d12layer.cpp" 
+    "src/backend-d3d12.cpp" 
     "src/shadercompiler.cpp"
     "src/renderer.cpp" 
     "src/profiling.cpp")

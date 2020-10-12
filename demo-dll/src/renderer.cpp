@@ -1,5 +1,5 @@
 #include <demo.h>
-#include <d3d12layer.h>
+#include <backend-d3d12.h>
 #include <profiling.h>
 #include <settings.h>
 #include <ppltasks.h>
@@ -15,13 +15,13 @@ namespace Jobs
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"pre_render_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
 			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			barrierDesc.Transition.pResource = Demo::D3D12::GetBackBufferResource();
+			barrierDesc.Transition.pResource = RenderBackend12::GetBackBufferResource();
 			barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
 			barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -35,13 +35,13 @@ namespace Jobs
 	{
 		return concurrency::create_task([rt, resX, resY]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"render_job");
 
 			SCOPED_GPU_EVENT(cmdList, L"render_commands", 0);
 
-			winrt::com_ptr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			// PSO
@@ -61,8 +61,8 @@ namespace Jobs
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = Demo::D3D12::CacheShader({ L"hello.hlsl", L"vs_main", L"" }, L"vs_6_4");
-				IDxcBlob* psBlob = Demo::D3D12::CacheShader({ L"hello.hlsl", L"ps_main", L"" }, L"ps_6_4");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"hello.hlsl", L"vs_main", L"" }, L"vs_6_4");
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"hello.hlsl", L"ps_main", L"" }, L"ps_6_4");
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -105,7 +105,7 @@ namespace Jobs
 				desc.StencilEnable = FALSE;
 			}
 
-			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(psoDesc);
+			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, resX, resY, 0.f, 1.f };
@@ -113,7 +113,7 @@ namespace Jobs
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtv = Demo::D3D12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rt->m_rtvIndices[0]);
+			D3D12_CPU_DESCRIPTOR_HANDLE rtv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rt->m_rtvIndices[0]);
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { rtv };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
@@ -131,7 +131,7 @@ namespace Jobs
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"imgui_job");
 			SCOPED_GPU_EVENT(cmdList, L"imgui_commands", 0);
@@ -148,7 +148,7 @@ namespace Jobs
 
 			// Vertex Buffer
 			{
-				FTransientBuffer vtxBuffer = Demo::D3D12::CreateTransientBuffer(
+				FTransientBuffer vtxBuffer = RenderBackend12::CreateTransientBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
 					cmdList,
@@ -172,7 +172,7 @@ namespace Jobs
 
 			// Index Buffer
 			{
-				FTransientBuffer idxBuffer = Demo::D3D12::CreateTransientBuffer(
+				FTransientBuffer idxBuffer = RenderBackend12::CreateTransientBuffer(
 					L"imgui_ib",
 					idxBufferSize,
 					cmdList,
@@ -194,7 +194,7 @@ namespace Jobs
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
 			}
 
-			winrt::com_ptr<D3DRootSignature_t> rootsig = Demo::D3D12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 			rootsig->SetName(L"imgui_rootsig");
 
@@ -244,8 +244,8 @@ namespace Jobs
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = Demo::D3D12::CacheShader({ L"imgui.hlsl", L"vs_main", L"" }, L"vs_6_4");
-				IDxcBlob* psBlob = Demo::D3D12::CacheShader({ L"imgui.hlsl", L"ps_main", L"" }, L"ps_6_4");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"vs_main", L"" }, L"vs_6_4");
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"ps_main", L"" }, L"ps_6_4");
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -304,7 +304,7 @@ namespace Jobs
 				desc.StencilEnable = FALSE;
 			}
 
-			D3DPipelineState_t* pso = Demo::D3D12::FetchGraphicsPipelineState(psoDesc);
+			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
 			// Viewport
@@ -320,12 +320,12 @@ namespace Jobs
 			const float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
 			d3dCmdList->OMSetBlendFactor(blendFactor);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { Demo::D3D12::GetBackBufferDescriptor() };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetBackBufferDescriptor() };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
-			D3DDescriptorHeap_t* descriptorHeaps[] = { Demo::D3D12::GetBindlessShaderResourceHeap() };
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-			d3dCmdList->SetGraphicsRootDescriptorTable(2, Demo::D3D12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
+			d3dCmdList->SetGraphicsRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 			// Render commands
@@ -382,13 +382,13 @@ namespace Jobs
 	{
 		return concurrency::create_task([]
 		{
-			FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"present_job");
 
 			D3D12_RESOURCE_BARRIER barrierDesc = {};
 			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			barrierDesc.Transition.pResource = Demo::D3D12::GetBackBufferResource();
+			barrierDesc.Transition.pResource = RenderBackend12::GetBackBufferResource();
 			barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
 			barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -403,22 +403,22 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
 
-	FRenderTexture rt = Demo::D3D12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
+	FRenderTexture rt = RenderBackend12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
 
 	auto preRenderCL = Jobs::PreRender().get();
 	auto renderCL = Jobs::Render(&rt, resX, resY).get();
-	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
 
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
 		auto uiCL = Jobs::UI().get();
-		Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { uiCL});
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { uiCL});
 	}
 
 	auto presentCL = Jobs::Present().get();
-	Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { presentCL });
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { presentCL });
 
-	Demo::D3D12::PresentDisplay();
+	RenderBackend12::PresentDisplay();
 	Profiling::Flip();
 }

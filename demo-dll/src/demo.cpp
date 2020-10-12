@@ -1,6 +1,6 @@
 ﻿#include <demo.h>
 #include <profiling.h>
-#include <d3d12layer.h>
+#include <backend-d3d12.h>
 #include <shadercompiler.h>
 #include <imgui.h>
 #include <imgui_impl_win32.h>
@@ -19,7 +19,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 {
 	Profiling::Initialize();
 
-	bool ok = D3D12::Initialize(windowHandle, resX, resY);
+	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);
 	ok = ok && ShaderCompiler::Initialize();
 
 	IMGUI_CHECKVERSION();
@@ -33,12 +33,12 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 void Demo::Tick(float dt)
 {
 	{
-		FCommandList* cmdList = Demo::D3D12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
-		uint32_t fontSrvIndex = Demo::D3D12::CacheTexture(L"imgui_fonts", &uploader);
+		uint32_t fontSrvIndex = RenderBackend12::CacheTexture(L"imgui_fonts", &uploader);
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
 		uploader.SubmitUploads(cmdList);
-		Demo::D3D12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
@@ -76,7 +76,7 @@ void Demo::Teardown(HWND& windowHandle)
 {
 	if (windowHandle)
 	{
-		D3D12::Teardown();
+		RenderBackend12::Teardown();
 		ShaderCompiler::Teardown();
 		ImGui_ImplWin32_Shutdown();
 		ImGui::DestroyContext();
