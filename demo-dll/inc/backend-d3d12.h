@@ -10,6 +10,7 @@
 #include <string>
 #include <functional>
 #include <optional>
+#include <concurrent_vector.h>
 
 // Aliased types
 using DXGIFactory_t = IDXGIFactory4;
@@ -59,25 +60,37 @@ struct FRootsigDesc
 struct FResource
 {
 	winrt::com_ptr<D3DResource_t> m_resource;
+	std::wstring m_name;
+	concurrency::concurrent_vector<D3D12_RESOURCE_STATES> m_subresourceStates;
+
+	void SetName(const std::wstring& name);
+	HRESULT InitCommittedResource(const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
+	HRESULT InitReservedResource(const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
+	virtual void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 struct FBindlessShaderResource : public FResource
 {
-	uint32_t m_bindlessDescriptorIndex;
+	uint32_t m_srvIndex = ~0u;
 };
 
 struct FTransientBuffer : public FResource
 {
-	~FTransientBuffer();
 	const FCommandList* m_dependentCmdlist;
+
+	FTransientBuffer(FResource&& resource);
+	~FTransientBuffer();
 };
 
 struct FRenderTexture : public FResource
 {
-	~FRenderTexture();
 	std::vector<uint32_t> m_tileList;
 	std::vector<uint32_t> m_rtvIndices; // one for each mip level
-	//uint32_t m_srvIndex;
+	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
+	uint32_t m_srvIndex = ~0u;
+
+	FRenderTexture(FResource&& resource);
+	~FRenderTexture();
 };
 
 class FResourceUploadContext
@@ -96,7 +109,7 @@ public:
 	D3DFence_t* SubmitUploads(FCommandList* owningCL);
 
 private:
-	D3DResource_t* m_uploadBuffer;
+	FResource m_uploadBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_sizeInBytes;
