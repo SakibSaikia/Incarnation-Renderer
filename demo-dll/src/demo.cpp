@@ -4,7 +4,7 @@
 #include <shadercompiler.h>
 #include <imgui.h>
 #include <imgui_impl_win32.h>
-#include <settings.h>
+#include <common.h>
 #include <sstream>
 
 namespace Demo

@@ -1,6 +1,7 @@
 #include <shadercompiler.h>
 #include <winrt/base.h>
 #include <assert.h>
+#include <common.h>
 #include <system_error>
 #include <vector>
 #include <filesystem>
@@ -22,19 +23,6 @@ namespace Demo::ShaderCompiler
 
 namespace
 {
-
-	inline void AssertIfFailed(HRESULT hr)
-	{
-	#if defined _DEBUG
-		if (FAILED(hr))
-		{
-			std::string message = std::system_category().message(hr);
-			OutputDebugStringA(message.c_str());
-			_CrtDbgBreak();
-		}
-	#endif
-	}
-
 	std::filesystem::path SearchShaderDir(const std::wstring& filename)
 	{
 		for (auto& it : std::filesystem::recursive_directory_iterator(SHADER_DIR))

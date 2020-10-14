@@ -1,10 +1,11 @@
 #include <backend-d3d12.h>
-#include <settings.h>
+#include <common.h>
 #include <shadercompiler.h>
 #include <ppltasks.h>
 #include <concurrent_unordered_map.h>
 #include <concurrent_queue.h>
 #include <assert.h>
+#include <common.h>
 #include <spookyhash_api.h>
 #include <microprofile.h>
 #include <imgui.h>
@@ -50,18 +51,6 @@ namespace
 
 namespace
 {
-	inline void AssertIfFailed(HRESULT hr)
-	{
-	#if defined _DEBUG
-		if (FAILED(hr))
-		{
-			std::string message = std::system_category().message(hr);
-			OutputDebugStringA(message.c_str());
-			_CrtDbgBreak();
-		}
-	#endif
-	}
-
 	winrt::com_ptr<DXGIAdapter_t> EnumerateAdapters(DXGIFactory_t* dxgiFactory)
 	{
 		winrt::com_ptr<DXGIAdapter_t> bestAdapter;
@@ -1005,7 +994,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Width = resX;
 	swapChainDesc.Height = resY;
-	swapChainDesc.Format = Demo::Settings::k_backBufferFormat;
+	swapChainDesc.Format = Settings::k_backBufferFormat;
 	swapChainDesc.Scaling = DXGI_SCALING_NONE;
 	swapChainDesc.SampleDesc.Quality = 0;
 	swapChainDesc.SampleDesc.Count = 1;
@@ -1246,11 +1235,6 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(s_computePSOPool[desc].put())));
 		return s_computePSOPool[desc].get();
 	}
-}
-
-uint32_t RenderBackend12::GetBackBufferIndex()
-{
-	return s_currentBufferIndex;
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetBackBufferDescriptor()

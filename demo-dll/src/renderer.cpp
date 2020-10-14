@@ -1,7 +1,7 @@
 #include <demo.h>
 #include <backend-d3d12.h>
 #include <profiling.h>
-#include <settings.h>
+#include <common.h>
 #include <ppltasks.h>
 #include <sstream>
 #include <assert.h>
@@ -46,7 +46,7 @@ namespace Jobs
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Demo::Settings::k_backBufferFormat;
+			psoDesc.RTVFormats[0] = Settings::k_backBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -229,7 +229,7 @@ namespace Jobs
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Demo::Settings::k_backBufferFormat;
+			psoDesc.RTVFormats[0] = Settings::k_backBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 

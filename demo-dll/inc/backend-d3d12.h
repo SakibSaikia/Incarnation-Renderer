@@ -140,7 +140,6 @@ namespace RenderBackend12
 	D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
 
 	// Swap chain and back buffers
-	uint32_t GetBackBufferIndex();
 	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
 	FResource* GetBackBufferResource();
 	void PresentDisplay();
