@@ -4,7 +4,6 @@
 #include <common.h>
 #include <ppltasks.h>
 #include <sstream>
-#include <assert.h>
 #include <imgui.h>
 #include <dxcapi.h>
 #include <microprofile.h>
@@ -338,7 +337,7 @@ namespace Jobs
 						// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
 						if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
 						{
-							assert(false);// ImGui_ImplDX12_SetupRenderState(drawData, d3dCmdList, fr);
+							DebugAssert(false);// ImGui_ImplDX12_SetupRenderState(drawData, d3dCmdList, fr);
 						}
 						else
 						{

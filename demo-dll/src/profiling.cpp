@@ -1,5 +1,6 @@
 #include <profiling.h>
 #include <backend-d3d12.h>
+#include <common.h>
 #include <pix3.h>
 #include <microprofile.h>
 
@@ -20,7 +21,7 @@ namespace Profiling
 		case D3D12_COMMAND_LIST_TYPE_COMPUTE:
 			return s_queueCompute;
 		default:
-			assert(false);
+			DebugAssert(false);
 		}
 
 		return -1;

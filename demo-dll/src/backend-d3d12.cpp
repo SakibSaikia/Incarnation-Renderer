@@ -4,7 +4,6 @@
 #include <ppltasks.h>
 #include <concurrent_unordered_map.h>
 #include <concurrent_queue.h>
-#include <assert.h>
 #include <common.h>
 #include <spookyhash_api.h>
 #include <microprofile.h>
@@ -236,7 +235,7 @@ public:
 			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 			if (event)
 			{
-				assert(cmdList->m_fenceValue != 0);
+				DebugAssert(cmdList->m_fenceValue != 0);
 				cmdList->m_fence->SetEventOnCompletion(cmdList->m_fenceValue, event);
 				WaitForSingleObject(event, INFINITE);
 			}
@@ -272,7 +271,7 @@ public:
 	void Clear()
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
-		assert(m_useList.empty() && "All CLs should be retired at this point");
+		DebugAssert(m_useList.empty(), "All CLs should be retired at this point");
 		m_freeList.clear();
 	}
 
@@ -388,7 +387,7 @@ public:
 	void Clear()
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
-		assert(m_useList.empty() && "All buffers should be retired at this point");
+		DebugAssert(m_useList.empty(), "All buffers should be retired at this point");
 		m_freeList.clear();
 	}
 
@@ -402,7 +401,7 @@ private:
 FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
 	m_currentOffset{ 0 }
 {
-	assert(uploadBufferSizeInBytes != 0);
+	DebugAssert(uploadBufferSizeInBytes != 0);
 
 	// Round up to power of 2
 	unsigned long n;
@@ -432,7 +431,7 @@ void FResourceUploadContext::UpdateSubresources(
 	GetDevice()->GetCopyableFootprints(&destinationDesc, firstSubresource, numSubresources, m_currentOffset, layouts.get(), numRows.get(), rowSizeInBytes.get(), &totalBytes);
 
 	size_t capacity = m_sizeInBytes - m_currentOffset;
-	assert(totalBytes <= capacity && L"Upload buffer is too small!");
+	DebugAssert(totalBytes <= capacity, "Upload buffer is too small!");
 
 	uint8_t* pAlloc = m_mappedPtr + m_currentOffset;
 
@@ -736,7 +735,7 @@ public:
 		{
 			uint32_t tileIndex;
 			bool result = m_tilePool.try_pop(tileIndex);
-			assert(result && "Ran out of tiles");
+			DebugAssert(result, "Ran out of tiles");
 			tileList.push_back(tileIndex);
 			remainingAllocation--;
 		}
@@ -762,7 +761,7 @@ public:
 	void Clear()
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
-		assert(m_useList.empty() && "All render textures should be retired at this point");
+		DebugAssert(m_useList.empty(), "All render textures should be retired at this point");
 		m_freeList.clear();
 		m_tilePool.clear();
 	}
@@ -1031,7 +1030,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 
 		uint32_t rtvIndex;
 		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
-		assert(ok && "Ran out of RTV descriptors");
+		DebugAssert(ok, "Ran out of RTV descriptors");
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor;
 		rtvDescriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -1359,7 +1358,7 @@ FTransientBuffer RenderBackend12::CreateTransientBuffer(
 	const FCommandList* dependentCL,
 	std::function<void(uint8_t*)> uploadFunc)
 {
-	assert(sizeInBytes != 0);
+	DebugAssert(sizeInBytes != 0);
 
 	DWORD n;
 	_BitScanReverse64(&n, sizeInBytes);
@@ -1418,7 +1417,7 @@ FRenderTexture RenderBackend12::CreateRenderTexture(
 	{
 		uint32_t rtvIndex;
 		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
-		assert(ok && "Ran out of RTV descriptors");
+		DebugAssert(ok, "Ran out of RTV descriptors");
 		D3D12_CPU_DESCRIPTOR_HANDLE rtv;
 		rtv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
 			rtvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
@@ -1536,7 +1535,7 @@ uint32_t RenderBackend12::CacheTexture(const std::wstring& name, FResourceUpload
 		// Descriptor
 		{
 			bool ok = s_bindlessIndexPool.try_pop(newTexture.m_srvIndex);
-			assert(ok && "Ran out of bindless descriptors");
+			DebugAssert(ok, "Ran out of bindless descriptors");
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
 				newTexture.m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];

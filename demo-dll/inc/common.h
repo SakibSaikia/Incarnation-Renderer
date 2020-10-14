@@ -16,3 +16,20 @@ inline void AssertIfFailed(HRESULT hr)
 	}
 #endif
 }
+
+inline void DebugAssert(bool success, const char* msg = nullptr)
+{
+#if defined _DEBUG
+	if (!success)
+	{
+		if (msg)
+		{
+			OutputDebugStringA("\n*****\n");
+			OutputDebugStringA(msg);
+			OutputDebugStringA("\n*****\n");
+		}
+
+		_CrtDbgBreak();
+	}
+#endif
+}

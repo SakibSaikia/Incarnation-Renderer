@@ -1,6 +1,5 @@
 #include <shadercompiler.h>
 #include <winrt/base.h>
-#include <assert.h>
 #include <common.h>
 #include <system_error>
 #include <vector>
@@ -41,7 +40,7 @@ namespace
 bool Demo::ShaderCompiler::Initialize()
 {
 	s_validationModule = LoadLibraryEx(L"dxil.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-	assert(s_validationModule && "Failed to load dxil.dll. Shaders will not be signed!");
+	DebugAssert(s_validationModule, "Failed to load dxil.dll. Shaders will not be signed!");
 	
 	return s_validationModule != nullptr;
 }
@@ -54,7 +53,7 @@ void Demo::ShaderCompiler::Teardown()
 FILETIME Demo::ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
 {
 	const std::filesystem::path filepath = SearchShaderDir(filename);
-	assert(!filepath.empty() && "Shader source file not found");
+	DebugAssert(!filepath.empty(), "Shader source file not found");
 
 	_WIN32_FILE_ATTRIBUTE_DATA fileAttributeData{};
 	GetFileAttributesExW(filepath.wstring().c_str(), GetFileExInfoStandard, &fileAttributeData);
@@ -69,7 +68,7 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 	IDxcBlob** compiledBlob)
 {
 	const std::filesystem::path filepath = SearchShaderDir(filename);
-	assert(!filepath.empty() && "Shader source file not found");
+	DebugAssert(!filepath.empty(), "Shader source file not found");
 
 	winrt::com_ptr<IDxcLibrary> library;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.put())));
@@ -141,7 +140,7 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 	IDxcBlob** compiledBlob)
 {
 	const std::filesystem::path filepath = SearchShaderDir(filename);
-	assert(!filepath.empty() && "Rootsignature source file not found");
+	DebugAssert(!filepath.empty(), "Rootsignature source file not found");
 
 	winrt::com_ptr<IDxcLibrary> library;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.put())));
