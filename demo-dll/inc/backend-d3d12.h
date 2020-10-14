@@ -59,37 +59,39 @@ struct FRootsigDesc
 
 struct FResource
 {
-	winrt::com_ptr<D3DResource_t> m_resource;
+	D3DResource_t* m_d3dResource;
 	std::wstring m_name;
 	concurrency::concurrent_vector<D3D12_RESOURCE_STATES> m_subresourceStates;
 
+	~FResource();
 	void SetName(const std::wstring& name);
-	HRESULT InitCommittedResource(const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
-	HRESULT InitReservedResource(const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
-	virtual void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	HRESULT InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
+	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
+	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
-struct FBindlessShaderResource : public FResource
+struct FBitmapTexture
 {
+	FResource m_resource;
 	uint32_t m_srvIndex = ~0u;
 };
 
-struct FTransientBuffer : public FResource
+struct FTransientBuffer
 {
+	FResource* m_resource;
 	const FCommandList* m_dependentCmdlist;
 
-	FTransientBuffer(FResource&& resource);
 	~FTransientBuffer();
 };
 
-struct FRenderTexture : public FResource
+struct FRenderTexture
 {
+	FResource* m_resource;
 	std::vector<uint32_t> m_tileList;
 	std::vector<uint32_t> m_rtvIndices; // one for each mip level
 	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
 	uint32_t m_srvIndex = ~0u;
 
-	FRenderTexture(FResource&& resource);
 	~FRenderTexture();
 };
 
@@ -109,7 +111,7 @@ public:
 	D3DFence_t* SubmitUploads(FCommandList* owningCL);
 
 private:
-	FResource m_uploadBuffer;
+	FResource* m_uploadBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_sizeInBytes;
@@ -140,7 +142,7 @@ namespace RenderBackend12
 	// Swap chain and back buffers
 	uint32_t GetBackBufferIndex();
 	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
-	D3DResource_t* GetBackBufferResource();
+	FResource* GetBackBufferResource();
 	void PresentDisplay();
 
 	// Shaders
@@ -158,16 +160,6 @@ namespace RenderBackend12
 		const size_t size,
 		const FCommandList* dependentCL,
 		std::function<void(uint8_t*)> uploadFunc = nullptr);
-
-	FResource CreateTemporaryDefaultBuffer(
-		const std::wstring& name,
-		const size_t size,
-		D3D12_RESOURCE_STATES state);
-
-	FResource CreateTemporaryDefaultTexture(
-		const std::wstring& name,
-		const size_t size,
-		D3D12_RESOURCE_STATES state);
 
 	FRenderTexture CreateRenderTexture(
 		const std::wstring& name,

@@ -19,13 +19,7 @@ namespace Jobs
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"pre_render_job");
 
-			D3D12_RESOURCE_BARRIER barrierDesc = {};
-			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			barrierDesc.Transition.pResource = RenderBackend12::GetBackBufferResource();
-			barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-			barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-			barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-			d3dCmdList->ResourceBarrier(1, &barrierDesc);
+			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 			return cmdList;
 		});
@@ -164,7 +158,7 @@ namespace Jobs
 					});
 
 				D3D12_VERTEX_BUFFER_VIEW vbDescriptor = {};
-				vbDescriptor.BufferLocation = vtxBuffer.m_resource->GetGPUVirtualAddress();
+				vbDescriptor.BufferLocation = vtxBuffer.m_resource->m_d3dResource->GetGPUVirtualAddress();
 				vbDescriptor.SizeInBytes = vtxBufferSize;
 				vbDescriptor.StrideInBytes = sizeof(ImDrawVert);
 				d3dCmdList->IASetVertexBuffers(0, 1, &vbDescriptor);
@@ -188,7 +182,7 @@ namespace Jobs
 					});
 
 				D3D12_INDEX_BUFFER_VIEW ibDescriptor = {};
-				ibDescriptor.BufferLocation = idxBuffer.m_resource->GetGPUVirtualAddress();
+				ibDescriptor.BufferLocation = idxBuffer.m_resource->m_d3dResource->GetGPUVirtualAddress();
 				ibDescriptor.SizeInBytes = idxBufferSize;
 				ibDescriptor.Format = sizeof(ImDrawIdx) == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
@@ -386,13 +380,7 @@ namespace Jobs
 			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
 			d3dCmdList->SetName(L"present_job");
 
-			D3D12_RESOURCE_BARRIER barrierDesc = {};
-			barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			barrierDesc.Transition.pResource = RenderBackend12::GetBackBufferResource();
-			barrierDesc.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-			barrierDesc.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-			barrierDesc.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-			d3dCmdList->ResourceBarrier(1, &barrierDesc);
+			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_PRESENT);
 
 			return cmdList;
 		});
