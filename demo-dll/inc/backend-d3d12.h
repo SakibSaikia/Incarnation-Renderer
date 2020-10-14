@@ -95,6 +95,7 @@ struct FRenderTexture
 	uint32_t m_srvIndex = ~0u;
 
 	~FRenderTexture();
+	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 class FResourceUploadContext

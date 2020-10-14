@@ -38,6 +38,8 @@ namespace
 	D3DCommandQueue_t* GetGraphicsQueue();
 	D3DCommandQueue_t* GetComputeQueue();
 	D3DCommandQueue_t* GetCopyQueue();
+	D3DDescriptorHeap_t* GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type);
+	uint32_t GetDescriptorSize(const D3D12_DESCRIPTOR_HEAP_TYPE type);
 	FUploadBufferPool* GetUploadBufferPool();
 	FRenderTexturePool* GetRenderTexturePool();
 	concurrency::concurrent_queue<uint32_t>& GetBindlessIndexPool();
@@ -82,6 +84,12 @@ namespace
 		OutputDebugString(out.str().c_str());
 
 		return bestAdapter;
+	}
+
+	bool IsShaderResource(D3D12_RESOURCE_STATES state)
+	{
+		return state == D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE || 
+			state == D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 	}
 }
 
@@ -809,6 +817,45 @@ FRenderTexture::~FRenderTexture()
 	}
 }
 
+void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+{
+	if (m_srvIndex == ~0u && IsShaderResource(destState))
+	{
+		bool ok = GetBindlessIndexPool().try_pop(m_srvIndex);
+		DebugAssert(ok, "Ran out of bindless descriptors");
+
+		D3D12_CPU_DESCRIPTOR_HANDLE srv;
+		srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
+			m_srvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
+		m_resource->Transition(cmdList, subresourceIndex, destState);
+	}
+	else if (m_srvIndex != ~0u && destState == D3D12_RESOURCE_STATE_RENDER_TARGET)
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = {};
+		nullDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		nullDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		nullDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+		D3D12_CPU_DESCRIPTOR_HANDLE srv;
+		srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
+			m_srvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		GetDevice()->CreateShaderResourceView(nullptr, &nullDesc, srv);
+
+		GetBindlessIndexPool().push(m_srvIndex);
+		m_srvIndex = ~0u;
+
+		m_resource->Transition(cmdList, subresourceIndex, destState);
+	}
+	else
+	{
+		DebugAssert(false);
+	}
+
+}
+
 struct FTimestampedBlob
 {
 	FILETIME m_timestamp;
@@ -875,6 +922,16 @@ namespace
 	D3DCommandQueue_t* GetCopyQueue()
 	{
 		return RenderBackend12::s_copyQueue.get();
+	}
+
+	D3DDescriptorHeap_t* GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type)
+	{
+		return RenderBackend12::s_descriptorHeaps[type].get();
+	}
+
+	uint32_t GetDescriptorSize(const D3D12_DESCRIPTOR_HEAP_TYPE type)
+	{
+		return RenderBackend12::s_descriptorSize[type];
 	}
 
 	FUploadBufferPool* GetUploadBufferPool()
@@ -956,16 +1013,16 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
 
 		// Initialize with null descriptors
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = {};
+		nullDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		nullDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		nullDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr + 
-				i * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
-			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
+			srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr + 
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullDesc, srv);
 		}
 
 		// Cache available indices
@@ -1039,8 +1096,8 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		DebugAssert(ok, "Ran out of RTV descriptors");
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor;
-		rtvDescriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
-			rtvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
+		rtvDescriptor.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)->GetCPUDescriptorHandleForHeapStart().ptr +
+			rtvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 		s_d3dDevice->CreateRenderTargetView(s_backBuffers[bufferIdx]->m_d3dResource, nullptr, rtvDescriptor);
 	}
@@ -1245,8 +1302,8 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetBackBufferDescriptor()
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
-		s_currentBufferIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
+	descriptor.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)->GetCPUDescriptorHandleForHeapStart().ptr +
+		s_currentBufferIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 	return descriptor;
 }
@@ -1337,14 +1394,14 @@ void RenderBackend12::PresentDisplay()
 
 D3DDescriptorHeap_t* RenderBackend12::GetBindlessShaderResourceHeap()
 {
-	return s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].get();
+	return GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = s_descriptorHeaps[type]->GetCPUDescriptorHandleForHeapStart().ptr +
-		descriptorIndex * s_descriptorSize[type];
+	descriptor.ptr = GetDescriptorHeap(type)->GetCPUDescriptorHandleForHeapStart().ptr +
+		descriptorIndex * GetDescriptorSize(type);
 
 	return descriptor;
 }
@@ -1352,8 +1409,8 @@ D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_H
 D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
 {
 	D3D12_GPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = s_descriptorHeaps[type]->GetGPUDescriptorHandleForHeapStart().ptr +
-		descriptorIndex * s_descriptorSize[type];
+	descriptor.ptr = GetDescriptorHeap(type)->GetGPUDescriptorHandleForHeapStart().ptr +
+		descriptorIndex * GetDescriptorSize(type);
 
 	return descriptor;
 }
@@ -1425,8 +1482,8 @@ FRenderTexture RenderBackend12::CreateRenderTexture(
 		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
 		DebugAssert(ok, "Ran out of RTV descriptors");
 		D3D12_CPU_DESCRIPTOR_HANDLE rtv;
-		rtv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_RTV]->GetCPUDescriptorHandleForHeapStart().ptr +
-			rtvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_RTV];
+		rtv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)->GetCPUDescriptorHandleForHeapStart().ptr +
+			rtvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 		rtvDesc.Format = format;
@@ -1469,7 +1526,6 @@ FRenderTexture RenderBackend12::CreateRenderTexture(
 	rt.m_tileList = std::move(tileList);
 	rt.m_rtvIndices = std::move(rtvIndices);
 	rt.m_srvDesc = std::move(srvDesc);
-	//rt.m_srvIndex = srvIndex;
 
 	return rt;
 }
@@ -1540,7 +1596,7 @@ uint32_t RenderBackend12::CacheTexture(const std::wstring& name, FResourceUpload
 
 		// Descriptor
 		{
-			bool ok = s_bindlessIndexPool.try_pop(newTexture.m_srvIndex);
+			bool ok = GetBindlessIndexPool().try_pop(newTexture.m_srvIndex);
 			DebugAssert(ok, "Ran out of bindless descriptors");
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
