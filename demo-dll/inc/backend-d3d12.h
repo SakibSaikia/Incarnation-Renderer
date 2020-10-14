@@ -33,15 +33,17 @@ struct IDxcBlob;
 
 struct FCommandList
 {
-	FCommandList() = default;
-	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
-
 	D3D12_COMMAND_LIST_TYPE m_type;
+	std::wstring m_name;
 	size_t m_fenceValue;
-	winrt::com_ptr<D3DCommandList_t> m_cmdList;
+	winrt::com_ptr<D3DCommandList_t> m_d3dCmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
 	winrt::com_ptr<D3DFence_t> m_fence;
 	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
+
+	FCommandList() = default;
+	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
+	void SetName(const std::wstring& name);
 };
 
 struct FShaderDesc

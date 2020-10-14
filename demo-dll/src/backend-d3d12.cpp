@@ -255,7 +255,7 @@ public:
 					FCommandList* cl = m_freeList.back().get();
 					cl->m_fenceValue = 0;
 					cl->m_cmdAllocator->Reset();
-					cl->m_cmdList->Reset(cl->m_cmdAllocator.get(), nullptr);
+					cl->m_d3dCmdList->Reset(cl->m_cmdAllocator.get(), nullptr);
 					break;
 				}
 				else
@@ -294,12 +294,18 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fen
 		type,
 		m_cmdAllocator.get(),
 		nullptr,
-		IID_PPV_ARGS(m_cmdList.put())));
+		IID_PPV_ARGS(m_d3dCmdList.put())));
 
 	AssertIfFailed(GetDevice()->CreateFence(
 		0,
 		D3D12_FENCE_FLAG_NONE,
 		IID_PPV_ARGS(m_fence.put())));
+}
+
+void FCommandList::SetName(const std::wstring& name)
+{
+	m_name = name;
+	m_d3dCmdList->SetName(name.c_str());
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -465,7 +471,7 @@ void FResourceUploadContext::UpdateSubresources(
 
 	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
-		m_copyCommandlist->m_cmdList->CopyBufferRegion(
+		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(
 			destinationResource,
 			0,
 			m_uploadBuffer->m_d3dResource,
@@ -486,7 +492,7 @@ void FResourceUploadContext::UpdateSubresources(
 			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 			dstLocation.SubresourceIndex = i + firstSubresource;
 
-			m_copyCommandlist->m_cmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
+			m_copyCommandlist->m_d3dCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 		}
 	}
 
@@ -579,7 +585,7 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 	barrierDesc.Transition.StateBefore = beforeState;
 	barrierDesc.Transition.StateAfter = destState;
 	barrierDesc.Transition.Subresource = subresourceIndex;
-	cmdList->m_cmdList->ResourceBarrier(1, &barrierDesc);
+	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
 
 	cmdList->m_postExecuteCallbacks.push_back(
 		[this, subresourceIndex, destState]()
@@ -1259,7 +1265,7 @@ D3DFence_t* RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE c
 	// Accumulate CLs and keep tab of the latest fence
 	for (const FCommandList* cl : commandLists)
 	{
-		D3DCommandList_t* d3dCL = cl->m_cmdList.get();
+		D3DCommandList_t* d3dCL = cl->m_d3dCmdList.get();
 		d3dCL->Close();
 		d3dCommandLists.push_back(d3dCL);
 

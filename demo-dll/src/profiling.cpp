@@ -56,8 +56,8 @@ Profiling::ScopedGpuEvent::ScopedGpuEvent(FCommandList* cmdList, const wchar_t* 
 
 	m_uprofLog = s_gpuThreadLog[currentThreadId];
 
-	PIXBeginEvent(cmdList->m_cmdList.get(), color, eventName);
-	MICROPROFILE_GPU_BEGIN(cmdList->m_cmdList.get(), m_uprofLog);
+	PIXBeginEvent(cmdList->m_d3dCmdList.get(), color, eventName);
+	MICROPROFILE_GPU_BEGIN(cmdList->m_d3dCmdList.get(), m_uprofLog);
 
 	char name[128];
 	WideCharToMultiByte(CP_UTF8, 0, eventName, -1, name, 128, NULL, NULL);
@@ -70,7 +70,7 @@ Profiling::ScopedGpuEvent::~ScopedGpuEvent()
 {
 	MicroProfileGpuLeaveInternal(m_uprofLog, m_uprofToken, m_uprofTick);
 
-	PIXEndEvent(m_cmdList->m_cmdList.get());
+	PIXEndEvent(m_cmdList->m_d3dCmdList.get());
 	uint64_t fence = MICROPROFILE_GPU_END(m_uprofLog);
 
 	m_cmdList->m_postExecuteCallbacks.push_back(

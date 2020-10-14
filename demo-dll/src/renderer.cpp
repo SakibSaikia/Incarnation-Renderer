@@ -15,7 +15,7 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			d3dCmdList->SetName(L"pre_render_job");
 
 			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -29,8 +29,9 @@ namespace Jobs
 		return concurrency::create_task([rt, resX, resY]
 		{
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
-			d3dCmdList->SetName(L"render_job");
+			cmdList->SetName(L"render_job");
+
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
 			SCOPED_GPU_EVENT(cmdList, L"render_commands", 0);
 
@@ -125,8 +126,9 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
-			d3dCmdList->SetName(L"imgui_job");
+			cmdList->SetName(L"imgui_job");
+
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_GPU_EVENT(cmdList, L"imgui_commands", 0);
 
 			ImDrawData* drawData = ImGui::GetDrawData();
@@ -376,8 +378,7 @@ namespace Jobs
 		return concurrency::create_task([]
 		{
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_cmdList.get();
-			d3dCmdList->SetName(L"present_job");
+			cmdList->SetName(L"present_job");
 
 			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_PRESENT);
 
