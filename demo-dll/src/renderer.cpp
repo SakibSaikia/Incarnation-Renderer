@@ -24,9 +24,9 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList*> Render(const FRenderTexture* rt, const uint32_t resX, const uint32_t resY)
+	concurrency::task<FCommandList*> Render(const uint32_t resX, const uint32_t resY)
 	{
-		return concurrency::create_task([rt, resX, resY]
+		return concurrency::create_task([resX, resY]
 		{
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			cmdList->SetName(L"render_job");
@@ -107,12 +107,12 @@ namespace Jobs
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rt->m_rtvIndices[0]);
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { rtv };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetBackBufferDescriptor() };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
+
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
-			d3dCmdList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
@@ -394,7 +394,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	FRenderTexture rt = RenderBackend12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
 
 	auto preRenderCL = Jobs::PreRender().get();
-	auto renderCL = Jobs::Render(&rt, resX, resY).get();
+	auto renderCL = Jobs::Render(resX, resY).get();
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
 
 	ImDrawData* imguiDraws = ImGui::GetDrawData();

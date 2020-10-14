@@ -1065,19 +1065,15 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
 	winrt::com_ptr<IDXGISwapChain1> swapChain;
-	AssertIfFailed(
-		s_dxgiFactory->CreateSwapChainForHwnd(
+	AssertIfFailed(s_dxgiFactory->CreateSwapChainForHwnd(
 			s_graphicsQueue.get(),
 			windowHandle,
 			&swapChainDesc,
 			nullptr,
 			nullptr,
-			swapChain.put())
-	);
+			swapChain.put()));
 
-	AssertIfFailed(
-		swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put()))
-	);
+	AssertIfFailed(swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
 
 	// Back buffers
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
