@@ -895,7 +895,7 @@ namespace RenderBackend12
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
-	concurrency::concurrent_unordered_map<std::wstring, FBitmapTexture> s_textureCache;
+	concurrency::concurrent_unordered_map<std::wstring, FImageTexture> s_textureCache;
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_bindlessIndexPool;
@@ -1535,7 +1535,7 @@ uint32_t RenderBackend12::CacheTexture(const std::wstring& name, FResourceUpload
 	}
 	else
 	{
-		FBitmapTexture& newTexture = s_textureCache[name];
+		FImageTexture& newTexture = s_textureCache[name];
 
 		uint8_t* pixels;
 		int width, height, bpp;

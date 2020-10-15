@@ -72,7 +72,7 @@ struct FResource
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
-struct FBitmapTexture
+struct FImageTexture
 {
 	FResource m_resource;
 	uint32_t m_srvIndex = ~0u;
