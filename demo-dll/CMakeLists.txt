@@ -29,6 +29,9 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
     "${CMAKE_SOURCE_DIR}/ext/imgui"
     "${CMAKE_SOURCE_DIR}/ext/microprofile"
+    "${CMAKE_SOURCE_DIR}/ext/stb"
+    "${CMAKE_SOURCE_DIR}/ext/tinygltf"
+    "${CMAKE_SOURCE_DIR}/ext/json"
     "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime")
 
 # Macro defines
@@ -36,7 +39,11 @@ add_compile_definitions(
     UNICODE
     _UNICODE
     MICROPROFILE_GPU_TIMERS_D3D12
-    SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders")
+    TINYGLTF_IMPLEMENTATION
+    STB_IMAGE_IMPLEMENTATION
+    STB_IMAGE_WRITE_IMPLEMENTATION
+    SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders"
+    CONTENT_DIR="${CMAKE_SOURCE_DIR}/content")
 
 # Generate a unique name
 string(TIMESTAMP seed %s)
