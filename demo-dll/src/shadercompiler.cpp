@@ -15,7 +15,7 @@ namespace Settings
 #endif
 }
 
-namespace Demo::ShaderCompiler
+namespace ShaderCompiler
 {
 	HMODULE s_validationModule;
 }
@@ -37,7 +37,7 @@ namespace
 	}
 }
 
-bool Demo::ShaderCompiler::Initialize()
+bool ShaderCompiler::Initialize()
 {
 	s_validationModule = LoadLibraryEx(L"dxil.dll", nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 	DebugAssert(s_validationModule, "Failed to load dxil.dll. Shaders will not be signed!");
@@ -45,12 +45,12 @@ bool Demo::ShaderCompiler::Initialize()
 	return s_validationModule != nullptr;
 }
 
-void Demo::ShaderCompiler::Teardown()
+void ShaderCompiler::Teardown()
 {
 	FreeLibrary(s_validationModule);
 }
 
-FILETIME Demo::ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
+FILETIME ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
 {
 	const std::filesystem::path filepath = SearchShaderDir(filename);
 	DebugAssert(!filepath.empty(), "Shader source file not found");
@@ -60,7 +60,7 @@ FILETIME Demo::ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
 	return fileAttributeData.ftLastWriteTime;
 }
 
-HRESULT Demo::ShaderCompiler::CompileShader(
+HRESULT ShaderCompiler::CompileShader(
 	const std::wstring& filename, 
 	const std::wstring& entrypoint, 
 	const std::wstring& arguments,
@@ -133,7 +133,7 @@ HRESULT Demo::ShaderCompiler::CompileShader(
 	}
 }
 
-HRESULT Demo::ShaderCompiler::CompileRootsignature(
+HRESULT ShaderCompiler::CompileRootsignature(
 	const std::wstring& filename,
 	const std::wstring& entrypoint,
 	const std::wstring& profile,
@@ -154,13 +154,6 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 	winrt::com_ptr<IDxcCompiler> compiler;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
 
-	std::wstringstream s;
-	s << k_bindlessSrvHeapSize;
-	DxcDefine defines[] = 
-	{ 
-		{L"BINDLESS_DESCRIPTOR_COUNT", s.str().c_str()} 
-	};
-
 	winrt::com_ptr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
 		source.get(),
@@ -168,7 +161,7 @@ HRESULT Demo::ShaderCompiler::CompileRootsignature(
 		entrypoint.c_str(),
 		profile.c_str(),
 		nullptr, 0,
-		defines, std::size(defines),
+		nullptr, 0,
 		includeHandler.get(),
 		result.put()));
 

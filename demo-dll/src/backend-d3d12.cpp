@@ -31,6 +31,7 @@ constexpr size_t k_renderTextureMemory = 32 * 1024 * 1024;
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 class FUploadBufferPool;
 class FRenderTexturePool;
+class FBindlessIndexPool;
 
 namespace
 {
@@ -42,7 +43,7 @@ namespace
 	uint32_t GetDescriptorSize(const D3D12_DESCRIPTOR_HEAP_TYPE type);
 	FUploadBufferPool* GetUploadBufferPool();
 	FRenderTexturePool* GetRenderTexturePool();
-	concurrency::concurrent_queue<uint32_t>& GetBindlessIndexPool();
+	FBindlessIndexPool* GetBindlessPool();
 	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool();
 }
 
@@ -90,6 +91,17 @@ namespace
 	{
 		return state == D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE || 
 			state == D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+	}
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC GetNullSRVDesc(D3D12_SRV_DIMENSION viewDimension)
+	{
+		DXGI_FORMAT format = (viewDimension == D3D12_SRV_DIMENSION_BUFFER ? DXGI_FORMAT_R32_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM);
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+		desc.Format = format;
+		desc.ViewDimension = viewDimension;
+		desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		return desc;
 	}
 }
 
@@ -619,6 +631,80 @@ FTransientBuffer::~FTransientBuffer()
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Bindless
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
+class FBindlessIndexPool
+{
+public:
+	void Initialize(D3DDescriptorHeap_t* bindlessHeap)
+	{
+		// Initialize with null descriptors and cache available indices
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
+		for (int i = (uint32_t)BindlessIndexRange::Texture2DBegin; i <= (uint32_t)BindlessIndexRange::Texture2DEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, srv);
+
+			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(i);
+		}
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
+		for (int i = (uint32_t)BindlessIndexRange::BufferBegin; i <= (uint32_t)BindlessIndexRange::BufferEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
+
+			m_indices[(uint32_t)BindlessResourceType::Buffer].push(i);
+		}
+	}
+
+	uint32_t FetchIndex(BindlessResourceType type)
+	{
+		uint32_t index;
+		bool ok = m_indices[(uint32_t)type].try_pop(index);
+		DebugAssert(ok, "Ran out of bindless descriptors");
+
+		return index;
+	}
+
+	void ReturnIndex(uint32_t index)
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
+		descriptor.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
+			index * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		if (index <= (uint32_t)BindlessIndexRange::BufferEnd)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::Buffer].push(index);
+		}
+		else if (index <= (uint32_t)BindlessIndexRange::Texture2DEnd)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(index);
+		}
+	}
+
+	void Clear()
+	{
+		for (int i = 0; i < (uint32_t)BindlessResourceType::Count; ++i)
+		{
+			m_indices[i].clear();
+		}
+	}
+
+private:
+	concurrency::concurrent_queue<uint32_t> m_indices[(uint32_t)BindlessResourceType::Count];
+};
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 //														Render Textures
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -821,8 +907,7 @@ void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourc
 {
 	if (m_srvIndex == ~0u && IsShaderResource(destState))
 	{
-		bool ok = GetBindlessIndexPool().try_pop(m_srvIndex);
-		DebugAssert(ok, "Ran out of bindless descriptors");
+		m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
 
 		D3D12_CPU_DESCRIPTOR_HANDLE srv;
 		srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -833,20 +918,8 @@ void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourc
 	}
 	else if (m_srvIndex != ~0u && destState == D3D12_RESOURCE_STATE_RENDER_TARGET)
 	{
-		D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = {};
-		nullDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		nullDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		nullDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-		D3D12_CPU_DESCRIPTOR_HANDLE srv;
-		srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
-			m_srvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-		GetDevice()->CreateShaderResourceView(nullptr, &nullDesc, srv);
-
-		GetBindlessIndexPool().push(m_srvIndex);
+		GetBindlessPool()->ReturnIndex(m_srvIndex);
 		m_srvIndex = ~0u;
-
 		m_resource->Transition(cmdList, subresourceIndex, destState);
 	}
 	else
@@ -892,13 +965,13 @@ namespace RenderBackend12
 	FCommandListPool s_commandListPool;
 	FUploadBufferPool s_uploadBufferPool;
 	FRenderTexturePool s_renderTexturePool;
+	FBindlessIndexPool s_bindlessPool;
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
 	concurrency::concurrent_unordered_map<std::wstring, FImageTexture> s_textureCache;
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
-	concurrency::concurrent_queue<uint32_t> s_bindlessIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 }
 
@@ -944,9 +1017,9 @@ namespace
 		return &RenderBackend12::s_renderTexturePool;
 	}
 
-	concurrency::concurrent_queue<uint32_t>& GetBindlessIndexPool()
+	FBindlessIndexPool* GetBindlessPool()
 	{
-		return RenderBackend12::s_bindlessIndexPool;
+		return &RenderBackend12::s_bindlessPool;
 	}
 
 	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool()
@@ -1002,7 +1075,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	// Bindless SRV heap
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
-		cbvSrvUavHeapDesc.NumDescriptors = k_bindlessSrvHeapSize;
+		cbvSrvUavHeapDesc.NumDescriptors = (uint32_t)BindlessIndexRange::TotalCount;
 		cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		AssertIfFailed(
@@ -1012,24 +1085,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		);
 		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->SetName(L"bindless_descriptor_heap");
 
-		// Initialize with null descriptors
-		D3D12_SHADER_RESOURCE_VIEW_DESC nullDesc = {};
-		nullDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		nullDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		nullDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
-		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr + 
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-			GetDevice()->CreateShaderResourceView(nullptr, &nullDesc, srv);
-		}
-
-		// Cache available indices
-		for (int i = 0; i < k_bindlessSrvHeapSize; ++i)
-		{
-			s_bindlessIndexPool.push(i);
-		}
+		s_bindlessPool.Initialize(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV].get());
 	}
 
 	// RTV heap
@@ -1141,13 +1197,13 @@ void RenderBackend12::Teardown()
 	s_commandListPool.Clear();
 	s_uploadBufferPool.Clear();
 	s_renderTexturePool.Clear();
+	s_bindlessPool.Clear();
 
 	s_shaderCache.clear();
 	s_rootsigCache.clear();
 	s_textureCache.clear();
 	s_graphicsPSOPool.clear();
 	s_computePSOPool.clear();
-	s_bindlessIndexPool.clear();
 	s_rtvIndexPool.clear();
 
 	s_frameFence.get()->Release();
@@ -1181,13 +1237,13 @@ FCommandList* RenderBackend12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE ty
 
 IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
 {
-	FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
+	FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
 
 	auto search = s_shaderCache.find(shaderDesc);
 	if (search != s_shaderCache.cend())
 	{
 		if (search->second.m_timestamp != currentTimestamp &&
-			Demo::ShaderCompiler::CompileShader(
+			ShaderCompiler::CompileShader(
 				shaderDesc.m_filename,
 				shaderDesc.m_entrypoint,
 				shaderDesc.m_defines,
@@ -1208,7 +1264,7 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std:
 	else
 	{
 		FTimestampedBlob& shaderBlob = s_shaderCache[shaderDesc];
-		AssertIfFailed(Demo::ShaderCompiler::CompileShader(
+		AssertIfFailed(ShaderCompiler::CompileShader(
 			shaderDesc.m_filename,
 			shaderDesc.m_entrypoint,
 			shaderDesc.m_defines,
@@ -1222,13 +1278,13 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std:
 
 IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile)
 {
-	FILETIME currentTimestamp = Demo::ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
+	FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
 
 	auto search = s_rootsigCache.find(rootsigDesc);
 	if (search != s_rootsigCache.cend())
 	{
 		if (search->second.m_timestamp != currentTimestamp &&
-			Demo::ShaderCompiler::CompileRootsignature(
+			ShaderCompiler::CompileRootsignature(
 				rootsigDesc.m_filename,
 				rootsigDesc.m_entrypoint,
 				profile,
@@ -1248,7 +1304,7 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, c
 	else
 	{
 		FTimestampedBlob& rsBlob = s_rootsigCache[rootsigDesc];
-		AssertIfFailed(Demo::ShaderCompiler::CompileRootsignature(
+		AssertIfFailed(ShaderCompiler::CompileRootsignature(
 			rootsigDesc.m_filename,
 			rootsigDesc.m_entrypoint,
 			profile,
@@ -1592,8 +1648,8 @@ uint32_t RenderBackend12::CacheTexture(const std::wstring& name, FResourceUpload
 
 		// Descriptor
 		{
-			bool ok = GetBindlessIndexPool().try_pop(newTexture.m_srvIndex);
-			DebugAssert(ok, "Ran out of bindless descriptors");
+			newTexture.m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
+		
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
 				newTexture.m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];

@@ -31,6 +31,22 @@ using PhysicalAlloc_t = std::vector<uint32_t>;
 
 struct IDxcBlob;
 
+enum class BindlessResourceType
+{
+	Buffer,
+	Texture2D,
+	Count
+};
+
+enum class BindlessIndexRange : uint32_t
+{
+	BufferBegin,
+	BufferEnd = BufferBegin + 999,
+	Texture2DBegin,
+	Texture2DEnd = Texture2DBegin + 999,
+	TotalCount
+};
+
 struct FCommandList
 {
 	D3D12_COMMAND_LIST_TYPE m_type;
