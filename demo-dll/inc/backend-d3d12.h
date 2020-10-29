@@ -88,10 +88,12 @@ struct FResource
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
-struct FImageTexture
+struct FBindlessResource
 {
-	FResource m_resource;
+	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
+
+	~FBindlessResource();
 };
 
 struct FTransientBuffer
@@ -146,6 +148,7 @@ namespace RenderBackend12
 {
 	bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY);
 	void Teardown();
+	void FlushGPU();
 
 	// Command Lists
 	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
@@ -173,13 +176,13 @@ namespace RenderBackend12
 	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
 
 	// Resource Management
-	FTransientBuffer CreateTransientBuffer(
+	std::unique_ptr<FTransientBuffer> CreateTransientBuffer(
 		const std::wstring& name,
 		const size_t size,
 		const FCommandList* dependentCL,
 		std::function<void(uint8_t*)> uploadFunc = nullptr);
 
-	FRenderTexture CreateRenderTexture(
+	std::unique_ptr<FRenderTexture> CreateRenderTexture(
 		const std::wstring& name,
 		const DXGI_FORMAT format,
 		const size_t width,
@@ -187,5 +190,19 @@ namespace RenderBackend12
 		const size_t mipLevels,
 		const size_t depth);
 
-	uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
+	std::unique_ptr<FBindlessResource> CreateBindlessTexture(
+		const std::wstring& name, 
+		const DXGI_FORMAT format,
+		const size_t width,
+		const size_t height,
+		const size_t miplevels,
+		const size_t bytesPerPixel,
+		const uint8_t* pData,
+		FResourceUploadContext* uploadContext);
+
+	std::unique_ptr<FBindlessResource> CreateBindlessByteAddressBuffer(
+		const std::wstring& name,
+		const size_t size,
+		const uint8_t* pData,
+		FResourceUploadContext* uploadContext);
 }

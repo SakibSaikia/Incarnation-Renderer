@@ -143,7 +143,7 @@ namespace Jobs
 
 			// Vertex Buffer
 			{
-				FTransientBuffer vtxBuffer = RenderBackend12::CreateTransientBuffer(
+				std::unique_ptr<FTransientBuffer> vtxBuffer = RenderBackend12::CreateTransientBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
 					cmdList,
@@ -159,7 +159,7 @@ namespace Jobs
 					});
 
 				D3D12_VERTEX_BUFFER_VIEW vbDescriptor = {};
-				vbDescriptor.BufferLocation = vtxBuffer.m_resource->m_d3dResource->GetGPUVirtualAddress();
+				vbDescriptor.BufferLocation = vtxBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
 				vbDescriptor.SizeInBytes = vtxBufferSize;
 				vbDescriptor.StrideInBytes = sizeof(ImDrawVert);
 				d3dCmdList->IASetVertexBuffers(0, 1, &vbDescriptor);
@@ -167,7 +167,7 @@ namespace Jobs
 
 			// Index Buffer
 			{
-				FTransientBuffer idxBuffer = RenderBackend12::CreateTransientBuffer(
+				std::unique_ptr<FTransientBuffer> idxBuffer = RenderBackend12::CreateTransientBuffer(
 					L"imgui_ib",
 					idxBufferSize,
 					cmdList,
@@ -183,7 +183,7 @@ namespace Jobs
 					});
 
 				D3D12_INDEX_BUFFER_VIEW ibDescriptor = {};
-				ibDescriptor.BufferLocation = idxBuffer.m_resource->m_d3dResource->GetGPUVirtualAddress();
+				ibDescriptor.BufferLocation = idxBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
 				ibDescriptor.SizeInBytes = idxBufferSize;
 				ibDescriptor.Format = sizeof(ImDrawIdx) == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
@@ -391,7 +391,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
 
-	FRenderTexture rt = RenderBackend12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
+	std::unique_ptr<FRenderTexture> rt = RenderBackend12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
 
 	auto preRenderCL = Jobs::PreRender().get();
 	auto renderCL = Jobs::Render(resX, resY).get();

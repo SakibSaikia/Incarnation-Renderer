@@ -27,16 +27,16 @@ PS_INPUT vs_main(VS_INPUT input)
 
 cbuffer pixelBuffer : register(b1)
 {
-    uint srvIndex;
+    uint textureIndex;
 };
 
 SamplerState sampler0 : register(s0);
 
-Texture2D bindlessShaderResources[] : register(t0);
+Texture2D bindlessTextures[] : register(t0);
 
 float4 ps_main(PS_INPUT input) : SV_Target
 {
-    Texture2D texture0 = bindlessShaderResources[srvIndex];
+    Texture2D texture0 = bindlessTextures[textureIndex];
     float4 out_col = input.col * texture0.Sample(sampler0, input.uv);
-    return out_col; 
+    return out_col;
 }

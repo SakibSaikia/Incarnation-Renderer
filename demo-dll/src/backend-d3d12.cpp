@@ -704,6 +704,13 @@ private:
 	concurrency::concurrent_queue<uint32_t> m_indices[(uint32_t)BindlessResourceType::Count];
 };
 
+FBindlessResource::~FBindlessResource()
+{
+	delete m_resource;
+	GetBindlessPool()->ReturnIndex(m_srvIndex);
+}
+
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														Render Textures
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -969,7 +976,6 @@ namespace RenderBackend12
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
-	concurrency::concurrent_unordered_map<std::wstring, FImageTexture> s_textureCache;
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
@@ -1173,8 +1179,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 
 	return true;
 }
-
-void RenderBackend12::Teardown()
+void RenderBackend12::FlushGPU()
 {
 	winrt::com_ptr<D3DFence_t> flushFence;
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.put())));
@@ -1191,7 +1196,11 @@ void RenderBackend12::Teardown()
 	s_graphicsQueue->Signal(flushFence.get(), 0xFF);
 	flushFence->SetEventOnCompletion(0xFF, flushEvents[2]);
 	WaitForMultipleObjects(3, flushEvents, TRUE, INFINITE);
+}
 
+
+void RenderBackend12::Teardown()
+{
 	MicroProfileGpuShutdown();
 
 	s_commandListPool.Clear();
@@ -1201,7 +1210,6 @@ void RenderBackend12::Teardown()
 
 	s_shaderCache.clear();
 	s_rootsigCache.clear();
-	s_textureCache.clear();
 	s_graphicsPSOPool.clear();
 	s_computePSOPool.clear();
 	s_rtvIndexPool.clear();
@@ -1467,7 +1475,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 	return descriptor;
 }
 
-FTransientBuffer RenderBackend12::CreateTransientBuffer(
+std::unique_ptr<FTransientBuffer> RenderBackend12::CreateTransientBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	const FCommandList* dependentCL,
@@ -1489,14 +1497,14 @@ FTransientBuffer RenderBackend12::CreateTransientBuffer(
 		buffer->m_d3dResource->Unmap(0, nullptr);
 	}
 
-	FTransientBuffer tempBuffer = {};
-	tempBuffer.m_resource = buffer;
-	tempBuffer.m_dependentCmdlist = dependentCL;
+	auto tempBuffer = std::make_unique<FTransientBuffer>();
+	tempBuffer->m_resource = buffer;
+	tempBuffer->m_dependentCmdlist = dependentCL;
 
-	return tempBuffer;
+	return std::move(tempBuffer);
 }
 
-FRenderTexture RenderBackend12::CreateRenderTexture(
+std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	const std::wstring& name,
 	const DXGI_FORMAT format,
 	const size_t width,
@@ -1573,96 +1581,155 @@ FRenderTexture RenderBackend12::CreateRenderTexture(
 		}
 	}
 
-	FRenderTexture rt = {};
-	rt.m_resource = rtResource;
-	rt.m_tileList = std::move(tileList);
-	rt.m_rtvIndices = std::move(rtvIndices);
-	rt.m_srvDesc = std::move(srvDesc);
+	auto rt = std::make_unique<FRenderTexture>();
+	rt->m_resource = rtResource;
+	rt->m_tileList = std::move(tileList);
+	rt->m_rtvIndices = std::move(rtvIndices);
+	rt->m_srvDesc = std::move(srvDesc);
 
-	return rt;
+	return std::move(rt);
 }
 
-uint32_t RenderBackend12::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
+std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
+	const std::wstring& name,
+	const DXGI_FORMAT format,
+	const size_t width,
+	const size_t height,
+	const size_t miplevels,
+	const size_t bytesPerPixel,
+	const uint8_t* pData,
+	FResourceUploadContext* uploadContext)
 {
-	auto search = s_textureCache.find(name);
-	if (search != s_textureCache.cend())
+	auto newTexture = std::make_unique<FBindlessResource>();
+
+	// Create resource
 	{
-		return search->second.m_srvIndex;
+		D3D12_HEAP_PROPERTIES props = {};
+		props.Type = D3D12_HEAP_TYPE_DEFAULT;
+		props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		D3D12_RESOURCE_DESC desc = {};
+		desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		desc.Alignment = 0;
+		desc.Width = width;
+		desc.Height = height;
+		desc.DepthOrArraySize = 1;
+		desc.MipLevels = miplevels;
+		desc.Format = format;
+		desc.SampleDesc.Count = 1;
+		desc.SampleDesc.Quality = 0;
+		desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+		newTexture->m_resource = new FResource;
+		AssertIfFailed(newTexture->m_resource->InitCommittedResource(name, props, desc, D3D12_RESOURCE_STATE_COPY_DEST));
 	}
-	else
+
+	// Upload texture data
 	{
-		FImageTexture& newTexture = s_textureCache[name];
-
-		uint8_t* pixels;
-		int width, height, bpp;
-		uint16_t mipLevels;
-		DXGI_FORMAT format;
-
-		if (name == L"imgui_fonts")
-		{
-			ImGuiIO& io = ImGui::GetIO();
-			io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
-			format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			mipLevels = 1;
-		}
-
-		// Create resource
-		{
-			D3D12_HEAP_PROPERTIES props = {};
-			props.Type = D3D12_HEAP_TYPE_DEFAULT;
-			props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-			props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-			D3D12_RESOURCE_DESC desc = {};
-			desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-			desc.Alignment = 0;
-			desc.Width = width;
-			desc.Height = height;
-			desc.DepthOrArraySize = 1;
-			desc.MipLevels = mipLevels;
-			desc.Format = format;
-			desc.SampleDesc.Count = 1;
-			desc.SampleDesc.Quality = 0;
-			desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-			desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-			AssertIfFailed(newTexture.m_resource.InitCommittedResource(name, props, desc, D3D12_RESOURCE_STATE_COPY_DEST));
-		}
-
-		// Upload texture data
-		{
-			D3D12_SUBRESOURCE_DATA srcData;
-			srcData.pData = pixels;
-			srcData.RowPitch = width * bpp;
-			srcData.SlicePitch = height * srcData.RowPitch;
-			uploadContext->UpdateSubresources(
-				newTexture.m_resource.m_d3dResource, 
-				0, 
-				1, 
-				&srcData,
-				[&newTexture](FCommandList* cmdList)
-				{
-					newTexture.m_resource.Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-				});
-		}
-
-		// Descriptor
-		{
-			newTexture.m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
-		
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
-				newTexture.m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
-
-			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			srvDesc.Format = format;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MipLevels = mipLevels;
-			srvDesc.Texture2D.MostDetailedMip = 0;
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			GetDevice()->CreateShaderResourceView(newTexture.m_resource.m_d3dResource, &srvDesc, srv);
-		}
-
-		return newTexture.m_srvIndex;
+		D3D12_SUBRESOURCE_DATA srcData;
+		srcData.pData = pData;
+		srcData.RowPitch = width * bytesPerPixel;
+		srcData.SlicePitch = height * srcData.RowPitch;
+		uploadContext->UpdateSubresources(
+			newTexture->m_resource->m_d3dResource,
+			0,
+			1,
+			&srcData,
+			[resource = newTexture->m_resource](FCommandList* cmdList)
+			{
+				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			});
 	}
+
+	// Descriptor
+	{
+		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE srv;
+		srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
+			newTexture->m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = miplevels;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+	}
+
+	return std::move(newTexture);
+}
+
+std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuffer(
+	const std::wstring& name,
+	const size_t size,
+	const uint8_t* pData,
+	FResourceUploadContext* uploadContext)
+{
+	auto newBuffer = std::make_unique<FBindlessResource>();
+
+	// Create resource
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		D3D12_RESOURCE_DESC desc = {};
+		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+		desc.Alignment = 0;
+		desc.Width = size;
+		desc.Height = 1;
+		desc.DepthOrArraySize = 1;
+		desc.MipLevels = 1;
+		desc.Format = DXGI_FORMAT_UNKNOWN;
+		desc.SampleDesc.Count = 1;
+		desc.SampleDesc.Quality = 0;
+		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+		newBuffer->m_resource = new FResource;
+		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, D3D12_RESOURCE_STATE_COPY_DEST));
+	}
+
+	// Upload texture data
+	{
+		D3D12_SUBRESOURCE_DATA srcData;
+		srcData.pData = pData;
+		srcData.RowPitch = size;
+		srcData.SlicePitch = size;
+		uploadContext->UpdateSubresources(
+			newBuffer->m_resource->m_d3dResource,
+			0,
+			1,
+			&srcData,
+			[resource = newBuffer->m_resource](FCommandList* cmdList)
+			{
+				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			});
+	}
+
+	// Descriptor
+	{
+		newBuffer->m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE srv;
+		srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
+			newBuffer->m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = size / 4; // number of R32 elements
+		srvDesc.Buffer.StructureByteStride = 0;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		GetDevice()->CreateShaderResourceView(newBuffer->m_resource->m_d3dResource, &srvDesc, srv);
+	}
+
+	return std::move(newBuffer);
 }

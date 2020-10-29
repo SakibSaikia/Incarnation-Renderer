@@ -13,6 +13,7 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_impl_win32.cpp"
     "${CMAKE_SOURCE_DIR}/ext/microprofile/microprofile.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/directXTK/src/SimpleMath.cpp"
     "src/demo.cpp"
     "src/backend-d3d12.cpp" 
     "src/shadercompiler.cpp"
@@ -32,6 +33,7 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/stb"
     "${CMAKE_SOURCE_DIR}/ext/tinygltf"
     "${CMAKE_SOURCE_DIR}/ext/json"
+    "${CMAKE_SOURCE_DIR}/ext/directXTK/inc"
     "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime")
 
 # Macro defines
