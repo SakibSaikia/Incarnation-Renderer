@@ -2,6 +2,7 @@
 #include <backend-d3d12.h>
 #include <profiling.h>
 #include <common.h>
+#include <renderer.h>
 #include <ppltasks.h>
 #include <sstream>
 #include <imgui.h>
@@ -55,8 +56,8 @@ namespace Jobs
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"hello.hlsl", L"vs_main", L"" }, L"vs_6_4");
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"hello.hlsl", L"ps_main", L"" }, L"ps_6_4");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"hello-triangle.hlsl", L"vs_main", L"" }, L"vs_6_4");
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"hello-triangle.hlsl", L"ps_main", L"" }, L"ps_6_4");
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

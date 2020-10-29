@@ -2,57 +2,13 @@
 #include <profiling.h>
 #include <backend-d3d12.h>
 #include <shadercompiler.h>
+#include <renderer.h>
 #include <imgui.h>
 #include <imgui_impl_win32.h>
 #include <common.h>
 #include <sstream>
 #include <tiny_gltf.h>
-#include <SimpleMath.h>
 #include <concurrent_unordered_map.h>
-
-using namespace DirectX::SimpleMath;
-
-struct FRenderMesh
-{
-	std::string m_name;
-	Matrix m_transform;
-	size_t m_indexCount;
-	uint32_t m_indexOffset;
-	uint32_t m_positionOffset;
-	uint32_t m_tangentBasisOffset;
-	uint32_t m_uvOffset;
-};
-
-struct FCamera
-{
-	Matrix m_viewTransform;
-};
-
-struct FScene
-{
-	void Reload(const char* filePath);
-	void LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& transform);
-	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
-	void Clear();
-
-	std::vector<FRenderMesh> m_meshes;
-	std::vector<FCamera> m_cameras;
-
-	std::unique_ptr<FBindlessResource> m_meshIndexBuffer;
-	std::unique_ptr<FBindlessResource> m_meshPositionBuffer;
-	std::unique_ptr<FBindlessResource> m_meshTangentBasisBuffer;
-	std::unique_ptr<FBindlessResource> m_meshUVBuffer;
-
-	uint8_t* m_scratchIndexBuffer;
-	uint8_t* m_scratchPositionBuffer;
-	uint8_t* m_scratchTangentBasisBuffer;
-	uint8_t* m_scratchUVBuffer;
-
-	size_t m_scratchIndexBufferOffset;
-	size_t m_scratchPositionBufferOffset;
-	size_t m_scratchTangentBasisBufferOffset;
-	size_t m_scratchUVBufferOffset;
-};
 
 struct FTextureCache
 {
@@ -66,6 +22,7 @@ namespace Demo
 {
 	std::string s_loadedScenePath = {};
 	FScene s_scene;
+	FView s_view;
 	FTextureCache s_textureCache;
 
 	// Mouse
@@ -96,8 +53,7 @@ void FScene::Reload(const char* filePath)
 	DebugAssert(ok, "Failed to parse glTF");
 
 	// Clear previous scene
-	m_meshes.clear();
-	m_cameras.clear();
+	Clear();
 
 	// Scratch data 
 	size_t maxSize = 0;
@@ -109,7 +65,7 @@ void FScene::Reload(const char* filePath)
 	m_scratchIndexBuffer = new uint8_t[maxSize];
 	m_scratchPositionBuffer = new uint8_t[maxSize];
 
-	// Parse GLTF and create scene buffers
+	// Parse GLTF and initialize scene
 	for (const tinygltf::Scene& scene : model.scenes)
 	{
 		for (const int nodeIndex : scene.nodes)
@@ -118,9 +74,22 @@ void FScene::Reload(const char* filePath)
 		}
 	}
 
+	// Scene bounds
+	std::vector<DirectX::BoundingBox> meshWorldBounds(m_meshBounds.size());
+	for (int i = 0; i < m_meshBounds.size(); ++i)
+	{
+		m_meshBounds[i].Transform(meshWorldBounds[i], m_meshTransforms[i]);
+	}
+
+	m_sceneBounds = meshWorldBounds[0];
+	for (const auto& bb : meshWorldBounds)
+	{
+		DirectX::BoundingBox::CreateMerged(m_sceneBounds, m_sceneBounds, bb);
+	}
+
+	// Create and upload scene buffers
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	FResourceUploadContext uploader{ maxSize };
-
 	m_meshIndexBuffer = RenderBackend12::CreateBindlessByteAddressBuffer(
 		L"scene_index_buffer",
 		m_scratchIndexBufferOffset,
@@ -148,7 +117,13 @@ void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix&
 	Matrix nodeTransform = Matrix::Identity;
 	if (!node.matrix.empty())
 	{
-		nodeTransform = Matrix{ (float*)node.matrix.data() }.Transpose();
+		const auto& m = node.matrix;
+		nodeTransform = Matrix { 
+			(float)m[0], (float)m[4], (float)m[8], (float)m[12],
+			(float)m[1], (float)m[5], (float)m[9], (float)m[13],
+			(float)m[2], (float)m[6], (float)m[10],(float)m[14],
+			(float)m[3], (float)m[7], (float)m[11],(float)m[15]
+		};
 	}
 	else if (!node.translation.empty() || !node.rotation.empty() || !node.scale.empty())
 	{
@@ -159,10 +134,10 @@ void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix&
 		nodeTransform = scale * rotation * translation;
 	}
 
-	/*if (node.camera != -1)
+	if (node.camera != -1)
 	{
-		m_cameras.push_back(LoadCamera(node.camera, model, nodeTransform * parentTransform))
-	}*/
+		LoadCamera(node.camera, model, nodeTransform * parentTransform);
+	}
 
 	if (node.mesh != -1)
 	{
@@ -196,28 +171,97 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		return bytesCopied;
 	};
 
+	auto CalcBounds = [&model](int positionAccessorIndex) -> DirectX::BoundingBox
+	{
+		const tinygltf::Accessor& accessor = model.accessors[positionAccessorIndex];
+		const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
+
+		size_t dataSize = tinygltf::GetComponentSizeInBytes(accessor.componentType) * tinygltf::GetNumComponentsInType(accessor.type);
+		size_t dataStride = accessor.ByteStride(bufferView);
+
+		const uint8_t* pData = &model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
+
+		DirectX::BoundingBox bb = {};
+		DirectX::BoundingBox::CreateFromPoints(bb, accessor.count, (DirectX::XMFLOAT3*)pData, dataStride);
+		return bb;
+	};
+
+
 	const tinygltf::Mesh& mesh = model.meshes[meshIndex];
 
 	// Each primitive is a separate render mesh with its own vertex and index buffers
 	for (const tinygltf::Primitive& primitive : mesh.primitives)
 	{
-		FRenderMesh newMesh;
+		FRenderMesh newMesh = {};
 		newMesh.m_name = mesh.name;
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset;
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset;
+		m_meshGeo.push_back(newMesh);
+		m_meshTransforms.push_back(parentTransform);
 
 		m_scratchIndexBufferOffset += CopyBufferData(primitive.indices, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
 
 		auto posIt = primitive.attributes.find("POSITION");
 		DebugAssert(posIt != primitive.attributes.cend());
 		m_scratchPositionBufferOffset += CopyBufferData(posIt->second, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
+
+		m_meshBounds.push_back(CalcBounds(posIt->second));
 	}
+}
+
+void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Matrix& transform)
+{
+	FCamera newCamera = {};
+	newCamera.m_viewTransform = transform;
+	
+	if (model.cameras[cameraIndex].type == "perspective")
+	{
+		std::stringstream s;
+		s << "perspective_cam_" << m_cameras.size();
+		newCamera.m_name = s.str();
+
+		const tinygltf::PerspectiveCamera& cam = model.cameras[cameraIndex].perspective;
+		newCamera.m_projectionTransform = Matrix::CreatePerspectiveFieldOfView(cam.yfov, cam.aspectRatio, cam.znear, cam.zfar);
+	}
+	else
+	{
+		std::stringstream s;
+		s << "ortho_cam_" << m_cameras.size();
+		newCamera.m_name = s.str();
+
+		const tinygltf::OrthographicCamera& cam = model.cameras[cameraIndex].orthographic;
+		newCamera.m_projectionTransform = Matrix::CreateOrthographic(cam.xmag, cam.ymag, cam.znear, cam.zfar);
+	}
+
+	m_cameras.push_back(newCamera);
 }
 
 void FScene::Clear()
 {
 	m_cameras.clear();
-	m_meshes.clear();
+	m_meshGeo.clear();
+	m_meshTransforms.clear();
+	m_meshBounds.clear();
+}
+
+void FView::Tick()
+{
+
+}
+
+void FView::Reset(const FScene& scene)
+{
+	if (scene.m_cameras.size() > 0)
+	{
+		// Use provided camera
+		m_viewTransform = scene.m_cameras[0].m_viewTransform;
+		m_projectionTransform = scene.m_cameras[0].m_projectionTransform;
+	}
+	else
+	{
+		// Default camera
+
+	}
 }
 
 // The returned index is offset to the beginning of the descriptor heap range
@@ -274,6 +318,7 @@ void Demo::Tick(float dt)
 	{
 		RenderBackend12::FlushGPU();
 		s_scene.Reload(Settings::k_scenePath);
+		s_view.Reset(s_scene);
 		s_loadedScenePath = Settings::k_scenePath;
 	}
 
