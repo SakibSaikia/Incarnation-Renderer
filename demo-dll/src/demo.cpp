@@ -18,6 +18,10 @@ struct FTextureCache
 	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessResource>> m_cachedTextures;
 };
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Controller
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 struct FController
 {
 	void MouseMove(const WPARAM buttonState, const POINT position)
@@ -43,6 +47,10 @@ struct FController
 	POINT m_mouseMovement = { 0,0 };
 };
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Demo
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 namespace Demo
 {
 	FScene s_scene;
@@ -51,6 +59,101 @@ namespace Demo
 	FTextureCache s_textureCache;
 	float s_aspectRatio;
 }
+
+bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
+{
+	s_aspectRatio = resX / (float)resY;
+
+	Profiling::Initialize();
+
+	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);
+	ok = ok && ShaderCompiler::Initialize();
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui::StyleColorsDark();
+	ImGui_ImplWin32_Init(windowHandle);
+
+	return ok;
+}
+
+void Demo::Tick(float deltaTime)
+{
+	if (s_scene.m_sceneFilePath.empty() ||
+		s_scene.m_sceneFilePath != Settings::k_scenePath)
+	{
+		RenderBackend12::FlushGPU();
+		s_scene.Reload(Settings::k_scenePath);
+		s_view.Reset(s_scene);
+	}
+
+	s_controller.Tick(deltaTime);
+	s_view.Tick(deltaTime, &s_controller);
+
+	{
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
+		uint32_t fontSrvIndex = s_textureCache.CacheTexture(L"imgui_fonts", &uploader);
+		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+
+		static bool show_demo_window = true;
+		static bool show_another_window = false;
+		static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+		static float f = 0.0f;
+		static int counter = 0;
+
+		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+
+		ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
+		ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+		ImGui::Checkbox("Another Window", &show_another_window);
+
+		ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+		ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+
+		if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+			counter++;
+		ImGui::SameLine();
+		ImGui::Text("counter = %d", counter);
+
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::End();
+
+		ImGui::EndFrame();
+		ImGui::Render();
+	}
+}
+
+void Demo::Teardown(HWND& windowHandle)
+{
+	RenderBackend12::FlushGPU();
+
+	s_scene.Clear();
+	s_textureCache.Clear();
+
+	if (windowHandle)
+	{
+		RenderBackend12::Teardown();
+		ShaderCompiler::Teardown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
+	}
+}
+
+void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
+{
+	s_controller.MouseMove(buttonState, POINT{ x, y });
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Scene
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 
 void FScene::Reload(const char* filePath)
 {
@@ -266,6 +369,10 @@ void FScene::Clear()
 	m_meshBounds.clear();
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														View
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 void FView::Tick(const float deltaTime, const FController* controller)
 {
 	constexpr float speed = 1000.f;
@@ -379,6 +486,10 @@ void FView::UpdateViewTransform()
 	m_viewTransform(3, 3) = 1.0f;
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Texture Cache
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 // The returned index is offset to the beginning of the descriptor heap range
 uint32_t FTextureCache::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
 {
@@ -412,96 +523,9 @@ void FTextureCache::Clear()
 	m_cachedTextures.clear();
 }
 
-bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
-{
-	s_aspectRatio = resX / (float)resY;
-
-	Profiling::Initialize();
-
-	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);
-	ok = ok && ShaderCompiler::Initialize();
-
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(windowHandle);
-
-	return ok;
-}
-
-void Demo::Tick(float deltaTime)
-{
-	if (s_scene.m_sceneFilePath.empty() || 
-		s_scene.m_sceneFilePath != Settings::k_scenePath)
-	{
-		RenderBackend12::FlushGPU();
-		s_scene.Reload(Settings::k_scenePath);
-		s_view.Reset(s_scene);
-	}
-
-	s_controller.Tick(deltaTime);
-	s_view.Tick(deltaTime, &s_controller);
-
-	{
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
-		uint32_t fontSrvIndex = s_textureCache.CacheTexture(L"imgui_fonts", &uploader);
-		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
-		uploader.SubmitUploads(cmdList);
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-
-		static bool show_demo_window = true;
-		static bool show_another_window = false;
-		static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-		static float f = 0.0f;
-		static int counter = 0;
-
-		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-		ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-		ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-		ImGui::Checkbox("Another Window", &show_another_window);
-
-		ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-		ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-		if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-			counter++;
-		ImGui::SameLine();
-		ImGui::Text("counter = %d", counter);
-
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::End();
-
-		ImGui::EndFrame();
-		ImGui::Render();
-	}
-}
-
-void Demo::Teardown(HWND& windowHandle)
-{
-	RenderBackend12::FlushGPU();
-
-	s_scene.Clear();
-	s_textureCache.Clear();
-
-	if (windowHandle)
-	{
-		RenderBackend12::Teardown();
-		ShaderCompiler::Teardown();
-		ImGui_ImplWin32_Shutdown();
-		ImGui::DestroyContext();
-	}
-}
-
-void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
-{
-	s_controller.MouseMove(buttonState, POINT{ x, y });
-}
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														ImGui
+//-----------------------------------------------------------------------------------------------------------------------------------------------
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT Demo::WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
