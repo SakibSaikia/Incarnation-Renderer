@@ -49,6 +49,7 @@ namespace Demo
 	FView s_view;
 	FController s_controller;
 	FTextureCache s_textureCache;
+	float s_aspectRatio;
 }
 
 void FScene::Reload(const char* filePath)
@@ -317,33 +318,7 @@ void FView::Tick(const float deltaTime, const FController* controller)
 
 	if (updateView)
 	{
-		m_look.Normalize();
-		m_up = m_look.Cross(m_right);
-		m_up.Normalize();
-		m_right = m_up.Cross(m_look);
-
-		Vector3 translation = Vector3(m_position.Dot(m_right), m_position.Dot(m_up), m_position.Dot(m_look));
-		
-		// v = inv(T) * transpose(R)
-		m_viewTransform(0, 0) = m_right.x;
-		m_viewTransform(1, 0) = m_right.y;
-		m_viewTransform(2, 0) = m_right.z;
-		m_viewTransform(3, 0) = -translation.x;
-
-		m_viewTransform(0, 1) = m_up.x;
-		m_viewTransform(1, 1) = m_up.y;
-		m_viewTransform(2, 1) = m_up.z;
-		m_viewTransform(3, 1) = -translation.y;
-
-		m_viewTransform(0, 2) = m_look.x;
-		m_viewTransform(1, 2) = m_look.y;
-		m_viewTransform(2, 2) = m_look.z;
-		m_viewTransform(3, 2) = -translation.z;
-
-		m_viewTransform(0, 3) = 0.0f;
-		m_viewTransform(1, 3) = 0.0f;
-		m_viewTransform(2, 3) = 0.0f;
-		m_viewTransform(3, 3) = 1.0f;
+		UpdateViewTransform();
 	}
 }
 
@@ -354,12 +329,54 @@ void FView::Reset(const FScene& scene)
 		// Use provided camera
 		m_viewTransform = scene.m_cameras[0].m_viewTransform;
 		m_projectionTransform = scene.m_cameras[0].m_projectionTransform;
+
+		m_position = m_viewTransform.Translation();
+		m_right = m_viewTransform.Right();
+		m_up = m_viewTransform.Up();
+		m_look = m_viewTransform.Backward();
 	}
 	else
 	{
 		// Default camera
+		m_position = { 0.f, 0.f, 0.f };
+		m_right = { 1.f, 0.f, 0.f };
+		m_up = { 0.f, 1.f, 0.f };
+		m_look = { 0.f, 0.f, 1.f };
 
+		UpdateViewTransform();
+		m_projectionTransform = Matrix::CreatePerspectiveFieldOfView(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f, 10000.f);
 	}
+}
+
+void FView::UpdateViewTransform()
+{
+	m_look.Normalize();
+	m_up = m_look.Cross(m_right);
+	m_up.Normalize();
+	m_right = m_up.Cross(m_look);
+
+	Vector3 translation = Vector3(m_position.Dot(m_right), m_position.Dot(m_up), m_position.Dot(m_look));
+
+	// v = inv(T) * transpose(R)
+	m_viewTransform(0, 0) = m_right.x;
+	m_viewTransform(1, 0) = m_right.y;
+	m_viewTransform(2, 0) = m_right.z;
+	m_viewTransform(3, 0) = -translation.x;
+
+	m_viewTransform(0, 1) = m_up.x;
+	m_viewTransform(1, 1) = m_up.y;
+	m_viewTransform(2, 1) = m_up.z;
+	m_viewTransform(3, 1) = -translation.y;
+
+	m_viewTransform(0, 2) = m_look.x;
+	m_viewTransform(1, 2) = m_look.y;
+	m_viewTransform(2, 2) = m_look.z;
+	m_viewTransform(3, 2) = -translation.z;
+
+	m_viewTransform(0, 3) = 0.0f;
+	m_viewTransform(1, 3) = 0.0f;
+	m_viewTransform(2, 3) = 0.0f;
+	m_viewTransform(3, 3) = 1.0f;
 }
 
 // The returned index is offset to the beginning of the descriptor heap range
@@ -397,6 +414,8 @@ void FTextureCache::Clear()
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
 {
+	s_aspectRatio = resX / (float)resY;
+
 	Profiling::Initialize();
 
 	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);

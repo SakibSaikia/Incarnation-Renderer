@@ -75,4 +75,7 @@ struct FView
 
 	Matrix m_viewTransform;
 	Matrix m_projectionTransform;
+
+private:
+	void UpdateViewTransform();
 };
