@@ -18,17 +18,37 @@ struct FTextureCache
 	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessResource>> m_cachedTextures;
 };
 
+struct FController
+{
+	void MouseMove(const WPARAM buttonState, const POINT position)
+	{
+		m_mouseButtonState = buttonState;
+		m_mouseCurrentPosition = position;
+	}
+
+	bool KeyPress(int key) const
+	{
+		return (GetAsyncKeyState(key) & 0x8000) != 0;
+	}
+
+	void Tick(const float deltaTime)
+	{
+		m_mouseMovement = { m_mouseCurrentPosition.x - m_mouseLastPosition.x, m_mouseCurrentPosition.y - m_mouseLastPosition.y };
+		m_mouseLastPosition = m_mouseCurrentPosition;
+	}
+
+	WPARAM m_mouseButtonState = {};
+	POINT m_mouseCurrentPosition = {0,0};
+	POINT m_mouseLastPosition = {0,0};
+	POINT m_mouseMovement = { 0,0 };
+};
+
 namespace Demo
 {
-	std::string s_loadedScenePath = {};
 	FScene s_scene;
 	FView s_view;
+	FController s_controller;
 	FTextureCache s_textureCache;
-
-	// Mouse
-	WPARAM s_mouseButtonState = {};
-	POINT s_currentMousePos = { 0, 0 };
-	POINT s_lastMousePos = { 0, 0 };
 }
 
 void FScene::Reload(const char* filePath)
@@ -51,6 +71,7 @@ void FScene::Reload(const char* filePath)
 	}
 
 	DebugAssert(ok, "Failed to parse glTF");
+	m_sceneFilePath = filePath;
 
 	// Clear previous scene
 	Clear();
@@ -244,9 +265,86 @@ void FScene::Clear()
 	m_meshBounds.clear();
 }
 
-void FView::Tick()
+void FView::Tick(const float deltaTime, const FController* controller)
 {
+	constexpr float speed = 1000.f;
+	bool updateView = false;
 
+	// Walk
+	if (controller->KeyPress('W'))
+	{
+		m_position += speed * deltaTime * m_look;
+		updateView = true;
+	}
+	else if (controller->KeyPress('S'))
+	{
+		m_position -= speed * deltaTime * m_look;
+		updateView = true;
+	}
+
+	// Strafe
+	if (controller->KeyPress('A'))
+	{
+		m_position -= speed * deltaTime * m_right;
+		updateView = true;
+	}
+	else if (controller->KeyPress('D'))
+	{
+		m_position += speed * deltaTime * m_right;
+		updateView = true;
+	}
+
+	// Pitch
+	if (controller->m_mouseMovement.y > 0)
+	{
+		float pitch = DirectX::XMConvertToRadians((float)controller->m_mouseMovement.y);
+		Matrix rotationMatrix = Matrix::CreateFromAxisAngle(m_right, pitch);
+		m_up = Vector3::TransformNormal(m_up, rotationMatrix);
+		m_look = Vector3::TransformNormal(m_look, rotationMatrix);
+		updateView = true;
+	}
+
+	// Yaw-ish (Rotate about world y-axis)
+	if (controller->m_mouseMovement.x)
+	{
+		float yaw = DirectX::XMConvertToRadians((float)controller->m_mouseMovement.x);
+		Matrix rotationMatrix = Matrix::CreateRotationY(yaw);
+		m_right = Vector3::TransformNormal(m_right, rotationMatrix);
+		m_up = Vector3::TransformNormal(m_up, rotationMatrix);
+		m_look = Vector3::TransformNormal(m_look, rotationMatrix);
+		updateView = true;
+	}
+
+	if (updateView)
+	{
+		m_look.Normalize();
+		m_up = m_look.Cross(m_right);
+		m_up.Normalize();
+		m_right = m_up.Cross(m_look);
+
+		Vector3 translation = Vector3(m_position.Dot(m_right), m_position.Dot(m_up), m_position.Dot(m_look));
+		
+		// v = inv(T) * transpose(R)
+		m_viewTransform(0, 0) = m_right.x;
+		m_viewTransform(1, 0) = m_right.y;
+		m_viewTransform(2, 0) = m_right.z;
+		m_viewTransform(3, 0) = -translation.x;
+
+		m_viewTransform(0, 1) = m_up.x;
+		m_viewTransform(1, 1) = m_up.y;
+		m_viewTransform(2, 1) = m_up.z;
+		m_viewTransform(3, 1) = -translation.y;
+
+		m_viewTransform(0, 2) = m_look.x;
+		m_viewTransform(1, 2) = m_look.y;
+		m_viewTransform(2, 2) = m_look.z;
+		m_viewTransform(3, 2) = -translation.z;
+
+		m_viewTransform(0, 3) = 0.0f;
+		m_viewTransform(1, 3) = 0.0f;
+		m_viewTransform(2, 3) = 0.0f;
+		m_viewTransform(3, 3) = 1.0f;
+	}
 }
 
 void FView::Reset(const FScene& scene)
@@ -312,15 +410,18 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	return ok;
 }
 
-void Demo::Tick(float dt)
+void Demo::Tick(float deltaTime)
 {
-	if (s_loadedScenePath != Settings::k_scenePath)
+	if (s_scene.m_sceneFilePath.empty() || 
+		s_scene.m_sceneFilePath != Settings::k_scenePath)
 	{
 		RenderBackend12::FlushGPU();
 		s_scene.Reload(Settings::k_scenePath);
 		s_view.Reset(s_scene);
-		s_loadedScenePath = Settings::k_scenePath;
 	}
+
+	s_controller.Tick(deltaTime);
+	s_view.Tick(deltaTime, &s_controller);
 
 	{
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -378,10 +479,9 @@ void Demo::Teardown(HWND& windowHandle)
 	}
 }
 
-void Demo::OnMouseMove(WPARAM btnState, int x, int y)
+void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 {
-	s_mouseButtonState = btnState;
-	s_currentMousePos = { x, y };
+	s_controller.MouseMove(buttonState, POINT{ x, y });
 }
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);

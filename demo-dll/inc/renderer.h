@@ -8,6 +8,8 @@ namespace tinygltf
 	class Model;
 }
 
+class FController;
+
 struct FRenderMesh
 {
 	std::string m_name;
@@ -32,6 +34,9 @@ struct FScene
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
+
+	// Scene file
+	std::string m_sceneFilePath = {};
 
 	// Scene entity lists
 	std::vector<FRenderMesh> m_meshGeo;
@@ -60,8 +65,13 @@ private:
 
 struct FView
 {
-	void Tick();
+	void Tick(const float deltaTime, const FController* controller);
 	void Reset(const FScene& scene);
+
+	Vector3 m_position;
+	Vector3 m_right;
+	Vector3 m_up;
+	Vector3 m_look;
 
 	Matrix m_viewTransform;
 	Matrix m_projectionTransform;
