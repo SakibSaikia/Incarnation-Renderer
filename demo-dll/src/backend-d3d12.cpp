@@ -1598,6 +1598,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	const size_t miplevels,
 	const size_t bytesPerPixel,
 	const uint8_t* pData,
+	D3D12_RESOURCE_STATES resourceState,
 	FResourceUploadContext* uploadContext)
 {
 	auto newTexture = std::make_unique<FBindlessResource>();
@@ -1637,9 +1638,9 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 			0,
 			1,
 			&srcData,
-			[resource = newTexture->m_resource](FCommandList* cmdList)
+			[resource = newTexture->m_resource, resourceState](FCommandList* cmdList)
 			{
-				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
@@ -1667,6 +1668,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuf
 	const std::wstring& name,
 	const size_t size,
 	const uint8_t* pData,
+	D3D12_RESOURCE_STATES resourceState,
 	FResourceUploadContext* uploadContext)
 {
 	auto newBuffer = std::make_unique<FBindlessResource>();
@@ -1695,7 +1697,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuf
 		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, D3D12_RESOURCE_STATE_COPY_DEST));
 	}
 
-	// Upload texture data
+	// Upload buffer data
 	{
 		D3D12_SUBRESOURCE_DATA srcData;
 		srcData.pData = pData;
@@ -1706,9 +1708,9 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuf
 			0,
 			1,
 			&srcData,
-			[resource = newBuffer->m_resource](FCommandList* cmdList)
+			[resource = newBuffer->m_resource, resourceState](FCommandList* cmdList)
 			{
-				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 

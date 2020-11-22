@@ -198,11 +198,13 @@ namespace RenderBackend12
 		const size_t miplevels,
 		const size_t bytesPerPixel,
 		const uint8_t* pData,
+		D3D12_RESOURCE_STATES resourceState,
 		FResourceUploadContext* uploadContext);
 
 	std::unique_ptr<FBindlessResource> CreateBindlessByteAddressBuffer(
 		const std::wstring& name,
 		const size_t size,
 		const uint8_t* pData,
+		D3D12_RESOURCE_STATES resourceState,
 		FResourceUploadContext* uploadContext);
 }

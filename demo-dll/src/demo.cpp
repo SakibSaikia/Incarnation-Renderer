@@ -220,12 +220,14 @@ void FScene::Reload(const char* filePath)
 		L"scene_index_buffer",
 		m_scratchIndexBufferOffset,
 		m_scratchIndexBuffer,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		&uploader);
 
 	m_meshPositionBuffer = RenderBackend12::CreateBindlessByteAddressBuffer(
 		L"scene_position_buffer",
 		m_scratchPositionBufferOffset,
 		m_scratchPositionBuffer,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		&uploader);
 
 	uploader.SubmitUploads(cmdList);
@@ -515,7 +517,7 @@ uint32_t FTextureCache::CacheTexture(const std::wstring& name, FResourceUploadCo
 			mipLevels = 1;
 		}
 
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, mipLevels, bpp, pixels, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, mipLevels, bpp, pixels, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, uploadContext);
 		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
 	}
 }
