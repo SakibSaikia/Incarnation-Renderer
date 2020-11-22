@@ -191,6 +191,7 @@ void FScene::Reload(const char* filePath)
 	m_scratchPositionBuffer = new uint8_t[maxSize];
 
 	// Parse GLTF and initialize scene
+	// See https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_003_MinimalGltfFile.md
 	for (const tinygltf::Scene& scene : model.scenes)
 	{
 		for (const int nodeIndex : scene.nodes)
@@ -321,6 +322,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		newMesh.m_name = mesh.name;
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset;
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset;
+		newMesh.m_indexCount = model.accessors[primitive.indices].count;
 		m_meshGeo.push_back(newMesh);
 		m_meshTransforms.push_back(parentTransform);
 
