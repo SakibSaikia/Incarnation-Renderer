@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.8)
+﻿cmake_minimum_required (VERSION 3.18)
 
 project(libdemo VERSION 0.0)
 
@@ -20,7 +20,11 @@ add_library(
     "src/renderer.cpp" 
     "src/profiling.cpp")
 
-set_property(TARGET libdemo PROPERTY CXX_STANDARD 20)
+target_compile_options(
+    ${module_name} PUBLIC
+    /await)
+
+set_property(TARGET ${module_name} PROPERTY CXX_STANDARD 20)
 
 # Include path
 include_directories(

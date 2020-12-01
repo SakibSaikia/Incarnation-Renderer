@@ -228,7 +228,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 
 				if (!LoadModule(LIB_DEMO_DIR, LIB_DEMO_NAME, demoDll, s_demoProcs))
 				{
-					ErrorExit(L"LoadModule");
+					ErrorExit((LPTSTR)TEXT("LoadModule"));
 				}
 				
 				s_demoProcs.init(windowHandle, windowWidth, windowHeight);

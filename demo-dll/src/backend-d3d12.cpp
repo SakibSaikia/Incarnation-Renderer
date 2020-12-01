@@ -459,8 +459,6 @@ void FResourceUploadContext::UpdateSubresources(
 	size_t capacity = m_sizeInBytes - m_currentOffset;
 	DebugAssert(totalBytes <= capacity, "Upload buffer is too small!");
 
-	uint8_t* pAlloc = m_mappedPtr + m_currentOffset;
-
 	for (UINT i = 0; i < numSubresources; ++i)
 	{
 		D3D12_SUBRESOURCE_DATA src;
@@ -469,7 +467,7 @@ void FResourceUploadContext::UpdateSubresources(
 		src.SlicePitch = srcData[i].SlicePitch;
 
 		D3D12_MEMCPY_DEST dest;
-		dest.pData = pAlloc + layouts[i].Offset;
+		dest.pData = m_mappedPtr + layouts[i].Offset;
 		dest.RowPitch = layouts[i].Footprint.RowPitch;
 		dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
 

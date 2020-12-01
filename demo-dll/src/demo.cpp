@@ -58,6 +58,16 @@ namespace Demo
 	FController s_controller;
 	FTextureCache s_textureCache;
 	float s_aspectRatio;
+
+	const FScene* GetScene()
+	{
+		return &s_scene;
+	}
+
+	const FView* GetView()
+	{
+		return &s_view;
+	}
 }
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
@@ -280,13 +290,48 @@ void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix&
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
 {
-	auto CopyBufferData = [&model](int accessorIndex, uint8_t* copyDest) -> size_t
+	auto CopyIndexData = [&model](const tinygltf::Accessor& accessor, uint8_t* copyDest) -> size_t
 	{
 		size_t bytesCopied = 0;
-		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
 		const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
-
 		size_t dataSize = tinygltf::GetComponentSizeInBytes(accessor.componentType) * tinygltf::GetNumComponentsInType(accessor.type);
+		size_t dataStride = accessor.ByteStride(bufferView);
+
+		const uint8_t* pSrc = &model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
+		uint32_t* indexDest = (uint32_t*)copyDest;
+
+		if (dataSize == 2)
+		{
+			// 16-bit indices
+			auto pSrc = (const uint16_t*)&model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
+			uint32_t* pDest = (uint32_t*)copyDest;
+
+			for (int i = 0; i < accessor.count; ++i)
+			{
+				*(pDest++) = *(pSrc++);
+				bytesCopied += sizeof(uint32_t);
+			}
+		}
+		else
+		{
+			// 32-bit indices
+			auto pSrc = (const uint32_t*)&model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
+			uint32_t* pDest = (uint32_t*)copyDest;
+
+			for (int i = 0; i < accessor.count; ++i)
+			{
+				*(pDest++) = *(pSrc++);
+				bytesCopied += sizeof(uint32_t);
+			}
+		}
+
+		return bytesCopied;
+	};
+
+	auto CopyBufferData = [&model](const tinygltf::Accessor& accessor, const uint32_t dataSize, uint8_t* copyDest) -> size_t
+	{
+		size_t bytesCopied = 0;
+		const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
 		size_t dataStride = accessor.ByteStride(bufferView);
 
 		const uint8_t* pSrc = &model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
@@ -320,19 +365,27 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	// Each primitive is a separate render mesh with its own vertex and index buffers
 	for (const tinygltf::Primitive& primitive : mesh.primitives)
 	{
+		// Index data (converted to uint32_t)
+		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+
+		// FLOAT3 position data
+		auto posIt = primitive.attributes.find("POSITION");
+		DebugAssert(posIt != primitive.attributes.cend());
+
+		const tinygltf::Accessor& positionAccessor = model.accessors[posIt->second];
+		const size_t positionSize = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
+		DebugAssert(positionSize == 3 * sizeof(float));
+
 		FRenderMesh newMesh = {};
 		newMesh.m_name = mesh.name;
-		newMesh.m_indexOffset = m_scratchIndexBufferOffset;
-		newMesh.m_positionOffset = m_scratchPositionBufferOffset;
-		newMesh.m_indexCount = model.accessors[primitive.indices].count;
+		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
+		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
+		newMesh.m_indexCount = indexAccessor.count;
 		m_meshGeo.push_back(newMesh);
 		m_meshTransforms.push_back(parentTransform);
 
-		m_scratchIndexBufferOffset += CopyBufferData(primitive.indices, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
-
-		auto posIt = primitive.attributes.find("POSITION");
-		DebugAssert(posIt != primitive.attributes.cend());
-		m_scratchPositionBufferOffset += CopyBufferData(posIt->second, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
+		m_scratchIndexBufferOffset += CopyIndexData(indexAccessor, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
+		m_scratchPositionBufferOffset += CopyBufferData(positionAccessor, positionSize, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
 
 		m_meshBounds.push_back(CalcBounds(posIt->second));
 	}

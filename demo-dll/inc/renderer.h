@@ -79,3 +79,9 @@ struct FView
 private:
 	void UpdateViewTransform();
 };
+
+namespace Demo
+{
+	const FScene* GetScene();
+	const FView* GetView();
+}

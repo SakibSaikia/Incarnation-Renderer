@@ -25,9 +25,9 @@ namespace Jobs
 		});
 	}
 
-	concurrency::task<FCommandList*> Render(const uint32_t resX, const uint32_t resY)
+	concurrency::task<FCommandList*> Render(const uint32_t resX, const uint32_t resY, const FScene* scene, const FView* view)
 	{
-		return concurrency::create_task([resX, resY]
+		return concurrency::create_task([resX, resY, scene, view]
 		{
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			cmdList->SetName(L"render_job");
@@ -38,6 +38,51 @@ namespace Jobs
 
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
+
+			// Frame constant buffer
+			struct FrameCbLayout
+			{
+				uint32_t sceneIndexBufferBindlessIndex;
+				uint32_t scenePositionBufferBindlessIndex;
+			};
+
+			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
+				L"frame_cb",
+				sizeof(FrameCbLayout),
+				cmdList,
+				[scene](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+					cbDest->sceneIndexBufferBindlessIndex = scene->m_meshIndexBuffer->m_srvIndex;
+					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			// View constant buffer
+			struct ViewCbLayout
+			{
+				Matrix viewTransform;
+				Matrix projectionTransform;
+			};
+
+			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
+				L"view_cb",
+				sizeof(ViewCbLayout),
+				cmdList,
+				[view](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
+					cbDest->viewTransform = view->m_viewTransform;
+					cbDest->projectionTransform = view->m_projectionTransform;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+			d3dCmdList->SetGraphicsRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::Texture2DBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::BufferBegin));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -56,8 +101,8 @@ namespace Jobs
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"hello-triangle.hlsl", L"vs_main", L"" }, L"vs_6_4");
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"hello-triangle.hlsl", L"ps_main", L"" }, L"ps_6_4");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" }, L"vs_6_4");
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", L"" }, L"ps_6_4");
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -103,8 +148,8 @@ namespace Jobs
 			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			D3D12_VIEWPORT viewport{ 0.f, 0.f, resX, resY, 0.f, 1.f };
-			D3D12_RECT screenRect{ 0.f, 0.f, resX, resY };
+			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)resX, (float)resY, 0.f, 1.f };
+			D3D12_RECT screenRect{ 0, 0, (LONG)resX, (LONG)resY };
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
@@ -116,7 +161,26 @@ namespace Jobs
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			d3dCmdList->DrawInstanced(3, 1, 0, 0);
+			
+			for (int meshIndex = 0; meshIndex < scene->m_meshGeo.size(); ++meshIndex)
+			{
+				const FRenderMesh& mesh = scene->m_meshGeo[meshIndex];
+
+				struct MeshCbLayout
+				{
+					Matrix localToWorldTransform;
+					uint32_t indexOffset;
+					uint32_t positionOffset;
+				} meshCb = 
+				{
+					scene->m_meshTransforms[meshIndex],
+					scene->m_meshGeo[meshIndex].m_indexOffset,
+					scene->m_meshGeo[meshIndex].m_positionOffset
+				};
+
+				d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(MeshCbLayout)/4, &meshCb, 0);
+				d3dCmdList->DrawInstanced(mesh.m_indexCount, 1, 0, 0);
+			}
 	
 			return cmdList;
 		});
@@ -395,7 +459,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FRenderTexture> rt = RenderBackend12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
 
 	auto preRenderCL = Jobs::PreRender().get();
-	auto renderCL = Jobs::Render(resX, resY).get();
+	auto renderCL = Jobs::Render(resX, resY, GetScene(), GetView()).get();
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
 
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
