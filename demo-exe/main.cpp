@@ -212,6 +212,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	MSG msg = {};
 	HWND windowHandle = {};
 
+	LARGE_INTEGER counterFrequency, startTime, endTime;
+	float elapsedSeconds = 0.016;
+	QueryPerformanceFrequency(&counterFrequency);
+
 	InitializeWindow(hInstance, windowHandle, windowWidth, windowHeight);
 	CleanTempFiles(LIB_DEMO_DIR, LIB_DEMO_NAME L"_");
 
@@ -250,8 +254,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 		}
 		else
 		{
-			s_demoProcs.tick(0.0166f);
+			QueryPerformanceCounter(&startTime);
+			s_demoProcs.tick(elapsedSeconds);
 			s_demoProcs.render(windowWidth, windowHeight);
+			QueryPerformanceCounter(&endTime);
+			elapsedSeconds = (endTime.QuadPart - startTime.QuadPart) / (float) counterFrequency.QuadPart;
 		}
 	}
 
