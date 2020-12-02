@@ -32,12 +32,17 @@ struct FController
 
 	bool KeyPress(int key) const
 	{
-		return (GetAsyncKeyState(key) & 0x8000) != 0;
+		return m_mouseButtonState == MK_LBUTTON &&
+			(GetAsyncKeyState(key) & 0x8000) != 0;
 	}
 
 	void Tick(const float deltaTime)
 	{
-		m_mouseMovement = { m_mouseCurrentPosition.x - m_mouseLastPosition.x, m_mouseCurrentPosition.y - m_mouseLastPosition.y };
+		if (m_mouseButtonState == MK_LBUTTON)
+		{
+			m_mouseMovement = { m_mouseCurrentPosition.x - m_mouseLastPosition.x, m_mouseCurrentPosition.y - m_mouseLastPosition.y };
+		}
+
 		m_mouseLastPosition = m_mouseCurrentPosition;
 	}
 

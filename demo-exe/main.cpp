@@ -128,6 +128,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		PostQuitMessage(0);
 		return 0;
 	case WM_MOUSEMOVE:
+	case WM_LBUTTONDOWN:
+	case WM_RBUTTONDOWN:
 		if (s_demoProcs.mouseMove)
 		{
 			s_demoProcs.mouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
