@@ -108,9 +108,10 @@ struct FRenderTexture
 {
 	FResource* m_resource;
 	std::vector<uint32_t> m_tileList;
-	std::vector<uint32_t> m_rtvIndices; // one for each mip level
+	std::vector<uint32_t> m_renderTextureIndices; // one for each mip level
 	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
 	uint32_t m_srvIndex = ~0u;
+	bool m_isDepthStencil;
 
 	~FRenderTexture();
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
@@ -189,6 +190,13 @@ namespace RenderBackend12
 		const size_t height,
 		const size_t mipLevels,
 		const size_t depth);
+
+	std::unique_ptr<FRenderTexture> CreateDepthStencilTexture(
+		const std::wstring& name,
+		const DXGI_FORMAT format,
+		const size_t width,
+		const size_t height,
+		const size_t mipLevels);
 
 	std::unique_ptr<FBindlessResource> CreateBindlessTexture(
 		const std::wstring& name, 

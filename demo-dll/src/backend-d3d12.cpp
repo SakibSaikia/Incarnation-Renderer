@@ -24,6 +24,7 @@ using namespace RenderBackend12;
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 constexpr uint32_t k_backBufferCount = 2;
 constexpr size_t k_rtvHeapSize = 32;
+constexpr size_t k_dsvHeapSize = 8;
 constexpr size_t k_renderTextureMemory = 32 * 1024 * 1024;
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -45,6 +46,7 @@ namespace
 	FRenderTexturePool* GetRenderTexturePool();
 	FBindlessIndexPool* GetBindlessPool();
 	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool();
+	concurrency::concurrent_queue<uint32_t>& GetDSVIndexPool();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -102,6 +104,58 @@ namespace
 		desc.ViewDimension = viewDimension;
 		desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		return desc;
+	}
+
+	DXGI_FORMAT GetTypelessDepthStencilFormat(DXGI_FORMAT depthStencilFormat)
+	{
+		switch (depthStencilFormat)
+		{
+		case DXGI_FORMAT_D32_FLOAT_S8X24_UINT: 
+			return DXGI_FORMAT_R32G8X24_TYPELESS;
+		case DXGI_FORMAT_D32_FLOAT: 
+			return DXGI_FORMAT_R32_TYPELESS;
+		case DXGI_FORMAT_D24_UNORM_S8_UINT: 
+			return DXGI_FORMAT_R24G8_TYPELESS;
+		case DXGI_FORMAT_D16_UNORM: 
+			return DXGI_FORMAT_R16_TYPELESS;
+		default:
+			DebugAssert(false);
+			return DXGI_FORMAT_UNKNOWN;
+		}
+	}
+
+	DXGI_FORMAT GetSrvDepthFormat(DXGI_FORMAT depthStencilFormat)
+	{
+		switch (depthStencilFormat)
+		{
+		case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+			return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
+		case DXGI_FORMAT_D32_FLOAT:
+			return DXGI_FORMAT_R32_FLOAT;
+		case DXGI_FORMAT_D24_UNORM_S8_UINT:
+			return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+		case DXGI_FORMAT_D16_UNORM:
+			return DXGI_FORMAT_R16_UNORM;
+		default:
+			DebugAssert(false);
+			return DXGI_FORMAT_UNKNOWN;
+		}
+	}
+
+	DXGI_FORMAT GetSrvStencilFormat(DXGI_FORMAT depthStencilFormat)
+	{
+		switch (depthStencilFormat)
+		{
+		case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+			return DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
+		case DXGI_FORMAT_D24_UNORM_S8_UINT:
+			return DXGI_FORMAT_X24_TYPELESS_G8_UINT;
+		case DXGI_FORMAT_D32_FLOAT:
+		case DXGI_FORMAT_D16_UNORM:
+		default:
+			DebugAssert(false);
+			return DXGI_FORMAT_UNKNOWN;
+		}
 	}
 }
 
@@ -216,6 +270,25 @@ bool operator==(const FILETIME& lhs, const FILETIME& rhs)
 {
 	return lhs.dwLowDateTime == rhs.dwLowDateTime &&
 		lhs.dwHighDateTime == rhs.dwHighDateTime;
+}
+
+bool operator==(const DXGI_SAMPLE_DESC& lhs, const DXGI_SAMPLE_DESC& rhs)
+{
+	return lhs.Count == rhs.Count && lhs.Quality == rhs.Quality;
+}
+
+bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
+{
+	return lhs.Dimension == rhs.Dimension &&
+		lhs.Alignment == rhs.Alignment &&
+		lhs.Width == rhs.Width &&
+		lhs.Height == rhs.Height &&
+		lhs.DepthOrArraySize == rhs.DepthOrArraySize &&
+		lhs.MipLevels == rhs.MipLevels &&
+		lhs.Format == rhs.Format &&
+		lhs.SampleDesc == rhs.SampleDesc &&
+		lhs.Layout == rhs.Layout &&
+		lhs.Flags == rhs.Flags;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -605,6 +678,7 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 	barrierDesc.Transition.Subresource = subresourceIndex;
 	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
 
+	// Update CPU side tracking of current state
 	cmdList->m_postExecuteCallbacks.push_back(
 		[this, subresourceIndex, destState]()
 		{
@@ -672,9 +746,7 @@ public:
 
 	void ReturnIndex(uint32_t index)
 	{
-		D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
-		descriptor.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
-			index * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, index);
 
 		if (index <= (uint32_t)BindlessIndexRange::BufferEnd)
 		{
@@ -747,26 +819,14 @@ public:
 		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put())));
 	}
 
-	FResource* GetOrCreate(
-		const std::wstring& name, 
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t mipLevels,
-		const size_t depth)
+	FResource* GetOrCreate(const std::wstring& name, const D3D12_RESOURCE_DESC& desc, const D3D12_RESOURCE_STATES initialState)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
 
 		// Reuse buffer
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
-			const D3D12_RESOURCE_DESC& desc = (*it)->m_d3dResource->GetDesc();
-
-			if (desc.Format == format &&
-				desc.Width == width &&
-				desc.Height == height &&
-				desc.MipLevels == mipLevels &&
-				desc.DepthOrArraySize == depth)
+			if (desc == (*it)->m_d3dResource->GetDesc())
 			{
 				m_useList.push_back(std::move(*it));
 				m_freeList.erase(it);
@@ -779,25 +839,13 @@ public:
 
 		// New render texture
 		auto newRt = std::make_unique<FResource>();
-
-		D3D12_RESOURCE_DESC rtDesc = {};
-		rtDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		rtDesc.Width = width;
-		rtDesc.Height = (UINT)height;
-		rtDesc.DepthOrArraySize = (UINT16)depth;
-		rtDesc.MipLevels = (UINT16)mipLevels;
-		rtDesc.Format = format;
-		rtDesc.SampleDesc.Count = 1;
-		rtDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
-		rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-
-		AssertIfFailed(newRt->InitReservedResource(name, rtDesc, D3D12_RESOURCE_STATE_RENDER_TARGET));
+		AssertIfFailed(newRt->InitReservedResource(name, desc, initialState));
 
 		m_useList.push_back(std::move(newRt));
 		return m_useList.back().get();
 	}
 
-	void Retire(const FResource* rt)
+	void Retire(const FRenderTexture* rt)
 	{
 		auto waitForFenceTask = concurrency::create_task([this]() mutable
 		{
@@ -810,13 +858,37 @@ public:
 			}
 		});
 
-		auto addToFreePool = [rt, this]()
+		auto addToFreePool = [this, resource = rt->m_resource, tileList = std::move(rt->m_tileList), depthStencil = rt->m_isDepthStencil, textureIndices = std::move(rt->m_renderTextureIndices)]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
+			const size_t numTiles = tileList.size();
+			std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NULL);
+			std::vector<UINT> rangeTileCounts(numTiles, 1);
+
+			GetGraphicsQueue()->UpdateTileMappings(
+				resource->m_d3dResource,
+				1,
+				nullptr,
+				nullptr,
+				GetRenderTexturePool()->GetHeap(),
+				numTiles,
+				rangeFlags.data(),
+				tileList.data(),
+				rangeTileCounts.data(),
+				D3D12_TILE_MAPPING_FLAG_NONE);
+
+			GetRenderTexturePool()->ReturnTiles(std::move(tileList));
+
+			concurrency::concurrent_queue<uint32_t>& descriptorIndexPool = depthStencil ? GetDSVIndexPool() : GetRTVIndexPool();
+			for (uint32_t descriptorIndex : textureIndices)
+			{
+				descriptorIndexPool.push(descriptorIndex);
+			}
+
 			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
-				if (it->get() == rt)
+				if (it->get() == resource)
 				{
 					m_freeList.push_back(std::move(*it));
 					it = m_useList.erase(it);
@@ -883,29 +955,7 @@ private:
 
 FRenderTexture::~FRenderTexture()
 {
-	const size_t numTiles = m_tileList.size();
-	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NULL);
-	std::vector<UINT> rangeTileCounts(numTiles, 1);
-
-	GetGraphicsQueue()->UpdateTileMappings(
-		m_resource->m_d3dResource,
-		1,
-		nullptr,
-		nullptr,
-		GetRenderTexturePool()->GetHeap(),
-		numTiles,
-		rangeFlags.data(),
-		m_tileList.data(),
-		rangeTileCounts.data(),
-		D3D12_TILE_MAPPING_FLAG_NONE);
-
-	GetRenderTexturePool()->ReturnTiles(std::move(m_tileList));
-	GetRenderTexturePool()->Retire(m_resource);
-	//s_bindlessIndexPool.push(m_srvIndex);
-	for (uint32_t rtvIndex : m_rtvIndices)
-	{
-		GetRTVIndexPool().push(rtvIndex);
-	}
+	GetRenderTexturePool()->Retire(this);
 }
 
 void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
@@ -913,15 +963,12 @@ void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourc
 	if (m_srvIndex == ~0u && IsShaderResource(destState))
 	{
 		m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
-
-		D3D12_CPU_DESCRIPTOR_HANDLE srv;
-		srv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)->GetCPUDescriptorHandleForHeapStart().ptr +
-			m_srvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_srvIndex);
 		GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
 		m_resource->Transition(cmdList, subresourceIndex, destState);
 	}
-	else if (m_srvIndex != ~0u && destState == D3D12_RESOURCE_STATE_RENDER_TARGET)
+	else if (m_srvIndex != ~0u && 
+		(destState == D3D12_RESOURCE_STATE_RENDER_TARGET || destState == D3D12_RESOURCE_STATE_DEPTH_WRITE || destState == D3D12_RESOURCE_STATE_DEPTH_READ))
 	{
 		GetBindlessPool()->ReturnIndex(m_srvIndex);
 		m_srvIndex = ~0u;
@@ -929,7 +976,7 @@ void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourc
 	}
 	else
 	{
-		DebugAssert(false);
+		m_resource->Transition(cmdList, subresourceIndex, destState);
 	}
 
 }
@@ -977,6 +1024,7 @@ namespace RenderBackend12
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
+	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
 }
 
 namespace 
@@ -1029,6 +1077,11 @@ namespace
 	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool()
 	{
 		return RenderBackend12::s_rtvIndexPool;
+	}
+
+	concurrency::concurrent_queue<uint32_t>& GetDSVIndexPool()
+	{
+		return RenderBackend12::s_dsvIndexPool;
 	}
 }
 
@@ -1112,6 +1165,26 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		}
 	}
 
+	// DSV heap
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+		dsvHeapDesc.NumDescriptors = k_dsvHeapSize;
+		dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+		dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		AssertIfFailed(
+			s_d3dDevice->CreateDescriptorHeap(
+				&dsvHeapDesc,
+				IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_DSV].put()))
+		);
+		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_DSV]->SetName(L"dsv_heap");
+
+		// Cache available indices
+		for (int i = 0; i < k_dsvHeapSize; ++i)
+		{
+			s_dsvIndexPool.push(i);
+		}
+	}
+
 	// Swap chain
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Width = resX;
@@ -1151,10 +1224,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
 		DebugAssert(ok, "Ran out of RTV descriptors");
 
-		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor;
-		rtvDescriptor.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)->GetCPUDescriptorHandleForHeapStart().ptr +
-			rtvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtvIndex);
 		s_d3dDevice->CreateRenderTargetView(s_backBuffers[bufferIdx]->m_d3dResource, nullptr, rtvDescriptor);
 	}
 
@@ -1211,6 +1281,7 @@ void RenderBackend12::Teardown()
 	s_graphicsPSOPool.clear();
 	s_computePSOPool.clear();
 	s_rtvIndexPool.clear();
+	s_dsvIndexPool.clear();
 
 	s_frameFence.get()->Release();
 
@@ -1359,10 +1430,7 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetBackBufferDescriptor()
 {
-	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)->GetCPUDescriptorHandleForHeapStart().ptr +
-		s_currentBufferIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
+	D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, s_currentBufferIndex);
 	return descriptor;
 }
 
@@ -1511,7 +1579,18 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	const size_t depth)
 {
 
-	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, format, width, height, mipLevels, depth);
+	D3D12_RESOURCE_DESC rtDesc = {};
+	rtDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	rtDesc.Width = width;
+	rtDesc.Height = (UINT)height;
+	rtDesc.DepthOrArraySize = (UINT16)depth;
+	rtDesc.MipLevels = (UINT16)mipLevels;
+	rtDesc.Format = format;
+	rtDesc.SampleDesc.Count = 1;
+	rtDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+	rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, rtDesc, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
 	uint32_t numTiles;
 	GetDevice()->GetResourceTiling(rtResource->m_d3dResource, &numTiles, nullptr, nullptr, nullptr, 0, nullptr);
@@ -1539,9 +1618,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 		uint32_t rtvIndex;
 		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
 		DebugAssert(ok, "Ran out of RTV descriptors");
-		D3D12_CPU_DESCRIPTOR_HANDLE rtv;
-		rtv.ptr = GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV)->GetCPUDescriptorHandleForHeapStart().ptr +
-			rtvIndex * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtvIndex);
 
 		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 		rtvDesc.Format = format;
@@ -1582,8 +1659,84 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	auto rt = std::make_unique<FRenderTexture>();
 	rt->m_resource = rtResource;
 	rt->m_tileList = std::move(tileList);
-	rt->m_rtvIndices = std::move(rtvIndices);
+	rt->m_renderTextureIndices = std::move(rtvIndices);
 	rt->m_srvDesc = std::move(srvDesc);
+	rt->m_isDepthStencil = false;
+
+	return std::move(rt);
+}
+
+std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
+	const std::wstring& name,
+	const DXGI_FORMAT format,
+	const size_t width,
+	const size_t height,
+	const size_t mipLevels)
+{
+	D3D12_RESOURCE_DESC dsDesc = {};
+	dsDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	dsDesc.Width = width;
+	dsDesc.Height = (UINT)height;
+	dsDesc.DepthOrArraySize = 1;
+	dsDesc.MipLevels = (UINT16)mipLevels;
+	dsDesc.Format = GetTypelessDepthStencilFormat(format);
+	dsDesc.SampleDesc.Count = 1;
+	dsDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+	dsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, dsDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+	uint32_t numTiles;
+	GetDevice()->GetResourceTiling(rtResource->m_d3dResource, &numTiles, nullptr, nullptr, nullptr, 0, nullptr);
+	std::vector<uint32_t> tileList = s_renderTexturePool.AllocateTiles(numTiles);
+
+	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NONE);
+	std::vector<UINT> rangeTileCounts(numTiles, 1);
+
+	s_graphicsQueue->UpdateTileMappings(
+		rtResource->m_d3dResource,
+		1,
+		nullptr,
+		nullptr,
+		s_renderTexturePool.GetHeap(),
+		numTiles,
+		rangeFlags.data(),
+		tileList.data(),
+		rangeTileCounts.data(),
+		D3D12_TILE_MAPPING_FLAG_NONE);
+
+	// DSV Descriptor
+	std::vector<uint32_t> dsvIndices;
+	for (int mip = 0; mip < mipLevels; ++mip)
+	{
+		uint32_t dsvIndex;
+		bool ok = s_dsvIndexPool.try_pop(dsvIndex);
+		DebugAssert(ok, "Ran out of DSV descriptors");
+		D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, dsvIndex);
+
+		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+		dsvDesc.Format = format;
+		dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		dsvDesc.Texture2D.MipSlice = mip;
+
+		GetDevice()->CreateDepthStencilView(rtResource->m_d3dResource, &dsvDesc, dsv);
+		dsvIndices.push_back(dsvIndex);
+	}
+
+	// Cache SRV Description
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = GetSrvDepthFormat(format);
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = mipLevels;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+
+	auto rt = std::make_unique<FRenderTexture>();
+	rt->m_resource = rtResource;
+	rt->m_tileList = std::move(tileList);
+	rt->m_renderTextureIndices = std::move(dsvIndices);
+	rt->m_srvDesc = std::move(srvDesc);
+	rt->m_isDepthStencil = true;
+
 
 	return std::move(rt);
 }
@@ -1645,10 +1798,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	// Descriptor
 	{
 		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
-
-		D3D12_CPU_DESCRIPTOR_HANDLE srv;
-		srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
-			newTexture->m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
@@ -1715,10 +1865,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuf
 	// Descriptor
 	{
 		newBuffer->m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
-
-		D3D12_CPU_DESCRIPTOR_HANDLE srv;
-		srv.ptr = s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV]->GetCPUDescriptorHandleForHeapStart().ptr +
-			newBuffer->m_srvIndex * s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV];
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newBuffer->m_srvIndex);
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;

@@ -437,7 +437,7 @@ void FScene::Clear()
 
 void FView::Tick(const float deltaTime, const FController* controller)
 {
-	constexpr float speed = 1000.f;
+	constexpr float speed = 10.f;
 	bool updateView = false;
 
 	// Walk
@@ -510,7 +510,7 @@ void FView::Reset(const FScene& scene)
 		m_position = { 0.f, 0.f, 0.f };
 		m_right = { 1.f, 0.f, 0.f };
 		m_up = { 0.f, 1.f, 0.f };
-		m_look = { 0.f, 0.f, 1.f };
+		m_look = { 0.f, 0.f, -1.f };
 
 		UpdateViewTransform();
 		m_projectionTransform = Matrix::CreatePerspectiveFieldOfView(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f, 10000.f);

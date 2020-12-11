@@ -36,6 +36,9 @@ namespace Jobs
 
 			SCOPED_GPU_EVENT(cmdList, L"render_commands", 0);
 
+			std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1);
+
+			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
@@ -90,7 +93,7 @@ namespace Jobs
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			psoDesc.pRootSignature = rootsig.get();
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = Settings::k_backBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
@@ -139,9 +142,9 @@ namespace Jobs
 			// PSO - Depth Stencil State
 			{
 				D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
-				desc.DepthEnable = FALSE;
-				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-				desc.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+				desc.DepthEnable = TRUE;
+				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+				desc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 				desc.StencilEnable = FALSE;
 			}
 
@@ -154,11 +157,12 @@ namespace Jobs
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetBackBufferDescriptor() };
-			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
-
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, depthBuffer->m_renderTextureIndices[0]);
+			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
 
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
+			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			
@@ -455,8 +459,6 @@ namespace Jobs
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
-
-	std::unique_ptr<FRenderTexture> rt = RenderBackend12::CreateRenderTexture(L"scene_rt", DXGI_FORMAT_R10G10B10A2_UNORM, resX, resY, 1, 1);
 
 	auto preRenderCL = Jobs::PreRender().get();
 	auto renderCL = Jobs::Render(resX, resY, GetScene(), GetView()).get();
