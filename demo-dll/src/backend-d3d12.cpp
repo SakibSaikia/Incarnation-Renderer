@@ -790,11 +790,6 @@ class FRenderTexturePool
 public:
 	void Initialize(size_t sizeInBytes)
 	{
-		constexpr size_t k_tileSize = 64 * 1024;
-
-		// align to 64k
-		sizeInBytes = (sizeInBytes + k_tileSize - 1) & ~(k_tileSize - 1);
-
 		D3D12_HEAP_DESC desc
 		{
 			.SizeInBytes = sizeInBytes,
@@ -809,12 +804,6 @@ public:
 		};
 
 		AssertIfFailed(GetDevice()->CreateHeap(&desc, IID_PPV_ARGS(m_heap.put())));
-
-		size_t numTiles = sizeInBytes / k_tileSize;
-		for (int i = 0; i < numTiles; ++i)
-		{
-			m_tilePool.push(i);
-		}
 
 		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put())));
 	}
@@ -837,9 +826,13 @@ public:
 			}
 		}
 
+		D3D12_HEAP_PROPERTIES heapDesc = {};
+		heapDesc.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapDesc.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
 		// New render texture
 		auto newRt = std::make_unique<FResource>();
-		AssertIfFailed(newRt->InitReservedResource(name, desc, initialState));
+		AssertIfFailed(newRt->InitCommittedResource(name, heapDesc, desc, initialState));
 
 		m_useList.push_back(std::move(newRt));
 		return m_useList.back().get();
@@ -858,27 +851,9 @@ public:
 			}
 		});
 
-		auto addToFreePool = [this, resource = rt->m_resource, tileList = std::move(rt->m_tileList), depthStencil = rt->m_isDepthStencil, textureIndices = std::move(rt->m_renderTextureIndices)]() mutable
+		auto addToFreePool = [this, resource = rt->m_resource, depthStencil = rt->m_isDepthStencil, textureIndices = std::move(rt->m_renderTextureIndices)]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
-
-			const size_t numTiles = tileList.size();
-			std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NULL);
-			std::vector<UINT> rangeTileCounts(numTiles, 1);
-
-			GetGraphicsQueue()->UpdateTileMappings(
-				resource->m_d3dResource,
-				1,
-				nullptr,
-				nullptr,
-				GetRenderTexturePool()->GetHeap(),
-				numTiles,
-				rangeFlags.data(),
-				tileList.data(),
-				rangeTileCounts.data(),
-				D3D12_TILE_MAPPING_FLAG_NONE);
-
-			GetRenderTexturePool()->ReturnTiles(std::move(tileList));
 
 			concurrency::concurrent_queue<uint32_t>& descriptorIndexPool = depthStencil ? GetDSVIndexPool() : GetRTVIndexPool();
 			for (uint32_t descriptorIndex : textureIndices)
@@ -904,32 +879,6 @@ public:
 		waitForFenceTask.then(addToFreePool);
 	}
 
-	std::vector<uint32_t> AllocateTiles(const size_t numTiles)
-	{
-		std::vector<uint32_t> tileList;
-		size_t remainingAllocation = numTiles;
-		while (remainingAllocation > 0)
-		{
-			uint32_t tileIndex;
-			bool result = m_tilePool.try_pop(tileIndex);
-			DebugAssert(result, "Ran out of tiles");
-			tileList.push_back(tileIndex);
-			remainingAllocation--;
-		}
-
-		return tileList;
-	}
-
-	void ReturnTiles(std::vector<uint32_t>&& tileList)
-	{
-		for (uint32_t tileIndex : tileList)
-		{
-			m_tilePool.push(tileIndex);
-		}
-
-		tileList.clear();
-	}
-
 	D3DHeap_t* GetHeap()
 	{
 		return m_heap.get();
@@ -940,7 +889,6 @@ public:
 		const std::lock_guard<std::mutex> lock(m_mutex);
 		DebugAssert(m_useList.empty(), "All render textures should be retired at this point");
 		m_freeList.clear();
-		m_tilePool.clear();
 	}
 
 private:
@@ -950,7 +898,6 @@ private:
 	size_t m_fenceValue = 0;
 	std::list<std::unique_ptr<FResource>> m_freeList;
 	std::list<std::unique_ptr<FResource>> m_useList;
-	concurrency::concurrent_queue<uint32_t> m_tilePool;
 };
 
 FRenderTexture::~FRenderTexture()
@@ -1592,25 +1539,6 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 
 	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, rtDesc, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-	uint32_t numTiles;
-	GetDevice()->GetResourceTiling(rtResource->m_d3dResource, &numTiles, nullptr, nullptr, nullptr, 0, nullptr);
-	std::vector<uint32_t> tileList = s_renderTexturePool.AllocateTiles(numTiles);
-
-	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NONE);
-	std::vector<UINT> rangeTileCounts(numTiles, 1);
-
-	s_graphicsQueue->UpdateTileMappings(
-		rtResource->m_d3dResource,
-		1,
-		nullptr,
-		nullptr,
-		s_renderTexturePool.GetHeap(),
-		numTiles,
-		rangeFlags.data(),
-		tileList.data(),
-		rangeTileCounts.data(),
-		D3D12_TILE_MAPPING_FLAG_NONE);
-
 	// RTV Descriptor
 	std::vector<uint32_t> rtvIndices;
 	for(int mip = 0; mip < mipLevels; ++mip)
@@ -1658,7 +1586,6 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 
 	auto rt = std::make_unique<FRenderTexture>();
 	rt->m_resource = rtResource;
-	rt->m_tileList = std::move(tileList);
 	rt->m_renderTextureIndices = std::move(rtvIndices);
 	rt->m_srvDesc = std::move(srvDesc);
 	rt->m_isDepthStencil = false;
@@ -1685,25 +1612,6 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	dsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
 	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, dsDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-
-	uint32_t numTiles;
-	GetDevice()->GetResourceTiling(rtResource->m_d3dResource, &numTiles, nullptr, nullptr, nullptr, 0, nullptr);
-	std::vector<uint32_t> tileList = s_renderTexturePool.AllocateTiles(numTiles);
-
-	std::vector<D3D12_TILE_RANGE_FLAGS> rangeFlags(numTiles, D3D12_TILE_RANGE_FLAG_NONE);
-	std::vector<UINT> rangeTileCounts(numTiles, 1);
-
-	s_graphicsQueue->UpdateTileMappings(
-		rtResource->m_d3dResource,
-		1,
-		nullptr,
-		nullptr,
-		s_renderTexturePool.GetHeap(),
-		numTiles,
-		rangeFlags.data(),
-		tileList.data(),
-		rangeTileCounts.data(),
-		D3D12_TILE_MAPPING_FLAG_NONE);
 
 	// DSV Descriptor
 	std::vector<uint32_t> dsvIndices;
@@ -1732,7 +1640,6 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 
 	auto rt = std::make_unique<FRenderTexture>();
 	rt->m_resource = rtResource;
-	rt->m_tileList = std::move(tileList);
 	rt->m_renderTextureIndices = std::move(dsvIndices);
 	rt->m_srvDesc = std::move(srvDesc);
 	rt->m_isDepthStencil = true;

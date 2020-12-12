@@ -107,7 +107,6 @@ struct FTransientBuffer
 struct FRenderTexture
 {
 	FResource* m_resource;
-	std::vector<uint32_t> m_tileList;
 	std::vector<uint32_t> m_renderTextureIndices; // one for each mip level
 	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
 	uint32_t m_srvIndex = ~0u;
