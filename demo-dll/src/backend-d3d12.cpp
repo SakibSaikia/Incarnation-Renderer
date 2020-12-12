@@ -625,14 +625,19 @@ void FResource::SetName(const std::wstring& name)
 	m_d3dResource->SetName(name.c_str());
 }
 
-HRESULT FResource::InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState)
+HRESULT FResource::InitCommittedResource(
+	const std::wstring& name, 
+	const D3D12_HEAP_PROPERTIES& heapProperties, 
+	const D3D12_RESOURCE_DESC& resourceDesc, 
+	const D3D12_RESOURCE_STATES initialState,
+	const D3D12_CLEAR_VALUE* clearValue)
 {
 	HRESULT hr = GetDevice()->CreateCommittedResource(
 		&heapProperties, 
 		D3D12_HEAP_FLAG_NONE, 
 		&resourceDesc,
 		initialState, 
-		nullptr,
+		clearValue,
 		IID_PPV_ARGS(&m_d3dResource));
 
 	SetName(name);
@@ -808,7 +813,7 @@ public:
 		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put())));
 	}
 
-	FResource* GetOrCreate(const std::wstring& name, const D3D12_RESOURCE_DESC& desc, const D3D12_RESOURCE_STATES initialState)
+	FResource* GetOrCreate(const std::wstring& name, const D3D12_RESOURCE_DESC& desc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE& clearValue)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -832,7 +837,7 @@ public:
 
 		// New render texture
 		auto newRt = std::make_unique<FResource>();
-		AssertIfFailed(newRt->InitCommittedResource(name, heapDesc, desc, initialState));
+		AssertIfFailed(newRt->InitCommittedResource(name, heapDesc, desc, initialState, &clearValue));
 
 		m_useList.push_back(std::move(newRt));
 		return m_useList.back().get();
@@ -1537,7 +1542,11 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	rtDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
 	rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
-	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, rtDesc, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	D3D12_CLEAR_VALUE clearValue = {};
+	clearValue.Format = format;
+	clearValue.Color[0] = clearValue.Color[1] = clearValue.Color[2] = clearValue.Color[3] = 0.f;
+
+	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, rtDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, clearValue);
 
 	// RTV Descriptor
 	std::vector<uint32_t> rtvIndices;
@@ -1611,7 +1620,12 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	dsDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
 	dsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
-	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, dsDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	D3D12_CLEAR_VALUE clearValue = {};
+	clearValue.Format = format;
+	clearValue.DepthStencil.Depth = 1.f;
+	clearValue.DepthStencil.Stencil = 0;
+
+	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, dsDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, clearValue);
 
 	// DSV Descriptor
 	std::vector<uint32_t> dsvIndices;
