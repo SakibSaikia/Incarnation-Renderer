@@ -280,7 +280,6 @@ bool operator==(const DXGI_SAMPLE_DESC& lhs, const DXGI_SAMPLE_DESC& rhs)
 bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
 {
 	return lhs.Dimension == rhs.Dimension &&
-		lhs.Alignment == rhs.Alignment &&
 		lhs.Width == rhs.Width &&
 		lhs.Height == rhs.Height &&
 		lhs.DepthOrArraySize == rhs.DepthOrArraySize &&
@@ -1539,7 +1538,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	rtDesc.MipLevels = (UINT16)mipLevels;
 	rtDesc.Format = format;
 	rtDesc.SampleDesc.Count = 1;
-	rtDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+	rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
 	D3D12_CLEAR_VALUE clearValue = {};
@@ -1617,7 +1616,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	dsDesc.MipLevels = (UINT16)mipLevels;
 	dsDesc.Format = GetTypelessDepthStencilFormat(format);
 	dsDesc.SampleDesc.Count = 1;
-	dsDesc.Layout = D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE;
+	dsDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	dsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
 	D3D12_CLEAR_VALUE clearValue = {};
