@@ -204,6 +204,7 @@ void FScene::Reload(const char* filePath)
 
 	m_scratchIndexBuffer = new uint8_t[maxSize];
 	m_scratchPositionBuffer = new uint8_t[maxSize];
+	m_scratchNormalBuffer = new uint8_t[maxSize];
 
 	// Parse GLTF and initialize scene
 	// See https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_003_MinimalGltfFile.md
@@ -245,11 +246,19 @@ void FScene::Reload(const char* filePath)
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		&uploader);
 
+	m_meshNormalBuffer = RenderBackend12::CreateBindlessByteAddressBuffer(
+		L"scene_normal_buffer",
+		m_scratchNormalBufferOffset,
+		m_scratchNormalBuffer,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		&uploader);
+
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	delete[] m_scratchIndexBuffer;
 	delete[] m_scratchPositionBuffer;
+	delete[] m_scratchNormalBuffer;
 }
 
 void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
@@ -376,21 +385,29 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		// FLOAT3 position data
 		auto posIt = primitive.attributes.find("POSITION");
 		DebugAssert(posIt != primitive.attributes.cend());
-
 		const tinygltf::Accessor& positionAccessor = model.accessors[posIt->second];
 		const size_t positionSize = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
 		DebugAssert(positionSize == 3 * sizeof(float));
+
+		// FLOAT3 normal data
+		auto normalIt = primitive.attributes.find("NORMAL");
+		DebugAssert(normalIt != primitive.attributes.cend());
+		const tinygltf::Accessor& normalAccessor = model.accessors[normalIt->second];
+		const size_t normalSize = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
+		DebugAssert(normalSize == 3 * sizeof(float));
 
 		FRenderMesh newMesh = {};
 		newMesh.m_name = mesh.name;
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
+		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
 		newMesh.m_indexCount = indexAccessor.count;
 		m_meshGeo.push_back(newMesh);
 		m_meshTransforms.push_back(parentTransform);
 
 		m_scratchIndexBufferOffset += CopyIndexData(indexAccessor, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
 		m_scratchPositionBufferOffset += CopyBufferData(positionAccessor, positionSize, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
+		m_scratchNormalBufferOffset += CopyBufferData(normalAccessor, normalSize, m_scratchNormalBuffer + m_scratchNormalBufferOffset);
 
 		m_meshBounds.push_back(CalcBounds(posIt->second));
 	}

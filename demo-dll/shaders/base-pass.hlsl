@@ -2,6 +2,7 @@ struct FrameCbLayout
 {
 	uint sceneIndexBufferBindlessIndex;
 	uint scenePositionBufferBindlessIndex;
+	uint sceneNormalBufferBindlessIndex;
 };
 
 struct ViewCbLayout
@@ -15,6 +16,7 @@ struct MeshCbLayout
 	float4x4 localToWorld;
 	uint indexOffset;
 	uint positionOffset;
+	uint normalOffset;
 };
 
 ConstantBuffer<FrameCbLayout> frameConstants : register(b2);
@@ -25,6 +27,7 @@ ByteAddressBuffer bindlessBuffers[] : register(t1);
 struct vs_to_ps
 {
 	float4 pos : SV_POSITION;
+	float4 normal : NORMAL;
 };
 
 vs_to_ps vs_main(uint vertexId : SV_VertexID)
@@ -37,13 +40,18 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	// size of 12 for float3 positions
 	float3 position = bindlessBuffers[frameConstants.scenePositionBufferBindlessIndex].Load<float3>(12 * (index + meshConstants.positionOffset));
 
+	// size of 12 for float3 normals
+	float3 normal = bindlessBuffers[frameConstants.sceneNormalBufferBindlessIndex].Load<float3>(12 * (index + meshConstants.normalOffset));
+
 	float4x4 viewProjTransform = mul(viewConstants.viewTransform, viewConstants.projectionTransform);
 	o.pos = mul(float4(position, 1.f), viewProjTransform);
+	o.normal = mul(float4(normal, 0.f), viewProjTransform);
 
 	return o;
 }
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	return float4(1.f, 0.f, 0.f, 0.f);
+	float4 lightDir = float4(1, 1, 1, 0);
+	return saturate(dot(lightDir, input.normal));
 }

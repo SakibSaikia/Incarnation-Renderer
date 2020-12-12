@@ -47,6 +47,7 @@ namespace Jobs
 			{
 				uint32_t sceneIndexBufferBindlessIndex;
 				uint32_t scenePositionBufferBindlessIndex;
+				uint32_t sceneNormalBufferBindlessIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -58,6 +59,7 @@ namespace Jobs
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneIndexBufferBindlessIndex = scene->m_meshIndexBuffer->m_srvIndex;
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
+					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -175,11 +177,13 @@ namespace Jobs
 					Matrix localToWorldTransform;
 					uint32_t indexOffset;
 					uint32_t positionOffset;
-				} meshCb = 
+					uint32_t normalOffset;
+				} meshCb =
 				{
 					scene->m_meshTransforms[meshIndex],
 					scene->m_meshGeo[meshIndex].m_indexOffset,
-					scene->m_meshGeo[meshIndex].m_positionOffset
+					scene->m_meshGeo[meshIndex].m_positionOffset,
+					scene->m_meshGeo[meshIndex].m_normalOffset
 				};
 
 				d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(MeshCbLayout)/4, &meshCb, 0);
