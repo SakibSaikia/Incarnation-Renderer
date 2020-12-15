@@ -482,7 +482,7 @@ void FView::Tick(const float deltaTime, const FController* controller)
 	}
 
 	// Pitch
-	if (controller->m_mouseMovement.y > 0)
+	if (controller->m_mouseMovement.y)
 	{
 		float pitch = DirectX::XMConvertToRadians((float)controller->m_mouseMovement.y);
 		Matrix rotationMatrix = Matrix::CreateFromAxisAngle(m_right, pitch);
