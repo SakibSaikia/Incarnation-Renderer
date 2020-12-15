@@ -206,13 +206,21 @@ void FScene::Reload(const char* filePath)
 	m_scratchPositionBuffer = new uint8_t[maxSize];
 	m_scratchNormalBuffer = new uint8_t[maxSize];
 
+	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
+	Matrix RH2LH = Matrix
+	{
+		Vector3{1.f, 0.f , 0.f},
+		Vector3{0.f, 1.f , 0.f},
+		Vector3{0.f, 0.f, -1.f}
+	};
+
 	// Parse GLTF and initialize scene
 	// See https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_003_MinimalGltfFile.md
 	for (const tinygltf::Scene& scene : model.scenes)
 	{
 		for (const int nodeIndex : scene.nodes)
 		{
-			LoadNode(nodeIndex, model, Matrix::Identity);
+			LoadNode(nodeIndex, model, RH2LH);
 		}
 	}
 
@@ -271,10 +279,10 @@ void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix&
 	{
 		const auto& m = node.matrix;
 		nodeTransform = Matrix { 
-			(float)m[0], (float)m[4], (float)m[8], (float)m[12],
-			(float)m[1], (float)m[5], (float)m[9], (float)m[13],
-			(float)m[2], (float)m[6], (float)m[10],(float)m[14],
-			(float)m[3], (float)m[7], (float)m[11],(float)m[15]
+			(float)m[0], (float)m[1], (float)m[2], (float)m[3],
+			(float)m[4], (float)m[5], (float)m[6], (float)m[7],
+			(float)m[8], (float)m[9], (float)m[10],(float)m[11],
+			(float)m[12], (float)m[13], (float)m[14],(float)m[15]
 		};
 	}
 	else if (!node.translation.empty() || !node.rotation.empty() || !node.scale.empty())
@@ -425,7 +433,7 @@ void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Mat
 		newCamera.m_name = s.str();
 
 		const tinygltf::PerspectiveCamera& cam = model.cameras[cameraIndex].perspective;
-		newCamera.m_projectionTransform = Matrix::CreatePerspectiveFieldOfView(cam.yfov, cam.aspectRatio, cam.znear, cam.zfar);
+		XMStoreFloat4x4(&newCamera.m_projectionTransform, DirectX::XMMatrixPerspectiveFovLH(cam.yfov, cam.aspectRatio, cam.znear, cam.zfar));
 	}
 	else
 	{
@@ -454,7 +462,7 @@ void FScene::Clear()
 
 void FView::Tick(const float deltaTime, const FController* controller)
 {
-	constexpr float speed = 10.f;
+	constexpr float speed = 5.f;
 	bool updateView = false;
 
 	// Walk
@@ -524,13 +532,13 @@ void FView::Reset(const FScene& scene)
 	else
 	{
 		// Default camera
-		m_position = { 0.f, 0.f, 0.f };
+		m_position = { 0.f, 0.f, -15.f };
 		m_right = { 1.f, 0.f, 0.f };
 		m_up = { 0.f, 1.f, 0.f };
-		m_look = { 0.f, 0.f, -1.f };
+		m_look = { 0.f, 0.f, 1.f };
 
 		UpdateViewTransform();
-		m_projectionTransform = Matrix::CreatePerspectiveFieldOfView(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f, 10000.f);
+		XMStoreFloat4x4(&m_projectionTransform, DirectX::XMMatrixPerspectiveFovLH(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f, 10000.f));
 	}
 }
 

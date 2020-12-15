@@ -53,6 +53,6 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	float4 lightDir = float4(1, 1, 1, 0);
+	float4 lightDir = float4(1, 1, -1, 0);
 	return saturate(dot(lightDir, input.normal));
 }
