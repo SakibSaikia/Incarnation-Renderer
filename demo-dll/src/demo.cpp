@@ -32,17 +32,62 @@ struct FController
 
 	bool KeyPress(int key) const
 	{
-		return m_mouseButtonState == MK_LBUTTON &&
-			(GetAsyncKeyState(key) & 0x8000) != 0;
+		return (GetAsyncKeyState(key) & 0x8000) != 0;
+	}
+
+	bool MouseLeftButtonPressed() const
+	{
+		return m_mouseButtonState == MK_LBUTTON;
+	}
+
+	bool MouseRightButtonPressed() const
+	{
+		return m_mouseButtonState == MK_RBUTTON;
+	}
+
+	bool MoveForward() const
+	{
+		return MouseLeftButtonPressed() && KeyPress('W');
+	}
+
+	bool MoveBack() const
+	{
+		return MouseLeftButtonPressed() && KeyPress('S');
+	}
+
+	bool StrafeLeft() const
+	{
+		return MouseLeftButtonPressed() && KeyPress('A');
+	}
+
+	bool StrafeRight() const
+	{
+		return MouseLeftButtonPressed() && KeyPress('D');
+	}
+
+	float Pitch() const
+	{
+		return MouseLeftButtonPressed() ? DirectX::XMConvertToRadians((float)m_mouseMovement.y) : 0.f;
+	}
+
+	float Yaw() const
+	{
+		return MouseLeftButtonPressed() ? DirectX::XMConvertToRadians((float)m_mouseMovement.x) : 0.f;
+	}
+
+	float RotateSceneX() const
+	{
+		return MouseRightButtonPressed() ? DirectX::XMConvertToRadians((float)m_mouseMovement.x) : 0.f;
+	}
+
+	float RotateSceneY() const
+	{
+		return MouseRightButtonPressed() ? DirectX::XMConvertToRadians((float)m_mouseMovement.y) : 0.f;
 	}
 
 	void Tick(const float deltaTime)
 	{
-		if (m_mouseButtonState == MK_LBUTTON)
-		{
-			m_mouseMovement = { m_mouseCurrentPosition.x - m_mouseLastPosition.x, m_mouseCurrentPosition.y - m_mouseLastPosition.y };
-		}
-
+		m_mouseMovement = { m_mouseCurrentPosition.x - m_mouseLastPosition.x, m_mouseCurrentPosition.y - m_mouseLastPosition.y };
 		m_mouseLastPosition = m_mouseCurrentPosition;
 	}
 
@@ -94,6 +139,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 
 void Demo::Tick(float deltaTime)
 {
+	// Reload scene file if required
 	if (s_scene.m_sceneFilePath.empty() ||
 		s_scene.m_sceneFilePath != Settings::k_scenePath)
 	{
@@ -102,8 +148,32 @@ void Demo::Tick(float deltaTime)
 		s_view.Reset(s_scene);
 	}
 
+	// Tick components
 	s_controller.Tick(deltaTime);
 	s_view.Tick(deltaTime, &s_controller);
+
+	// Handle scene rotation
+	{
+		// Mouse rotation but as applied in view space
+		static float rotX = 0.f;
+		static float rotY = 0.f;
+		Matrix rotation = Matrix::Identity;
+
+		rotX -= s_controller.RotateSceneX();
+		if (rotX != 0.f)
+		{
+			rotation *= Matrix::CreateFromAxisAngle(s_view.m_up, rotX);
+		}
+
+		rotY -= s_controller.RotateSceneY();
+		if (rotY != 0.f)
+		{
+			rotation *= Matrix::CreateFromAxisAngle(s_view.m_right, rotY);
+		}
+
+		// Rotate to view space, apply view space rotation and then rotate back to world space
+		s_scene.m_rootTransform = rotation;
+	}
 
 	{
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -466,33 +536,33 @@ void FView::Tick(const float deltaTime, const FController* controller)
 	bool updateView = false;
 
 	// Walk
-	if (controller->KeyPress('W'))
+	if (controller->MoveForward())
 	{
 		m_position += speed * deltaTime * m_look;
 		updateView = true;
 	}
-	else if (controller->KeyPress('S'))
+	else if (controller->MoveBack())
 	{
 		m_position -= speed * deltaTime * m_look;
 		updateView = true;
 	}
 
 	// Strafe
-	if (controller->KeyPress('A'))
+	if (controller->StrafeLeft())
 	{
 		m_position -= speed * deltaTime * m_right;
 		updateView = true;
 	}
-	else if (controller->KeyPress('D'))
+	else if (controller->StrafeRight())
 	{
 		m_position += speed * deltaTime * m_right;
 		updateView = true;
 	}
 
 	// Pitch
-	if (controller->m_mouseMovement.y)
+	float pitch = controller->Pitch();
+	if (pitch != 0.f)
 	{
-		float pitch = DirectX::XMConvertToRadians((float)controller->m_mouseMovement.y);
 		Matrix rotationMatrix = Matrix::CreateFromAxisAngle(m_right, pitch);
 		m_up = Vector3::TransformNormal(m_up, rotationMatrix);
 		m_look = Vector3::TransformNormal(m_look, rotationMatrix);
@@ -500,9 +570,9 @@ void FView::Tick(const float deltaTime, const FController* controller)
 	}
 
 	// Yaw-ish (Rotate about world y-axis)
-	if (controller->m_mouseMovement.x)
+	float yaw = controller->Yaw();
+	if (yaw != 0.f)
 	{
-		float yaw = DirectX::XMConvertToRadians((float)controller->m_mouseMovement.x);
 		Matrix rotationMatrix = Matrix::CreateRotationY(yaw);
 		m_right = Vector3::TransformNormal(m_right, rotationMatrix);
 		m_up = Vector3::TransformNormal(m_up, rotationMatrix);

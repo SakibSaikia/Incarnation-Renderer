@@ -45,6 +45,7 @@ namespace Jobs
 			// Frame constant buffer
 			struct FrameCbLayout
 			{
+				Matrix sceneRotation;
 				uint32_t sceneIndexBufferBindlessIndex;
 				uint32_t scenePositionBufferBindlessIndex;
 				uint32_t sceneNormalBufferBindlessIndex;
@@ -57,6 +58,7 @@ namespace Jobs
 				[scene](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+					cbDest->sceneRotation = scene->m_rootTransform;
 					cbDest->sceneIndexBufferBindlessIndex = scene->m_meshIndexBuffer->m_srvIndex;
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
 					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;

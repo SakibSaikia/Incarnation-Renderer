@@ -1,5 +1,6 @@
 struct FrameCbLayout
 {
+	float4x4 sceneRotation;
 	uint sceneIndexBufferBindlessIndex;
 	uint scenePositionBufferBindlessIndex;
 	uint sceneNormalBufferBindlessIndex;
@@ -43,7 +44,8 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	// size of 12 for float3 normals
 	float3 normal = bindlessBuffers[frameConstants.sceneNormalBufferBindlessIndex].Load<float3>(12 * (index + meshConstants.normalOffset));
 
-	float4 worldPos = mul(float4(position, 1.f), meshConstants.localToWorld);
+	float4x4 localToWorld = mul(meshConstants.localToWorld, frameConstants.sceneRotation);
+	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	float4x4 viewProjTransform = mul(viewConstants.viewTransform, viewConstants.projectionTransform);
 	o.pos = mul(worldPos, viewProjTransform);
 	o.normal = mul(float4(normal, 0.f), meshConstants.localToWorld);

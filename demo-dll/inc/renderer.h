@@ -51,6 +51,9 @@ struct FScene
 	std::unique_ptr<FBindlessResource> m_meshUVBuffer;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
+	// Transform
+	Matrix m_rootTransform;
+
 private:
 	uint8_t* m_scratchIndexBuffer;
 	uint8_t* m_scratchPositionBuffer;
