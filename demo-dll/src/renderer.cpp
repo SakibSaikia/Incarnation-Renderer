@@ -138,7 +138,7 @@ namespace Jobs
 				D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
 				desc.DepthEnable = TRUE;
 				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-				desc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+				desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 				desc.StencilEnable = FALSE;
 			}
 
@@ -156,7 +156,7 @@ namespace Jobs
 
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
-			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			

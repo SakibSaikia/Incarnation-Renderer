@@ -1657,7 +1657,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 
 	D3D12_CLEAR_VALUE clearValue = {};
 	clearValue.Format = format;
-	clearValue.DepthStencil.Depth = 1.f;
+	clearValue.DepthStencil.Depth = 0.f;
 	clearValue.DepthStencil.Stencil = 0;
 
 	FResource* rtResource = s_renderTexturePool.GetOrCreate(name, dsDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, clearValue);

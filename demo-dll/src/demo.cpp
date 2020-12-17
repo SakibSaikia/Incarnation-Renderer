@@ -10,6 +10,23 @@
 #include <tiny_gltf.h>
 #include <concurrent_unordered_map.h>
 
+namespace
+{
+	Matrix GetReverseZInfinitePerspectiveFovLH(float fov, float r, float n)
+	{
+		return Matrix{
+			1.f / (r * tan(fov / 2.f)),	0.f,					0.f,	0.f,
+			0.f,						1.f / tan(fov / 2.f),	0.f,	0.f,
+			0.f,						0.f,					0.f,	1.f,
+			0.f,						0.f,					n,		0.f
+		};
+	}
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Texture Cache
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
 struct FTextureCache
 {
 	uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
@@ -503,7 +520,7 @@ void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Mat
 		newCamera.m_name = s.str();
 
 		const tinygltf::PerspectiveCamera& cam = model.cameras[cameraIndex].perspective;
-		XMStoreFloat4x4(&newCamera.m_projectionTransform, DirectX::XMMatrixPerspectiveFovLH(cam.yfov, cam.aspectRatio, cam.znear, cam.zfar));
+		newCamera.m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(cam.yfov, cam.aspectRatio, cam.znear);
 	}
 	else
 	{
@@ -608,7 +625,7 @@ void FView::Reset(const FScene& scene)
 		m_look = { 0.f, 0.f, 1.f };
 
 		UpdateViewTransform();
-		XMStoreFloat4x4(&m_projectionTransform, DirectX::XMMatrixPerspectiveFovLH(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f, 10000.f));
+		m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f);
 	}
 }
 
