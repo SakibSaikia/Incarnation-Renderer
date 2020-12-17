@@ -11,20 +11,6 @@
 
 namespace Jobs
 {
-	concurrency::task<FCommandList*> PreRender()
-	{
-		return concurrency::create_task([]
-		{
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-			d3dCmdList->SetName(L"pre_render_job");
-
-			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-
-			return cmdList;
-		});
-	}
-
 	concurrency::task<FCommandList*> Render(const uint32_t resX, const uint32_t resY, const FScene* scene, const FView* view)
 	{
 		return concurrency::create_task([resX, resY, scene, view]
@@ -36,7 +22,11 @@ namespace Jobs
 
 			SCOPED_GPU_EVENT(cmdList, L"render_commands", 0);
 
-			std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1);
+			const uint32_t sampleCount = 4;
+			std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Settings::k_backBufferFormat, resX, resY, 1, 1, sampleCount);
+			std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
+			colorBuffer->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			depthBuffer->Transition(cmdList, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
@@ -100,7 +90,7 @@ namespace Jobs
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = Settings::k_backBufferFormat;
-			psoDesc.SampleDesc.Count = 1;
+			psoDesc.SampleDesc.Count = sampleCount;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
 			// PSO - Shaders
@@ -160,7 +150,7 @@ namespace Jobs
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetBackBufferDescriptor() };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, colorBuffer->m_renderTextureIndices[0]) };
 			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, depthBuffer->m_renderTextureIndices[0]);
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
 
@@ -170,6 +160,7 @@ namespace Jobs
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			
+			// Issue scene draws
 			for (int meshIndex = 0; meshIndex < scene->m_meshGeo.size(); ++meshIndex)
 			{
 				const FRenderMesh& mesh = scene->m_meshGeo[meshIndex];
@@ -186,11 +177,21 @@ namespace Jobs
 					scene->m_meshGeo[meshIndex].m_indexOffset,
 					scene->m_meshGeo[meshIndex].m_positionOffset,
 					scene->m_meshGeo[meshIndex].m_normalOffset
-				};
+				};				
 
 				d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(MeshCbLayout)/4, &meshCb, 0);
 				d3dCmdList->DrawInstanced(mesh.m_indexCount, 1, 0, 0);
 			}
+
+			// MSAA resolve
+			colorBuffer->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+			d3dCmdList->ResolveSubresource(
+				RenderBackend12::GetBackBufferResource()->m_d3dResource, 
+				0,
+				colorBuffer->m_resource->m_d3dResource, 
+				0,
+				Settings::k_backBufferFormat);
 	
 			return cmdList;
 		});
@@ -390,6 +391,7 @@ namespace Jobs
 			const float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
 			d3dCmdList->OMSetBlendFactor(blendFactor);
 
+			RenderBackend12::GetBackBufferResource()->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetBackBufferDescriptor() };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
@@ -466,9 +468,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
 
-	auto preRenderCL = Jobs::PreRender().get();
 	auto renderCL = Jobs::Render(resX, resY, GetScene(), GetView()).get();
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { preRenderCL, renderCL});
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { renderCL });
 
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)

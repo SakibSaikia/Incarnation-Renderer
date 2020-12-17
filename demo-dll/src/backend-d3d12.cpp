@@ -672,7 +672,19 @@ HRESULT FResource::InitReservedResource(const std::wstring& name, const D3D12_RE
 void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
 {
 	uint32_t subId = (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES ? 0 : subresourceIndex);
+
+	// Check if there are any pending transitions for this resource on the same commandlist.
+	// If yes, then update the before state immediately for the current transition call.
+	auto pendingResourceTransition = cmdList->m_pendingTransitions.find(this);
+	if (pendingResourceTransition != cmdList->m_pendingTransitions.cend())
+	{
+		pendingResourceTransition->second();
+		cmdList->m_pendingTransitions.erase(pendingResourceTransition);
+	}
+
 	D3D12_RESOURCE_STATES beforeState = m_subresourceStates[subId];
+	if (beforeState == destState)
+		return;
 
 	D3D12_RESOURCE_BARRIER barrierDesc = {};
 	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -683,7 +695,8 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
 
 	// Update CPU side tracking of current state
-	cmdList->m_postExecuteCallbacks.push_back(
+	cmdList->m_pendingTransitions.emplace(
+		this,
 		[this, subresourceIndex, destState]()
 		{
 			if (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
@@ -1429,6 +1442,13 @@ D3DFence_t* RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE c
 	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
 	for (FCommandList* cl : commandLists)
 	{
+		for (auto&& [resource, transitionProc] : cl->m_pendingTransitions)
+		{
+			transitionProc();
+		}
+
+		cl->m_pendingTransitions.clear();
+
 		for (auto& callbackProc : cl->m_postExecuteCallbacks)
 		{
 			callbackProc();
@@ -1527,7 +1547,8 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	const size_t width,
 	const size_t height,
 	const size_t mipLevels,
-	const size_t depth)
+	const size_t depth,
+	const size_t sampleCount)
 {
 
 	D3D12_RESOURCE_DESC rtDesc = {};
@@ -1537,7 +1558,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	rtDesc.DepthOrArraySize = (UINT16)depth;
 	rtDesc.MipLevels = (UINT16)mipLevels;
 	rtDesc.Format = format;
-	rtDesc.SampleDesc.Count = 1;
+	rtDesc.SampleDesc.Count = sampleCount;
 	rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
@@ -1560,8 +1581,15 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 		rtvDesc.Format = format;
 		if (depth == 1)
 		{
-			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-			rtvDesc.Texture2D.MipSlice = mip;
+			if (sampleCount > 1)
+			{
+				rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+			}
+			else
+			{
+				rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+				rtvDesc.Texture2D.MipSlice = mip;
+			}
 		}
 		else
 		{
@@ -1580,9 +1608,16 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		if (depth == 1)
 		{
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MipLevels = mipLevels;
-			srvDesc.Texture2D.MostDetailedMip = 0;
+			if (sampleCount > 1)
+			{
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+			}
+			else
+			{
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+				srvDesc.Texture2D.MipLevels = mipLevels;
+				srvDesc.Texture2D.MostDetailedMip = 0;
+			}
 		}
 		else
 		{
@@ -1606,7 +1641,8 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
-	const size_t mipLevels)
+	const size_t mipLevels,
+	const size_t sampleCount)
 {
 	D3D12_RESOURCE_DESC dsDesc = {};
 	dsDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1615,7 +1651,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	dsDesc.DepthOrArraySize = 1;
 	dsDesc.MipLevels = (UINT16)mipLevels;
 	dsDesc.Format = GetTypelessDepthStencilFormat(format);
-	dsDesc.SampleDesc.Count = 1;
+	dsDesc.SampleDesc.Count = sampleCount;
 	dsDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	dsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
@@ -1637,8 +1673,16 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 
 		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
 		dsvDesc.Format = format;
-		dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-		dsvDesc.Texture2D.MipSlice = mip;
+
+		if (sampleCount > 1)
+		{
+			dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+		}
+		else
+		{
+			dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+			dsvDesc.Texture2D.MipSlice = mip;
+		}
 
 		GetDevice()->CreateDepthStencilView(rtResource->m_d3dResource, &dsvDesc, dsv);
 		dsvIndices.push_back(dsvIndex);
@@ -1647,9 +1691,17 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	// Cache SRV Description
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.Format = GetSrvDepthFormat(format);
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = mipLevels;
-	srvDesc.Texture2D.MostDetailedMip = 0;
+
+	if (sampleCount > 1)
+	{
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+	}
+	else
+	{
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = mipLevels;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+	}
 
 	auto rt = std::make_unique<FRenderTexture>();
 	rt->m_resource = rtResource;

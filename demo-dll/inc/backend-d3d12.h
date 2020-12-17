@@ -30,6 +30,7 @@ using D3DRootSignature_t = ID3D12RootSignature;
 using PhysicalAlloc_t = std::vector<uint32_t>;
 
 struct IDxcBlob;
+struct FResource;
 
 enum class BindlessResourceType
 {
@@ -55,6 +56,7 @@ struct FCommandList
 	winrt::com_ptr<D3DCommandList_t> m_d3dCmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
 	winrt::com_ptr<D3DFence_t> m_fence;
+	std::unordered_map<FResource*, std::function<void(void)>> m_pendingTransitions;
 	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
 
 	FCommandList() = default;
@@ -188,14 +190,16 @@ namespace RenderBackend12
 		const size_t width,
 		const size_t height,
 		const size_t mipLevels,
-		const size_t depth);
+		const size_t depth,
+		const size_t sampleCount);
 
 	std::unique_ptr<FRenderTexture> CreateDepthStencilTexture(
 		const std::wstring& name,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
-		const size_t mipLevels);
+		const size_t mipLevels,
+		const size_t sampleCount);
 
 	std::unique_ptr<FBindlessResource> CreateBindlessTexture(
 		const std::wstring& name, 
