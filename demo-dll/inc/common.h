@@ -3,7 +3,7 @@
 namespace Settings
 {
 	constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
-	constexpr char k_scenePath[] = CONTENT_DIR "\\metal-rough-spheres\\MetalRoughSpheres.gltf";
+	constexpr char k_scenePath[] = CONTENT_DIR "/metal-rough-spheres/MetalRoughSpheres.gltf";
 }
 
 inline void AssertIfFailed(HRESULT hr)
