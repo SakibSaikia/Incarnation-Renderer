@@ -592,17 +592,20 @@ void FResourceUploadContext::UpdateSubresources(
 
 D3DFence_t* FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
 {
-	D3DFence_t* clFence = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
+	ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
 
 	GetUploadBufferPool()->Retire(m_uploadBuffer, m_copyCommandlist);
 
 	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
+	// Wait for the copy to finish before doing the transitions.
+	D3DCommandQueue_t* queue = owningCL->m_type == D3D12_COMMAND_LIST_TYPE_DIRECT ? GetGraphicsQueue() : GetComputeQueue();
+	queue->Wait(m_copyCommandlist->m_fence.get(), m_copyCommandlist->m_fenceValue);
 	for (auto& transitionCallback : m_pendingTransitions)
 	{
 		transitionCallback(owningCL);
 	}
 
-	return clFence;
+	return m_copyCommandlist->m_fence.get();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
