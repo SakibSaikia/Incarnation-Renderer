@@ -29,7 +29,16 @@ namespace
 
 struct FTextureCache
 {
-	uint32_t CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext);
+	uint32_t CacheTexture(
+		FResourceUploadContext* uploadContext,
+		const std::wstring& name,
+		const DXGI_FORMAT format,
+		const int width,
+		const int height,
+		const int mips,
+		const int bpp,
+		const uint8_t* data);
+
 	void Clear();
 
 	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessResource>> m_cachedTextures;
@@ -195,7 +204,12 @@ void Demo::Tick(float deltaTime)
 	{
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
-		uint32_t fontSrvIndex = s_textureCache.CacheTexture(L"imgui_fonts", &uploader);
+
+		uint8_t* pixels;
+		int width, height, bpp;
+		ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
+
+		uint32_t fontSrvIndex = s_textureCache.CacheTexture(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, bpp, pixels);
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -245,6 +259,7 @@ void Demo::Teardown(HWND& windowHandle)
 		ShaderCompiler::Teardown();
 		ImGui_ImplWin32_Shutdown();
 		ImGui::DestroyContext();
+		Profiling::Teardown();
 	}
 }
 
@@ -292,6 +307,7 @@ void FScene::Reload(const char* filePath)
 	m_scratchIndexBuffer = new uint8_t[maxSize];
 	m_scratchPositionBuffer = new uint8_t[maxSize];
 	m_scratchNormalBuffer = new uint8_t[maxSize];
+	m_scratchUvBuffer = new uint8_t[maxSize];
 
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
 	Matrix RH2LH = Matrix
@@ -325,7 +341,6 @@ void FScene::Reload(const char* filePath)
 	}
 
 	// Create and upload scene buffers
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	FResourceUploadContext uploader{ maxSize };
 	m_meshIndexBuffer = RenderBackend12::CreateBindlessByteAddressBuffer(
 		L"scene_index_buffer",
@@ -348,12 +363,21 @@ void FScene::Reload(const char* filePath)
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		&uploader);
 
+	m_meshUvBuffer = RenderBackend12::CreateBindlessByteAddressBuffer(
+		L"scene_uv_buffer",
+		m_scratchUvBufferOffset,
+		m_scratchUvBuffer,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		&uploader);
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	delete[] m_scratchIndexBuffer;
 	delete[] m_scratchPositionBuffer;
 	delete[] m_scratchNormalBuffer;
+	delete[] m_scratchUvBuffer;
 }
 
 void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
@@ -491,21 +515,77 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		const size_t normalSize = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
 		DebugAssert(normalSize == 3 * sizeof(float));
 
+		// FLOAT2 UV data
+		auto uvIt = primitive.attributes.find("TEXCOORD_0");
+		DebugAssert(uvIt != primitive.attributes.cend());
+		const tinygltf::Accessor& uvAccessor = model.accessors[uvIt->second];
+		const size_t uvSize = tinygltf::GetComponentSizeInBytes(uvAccessor.componentType) * tinygltf::GetNumComponentsInType(uvAccessor.type);
+		DebugAssert(uvSize == 2 * sizeof(float));
+
+		tinygltf::Material material = model.materials[primitive.material];
+
 		FRenderMesh newMesh = {};
 		newMesh.m_name = mesh.name;
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
 		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
 		newMesh.m_indexCount = indexAccessor.count;
+		newMesh.m_materialName = material.name;
+		newMesh.m_emissiveFactor = Vector3{ (float)material.emissiveFactor[0], (float)material.emissiveFactor[1], (float)material.emissiveFactor[2] };
+		newMesh.m_baseColorFactor = Vector3{ (float)material.pbrMetallicRoughness.baseColorFactor[0], (float)material.pbrMetallicRoughness.baseColorFactor[1], (float)material.pbrMetallicRoughness.baseColorFactor[2] };
+		newMesh.m_metallicFactor = (float)material.pbrMetallicRoughness.metallicFactor;
+		newMesh.m_roughnessFactor = (float)material.pbrMetallicRoughness.roughnessFactor;
+		newMesh.m_baseColorTextureIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source], true) : -1;
+		newMesh.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], false) : -1;
+		newMesh.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], false) : -1;
+		newMesh.m_baseColorSamplerIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].sampler]) : -1;
+		newMesh.m_metallicRoughnessSamplerIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].sampler]) : -1;
+		newMesh.m_normalSamplerIndex = material.normalTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.normalTexture.index].sampler]) : -1;
 		m_meshGeo.push_back(newMesh);
 		m_meshTransforms.push_back(parentTransform);
 
 		m_scratchIndexBufferOffset += CopyIndexData(indexAccessor, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
 		m_scratchPositionBufferOffset += CopyBufferData(positionAccessor, positionSize, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
 		m_scratchNormalBufferOffset += CopyBufferData(normalAccessor, normalSize, m_scratchNormalBuffer + m_scratchNormalBufferOffset);
+		m_scratchUvBufferOffset += CopyBufferData(uvAccessor, uvSize, m_scratchUvBuffer + m_scratchUvBufferOffset);
 
 		m_meshBounds.push_back(CalcBounds(posIt->second));
 	}
+}
+
+int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
+{
+	DebugAssert(!image.uri.empty(), "Embedded image data is not yet supported.");
+
+	std::wstring name{ image.uri.begin(), image.uri.end() };
+	FResourceUploadContext uploader{ image.image.size() };
+
+	DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+	if (image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4)
+	{
+		format = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+	}
+
+	uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture(
+		&uploader,
+		name,
+		format,
+		image.width,
+		image.height,
+		1,
+		(image.bits * image.component) / 8,
+		image.image.data());
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	return bindlessIndex;
+}
+
+int FScene::LoadSampler(const tinygltf::Sampler& sampler)
+{
+	return -1;
 }
 
 void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Matrix& transform)
@@ -665,7 +745,15 @@ void FView::UpdateViewTransform()
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
 // The returned index is offset to the beginning of the descriptor heap range
-uint32_t FTextureCache::CacheTexture(const std::wstring& name, FResourceUploadContext* uploadContext)
+uint32_t FTextureCache::CacheTexture(
+	FResourceUploadContext* uploadContext, 
+	const std::wstring& name,
+	const DXGI_FORMAT format,
+	const int width,
+	const int height,
+	const int mips,
+	const int bpp,
+	const uint8_t* data)
 {
 	auto search = m_cachedTextures.find(name);
 	if (search != m_cachedTextures.cend())
@@ -674,20 +762,7 @@ uint32_t FTextureCache::CacheTexture(const std::wstring& name, FResourceUploadCo
 	}
 	else
 	{
-		uint8_t* pixels;
-		int width, height, bpp;
-		uint16_t mipLevels;
-		DXGI_FORMAT format;
-
-		if (name == L"imgui_fonts")
-		{
-			ImGuiIO& io = ImGui::GetIO();
-			io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
-			format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			mipLevels = 1;
-		}
-
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, mipLevels, bpp, pixels, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, mips, bpp, data, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, uploadContext);
 		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
 	}
 }

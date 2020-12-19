@@ -48,37 +48,37 @@ Profiling::ScopedCpuEvent::~ScopedCpuEvent()
 Profiling::ScopedGpuEvent::ScopedGpuEvent(FCommandList* cmdList, const wchar_t* eventName, uint64_t color) :
 	m_cmdList{ cmdList }
 {
-	ThreadId currentThreadId = GetCurrentThreadId();
-	if (s_gpuThreadLog.find(currentThreadId) == s_gpuThreadLog.cend())
-	{
-		s_gpuThreadLog[currentThreadId] = MicroProfileThreadLogGpuAlloc();
-	}
+	//ThreadId currentThreadId = GetCurrentThreadId();
+	//if (s_gpuThreadLog.find(currentThreadId) == s_gpuThreadLog.cend())
+	//{
+	//	s_gpuThreadLog[currentThreadId] = MicroProfileThreadLogGpuAlloc();
+	//}
 
-	m_uprofLog = s_gpuThreadLog[currentThreadId];
+	//m_uprofLog = s_gpuThreadLog[currentThreadId];
 
 	PIXBeginEvent(cmdList->m_d3dCmdList.get(), color, eventName);
-	MICROPROFILE_GPU_BEGIN(cmdList->m_d3dCmdList.get(), m_uprofLog);
+	//MICROPROFILE_GPU_BEGIN(cmdList->m_d3dCmdList.get(), m_uprofLog);
 
-	char name[128];
-	WideCharToMultiByte(CP_UTF8, 0, eventName, -1, name, 128, NULL, NULL);
+	//char name[128];
+	//WideCharToMultiByte(CP_UTF8, 0, eventName, -1, name, 128, NULL, NULL);
 
-	m_uprofToken = MicroProfileGetToken("GPU", name, color, MicroProfileTokenTypeGpu);
-	m_uprofTick = MicroProfileGpuEnterInternal(m_uprofLog, m_uprofToken);
+	//m_uprofToken = MicroProfileGetToken("GPU", name, color, MicroProfileTokenTypeGpu);
+	//m_uprofTick = MicroProfileGpuEnterInternal(m_uprofLog, m_uprofToken);
 }
 
 Profiling::ScopedGpuEvent::~ScopedGpuEvent()
 {
-	MicroProfileGpuLeaveInternal(m_uprofLog, m_uprofToken, m_uprofTick);
+	/*MicroProfileGpuLeaveInternal(m_uprofLog, m_uprofToken, m_uprofTick);*/
 
 	PIXEndEvent(m_cmdList->m_d3dCmdList.get());
-	uint64_t fence = MICROPROFILE_GPU_END(m_uprofLog);
+	/*uint64_t fence = MICROPROFILE_GPU_END(m_uprofLog);
 
 	m_cmdList->m_postExecuteCallbacks.push_back(
 		[fence, uprofQueue = GetQueue(m_cmdList->m_type)]()
 		{
 			MICROPROFILE_GPU_SUBMIT(uprofQueue, fence);
 		}
-	);
+	);*/
 }
 
 void Profiling::Initialize()
@@ -89,6 +89,12 @@ void Profiling::Initialize()
 	MicroProfileOnThreadCreate("Main");
 	MicroProfileSetEnableAllGroups(true);
 	MicroProfileSetForceMetaCounters(true);
+}
+
+void Profiling::Teardown()
+{
+	MICROPROFILE_GPU_FREE_QUEUE(s_queueGraphics);
+	MICROPROFILE_GPU_FREE_QUEUE(s_queueCompute);
 }
 
 void Profiling::Flip()

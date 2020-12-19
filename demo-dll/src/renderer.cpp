@@ -39,6 +39,7 @@ namespace Jobs
 				uint32_t sceneIndexBufferBindlessIndex;
 				uint32_t scenePositionBufferBindlessIndex;
 				uint32_t sceneNormalBufferBindlessIndex;
+				uint32_t sceneUvBufferBindlessIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -52,9 +53,10 @@ namespace Jobs
 					cbDest->sceneIndexBufferBindlessIndex = scene->m_meshIndexBuffer->m_srvIndex;
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
 					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
+					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
 				});
 
-			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(3, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// View constant buffer
 			struct ViewCbLayout
@@ -74,12 +76,12 @@ namespace Jobs
 					cbDest->projectionTransform = view->m_projectionTransform;
 				});
 
-			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-			d3dCmdList->SetGraphicsRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::Texture2DBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::BufferBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::Texture2DBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::BufferBegin));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -165,21 +167,61 @@ namespace Jobs
 			{
 				const FRenderMesh& mesh = scene->m_meshGeo[meshIndex];
 
+				// Geometry constants
 				struct MeshCbLayout
 				{
 					Matrix localToWorldTransform;
 					uint32_t indexOffset;
 					uint32_t positionOffset;
 					uint32_t normalOffset;
+					uint32_t uvOffset;
 				} meshCb =
 				{
 					scene->m_meshTransforms[meshIndex],
 					scene->m_meshGeo[meshIndex].m_indexOffset,
 					scene->m_meshGeo[meshIndex].m_positionOffset,
-					scene->m_meshGeo[meshIndex].m_normalOffset
-				};				
+					scene->m_meshGeo[meshIndex].m_normalOffset,
+					scene->m_meshGeo[meshIndex].m_uvOffset
+				};	
 
 				d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(MeshCbLayout)/4, &meshCb, 0);
+
+				// Material constants
+				struct MaterialCbLayout
+				{
+					Vector3 emissiveFactor;
+					float metallicFactor;
+					Vector3 baseColorFactor;
+					float roughnessFactor;
+					int baseColorTextureIndex;
+					int metallicRoughnessTextureIndex;
+					int normalTextureIndex;
+					int baseColorSamplerIndex;
+					int metallicRoughnessSamplerIndex;
+					int normalSamplerIndex;
+				};
+
+				std::unique_ptr<FTransientBuffer> materialCb = RenderBackend12::CreateTransientBuffer(
+					L"material_cb",
+					sizeof(MaterialCbLayout),
+					cmdList,
+					[&mesh](uint8_t* pDest)
+					{
+						auto cbDest = reinterpret_cast<MaterialCbLayout*>(pDest);
+						cbDest->emissiveFactor = mesh.m_emissiveFactor;
+						cbDest->metallicFactor = mesh.m_metallicFactor;
+						cbDest->baseColorFactor = mesh.m_baseColorFactor;
+						cbDest->roughnessFactor = mesh.m_roughnessFactor;
+						cbDest->baseColorTextureIndex = mesh.m_baseColorTextureIndex;
+						cbDest->metallicRoughnessTextureIndex = mesh.m_metallicRoughnessTextureIndex;
+						cbDest->normalTextureIndex = mesh.m_normalTextureIndex;
+						cbDest->baseColorSamplerIndex = mesh.m_baseColorSamplerIndex;
+						cbDest->metallicRoughnessSamplerIndex = mesh.m_metallicRoughnessSamplerIndex;
+						cbDest->normalSamplerIndex = mesh.m_normalSamplerIndex;
+					});
+
+				d3dCmdList->SetGraphicsRootConstantBufferView(1, materialCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
 				d3dCmdList->DrawInstanced(mesh.m_indexCount, 1, 0, 0);
 			}
 

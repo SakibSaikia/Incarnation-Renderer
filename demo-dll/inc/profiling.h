@@ -30,5 +30,6 @@ namespace Profiling
 	};
 
 	void Initialize();
+	void Teardown();
 	void Flip();
 }
