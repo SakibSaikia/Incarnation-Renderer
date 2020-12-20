@@ -94,42 +94,48 @@ HRESULT ShaderCompiler::CompileShader(
 		result.put()));
 
 	HRESULT hr;
-	result->GetStatus(&hr);
-	if (SUCCEEDED(hr)) 
+	if (result && SUCCEEDED(result->GetStatus(&hr)))
 	{
-		// Compilation result
-		result->GetResult(compiledBlob);
-
-		// Validation
-		DxcCreateInstanceProc dxil_create_func = (DxcCreateInstanceProc)GetProcAddress(s_validationModule, "DxcCreateInstance");
-		winrt::com_ptr<IDxcValidator> validator;
-		AssertIfFailed(dxil_create_func(CLSID_DxcValidator, IID_PPV_ARGS(validator.put())));
-
-		winrt::com_ptr<IDxcOperationResult> signResult;
-		AssertIfFailed(validator->Validate(*compiledBlob, DxcValidatorFlags_InPlaceEdit, signResult.put()));
-
-		signResult->GetStatus(&hr);
 		if (SUCCEEDED(hr))
 		{
-			return signResult->GetResult(compiledBlob);
+			// Compilation result
+			result->GetResult(compiledBlob);
+
+			// Validation
+			DxcCreateInstanceProc dxil_create_func = (DxcCreateInstanceProc)GetProcAddress(s_validationModule, "DxcCreateInstance");
+			winrt::com_ptr<IDxcValidator> validator;
+			AssertIfFailed(dxil_create_func(CLSID_DxcValidator, IID_PPV_ARGS(validator.put())));
+
+			winrt::com_ptr<IDxcOperationResult> signResult;
+			AssertIfFailed(validator->Validate(*compiledBlob, DxcValidatorFlags_InPlaceEdit, signResult.put()));
+
+			signResult->GetStatus(&hr);
+			if (SUCCEEDED(hr))
+			{
+				return signResult->GetResult(compiledBlob);
+			}
+			else
+			{
+				winrt::com_ptr<IDxcBlobEncoding> error;
+				signResult->GetErrorBuffer(error.put());
+				return hr;
+			}
 		}
 		else
 		{
 			winrt::com_ptr<IDxcBlobEncoding> error;
-			signResult->GetErrorBuffer(error.put());
+			result->GetErrorBuffer(error.put());
+
+			winrt::com_ptr<IDxcBlobEncoding> errorMessage;
+			library->GetBlobAsUtf16(error.get(), errorMessage.put());
+			OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
+
 			return hr;
 		}
 	}
 	else
 	{
-		winrt::com_ptr<IDxcBlobEncoding> error;
-		result->GetErrorBuffer(error.put());
-
-		winrt::com_ptr<IDxcBlobEncoding> errorMessage;
-		library->GetBlobAsUtf16(error.get(), errorMessage.put());
-		OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
-
-		return hr;
+		OutputDebugStringA("Shader compilation failed");
 	}
 }
 

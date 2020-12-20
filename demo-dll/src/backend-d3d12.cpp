@@ -1287,12 +1287,12 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std:
 	if (search != s_shaderCache.cend())
 	{
 		if (search->second.m_timestamp != currentTimestamp &&
-			ShaderCompiler::CompileShader(
+			SUCCEEDED(ShaderCompiler::CompileShader(
 				shaderDesc.m_filename,
 				shaderDesc.m_entrypoint,
 				shaderDesc.m_defines,
 				profile,
-				search->second.m_blob.put()))
+				search->second.m_blob.put())))
 		{
 			search->second.m_timestamp = currentTimestamp;
 			return search->second.m_blob.get();
