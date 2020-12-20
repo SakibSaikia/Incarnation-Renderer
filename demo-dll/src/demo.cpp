@@ -529,6 +529,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
 		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
+		newMesh.m_uvOffset = m_scratchUvBufferOffset / uvSize;
 		newMesh.m_indexCount = indexAccessor.count;
 		newMesh.m_materialName = material.name;
 		newMesh.m_emissiveFactor = Vector3{ (float)material.emissiveFactor[0], (float)material.emissiveFactor[1], (float)material.emissiveFactor[2] };
