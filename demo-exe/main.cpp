@@ -185,16 +185,17 @@ bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32
 		nullptr
 	);
 
-	if (windowHandle == nullptr)
+	if (!windowHandle)
 	{
 		MessageBox(nullptr, TEXT("Failed to create window"), nullptr, 0);
 		return false;
 	}
-
-	ShowWindow(windowHandle, SW_SHOW);
-	UpdateWindow(windowHandle);
-
-	return true;
+	else
+	{
+		ShowWindow(windowHandle, SW_SHOW);
+		UpdateWindow(windowHandle);
+		return true;
+	}
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nShowCmd)
