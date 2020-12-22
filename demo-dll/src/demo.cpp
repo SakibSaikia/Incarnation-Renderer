@@ -35,9 +35,7 @@ struct FTextureCache
 		const DXGI_FORMAT format,
 		const int width,
 		const int height,
-		const int mips,
-		const int bpp,
-		const uint8_t* data);
+		const std::vector<DirectX::Image>& images);
 
 	void Clear();
 
@@ -206,10 +204,18 @@ void Demo::Tick(float deltaTime)
 		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
 
 		uint8_t* pixels;
-		int width, height, bpp;
+		int bpp, width, height;
 		ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
 
-		uint32_t fontSrvIndex = s_textureCache.CacheTexture(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1, bpp, pixels);
+		DirectX::Image img;
+		img.width = width;
+		img.height = height;
+		img.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		img.pixels = pixels;
+
+		AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
+
+		uint32_t fontSrvIndex = s_textureCache.CacheTexture(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, {img});
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -558,24 +564,57 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 {
 	DebugAssert(!image.uri.empty(), "Embedded image data is not yet supported.");
 
-	std::wstring name{ image.uri.begin(), image.uri.end() };
-	FResourceUploadContext uploader{ image.image.size() };
-
-	DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+	DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN;
+	DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN;
 	if (image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4)
 	{
-		format = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+		srcFormat = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+		compressedFormat = srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
 	}
 
+	// Source image
+	size_t bpp = (image.bits * image.component) / 8;
+	DirectX::Image srcImage = {};
+	srcImage.width = image.width;
+	srcImage.height = image.height;
+	srcImage.format = srcFormat;
+	srcImage.rowPitch = bpp * image.width;
+	srcImage.slicePitch = srcImage.rowPitch * image.height;
+	srcImage.pixels = (uint8_t*)image.image.data();
+
+	// Calculate mips upto 4x4 for block compression
+	int numMips = 0;
+	size_t width = image.width, height = image.height; 
+	while (width >= 4 && height >= 4)
+	{
+		numMips++;
+		width = width >> 1;
+		height = height >> 1;
+	}
+
+	// Generate mips
+	DirectX::ScratchImage mipchain = {};
+	AssertIfFailed(DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain));
+
+	// Block compression
+	DirectX::ScratchImage compressedScratch;
+	AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+
+	std::vector<DirectX::Image> mipImages(numMips);
+	for (int mipIndex = 0; mipIndex < numMips; ++mipIndex)
+	{
+		memcpy(&mipImages[mipIndex], compressedScratch.GetImage(mipIndex, 0, 0), sizeof(DirectX::Image));
+	}
+
+	std::wstring name{ image.uri.begin(), image.uri.end() };
+	FResourceUploadContext uploader{ image.image.size() };
 	uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture(
 		&uploader,
 		name,
-		format,
-		image.width,
-		image.height,
-		1,
-		(image.bits * image.component) / 8,
-		image.image.data());
+		compressedFormat,
+		srcImage.width,
+		srcImage.height,
+		mipImages);
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
@@ -752,9 +791,7 @@ uint32_t FTextureCache::CacheTexture(
 	const DXGI_FORMAT format,
 	const int width,
 	const int height,
-	const int mips,
-	const int bpp,
-	const uint8_t* data)
+	const std::vector<DirectX::Image>& images)
 {
 	auto search = m_cachedTextures.find(name);
 	if (search != m_cachedTextures.cend())
@@ -763,7 +800,7 @@ uint32_t FTextureCache::CacheTexture(
 	}
 	else
 	{
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, mips, bpp, data, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, images, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, uploadContext);
 		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
 	}
 }

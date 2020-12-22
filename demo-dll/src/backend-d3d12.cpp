@@ -514,24 +514,22 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 
 void FResourceUploadContext::UpdateSubresources(
 	D3DResource_t* destinationResource,
-	const uint32_t firstSubresource,
-	const uint32_t numSubresources,
-	D3D12_SUBRESOURCE_DATA* srcData,
+	const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 	std::function<void(FCommandList*)> transition)
 {
 	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
 	UINT64 totalBytes = 0;
-	auto layouts = std::make_unique<D3D12_PLACED_SUBRESOURCE_FOOTPRINT[]>(numSubresources);
-	auto rowSizeInBytes = std::make_unique<UINT64[]>(numSubresources);
-	auto numRows = std::make_unique<UINT[]>(numSubresources);
+	std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(srcData.size());
+	std::vector<UINT64> rowSizeInBytes(srcData.size());
+	std::vector<UINT> numRows(srcData.size());
 
 	D3D12_RESOURCE_DESC destinationDesc = destinationResource->GetDesc();
-	GetDevice()->GetCopyableFootprints(&destinationDesc, firstSubresource, numSubresources, m_currentOffset, layouts.get(), numRows.get(), rowSizeInBytes.get(), &totalBytes);
+	GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), m_currentOffset, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
 
 	size_t capacity = m_sizeInBytes - m_currentOffset;
 	DebugAssert(totalBytes <= capacity, "Upload buffer is too small!");
 
-	for (UINT i = 0; i < numSubresources; ++i)
+	for (UINT i = 0; i < srcData.size(); ++i)
 	{
 		D3D12_SUBRESOURCE_DATA src;
 		src.pData = srcData[i].pData;
@@ -570,7 +568,7 @@ void FResourceUploadContext::UpdateSubresources(
 	}
 	else
 	{
-		for (UINT i = 0; i < numSubresources; ++i)
+		for (UINT i = 0; i < srcData.size(); ++i)
 		{
 			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
 			srcLocation.pResource = m_uploadBuffer->m_d3dResource;
@@ -580,7 +578,7 @@ void FResourceUploadContext::UpdateSubresources(
 			D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
 			dstLocation.pResource = destinationResource;
 			dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-			dstLocation.SubresourceIndex = i + firstSubresource;
+			dstLocation.SubresourceIndex = i;
 
 			m_copyCommandlist->m_d3dCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 		}
@@ -1721,9 +1719,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
-	const size_t miplevels,
-	const size_t bytesPerPixel,
-	const uint8_t* pData,
+	const std::vector<DirectX::Image>& images,
 	D3D12_RESOURCE_STATES resourceState,
 	FResourceUploadContext* uploadContext)
 {
@@ -1742,7 +1738,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 		desc.Width = width;
 		desc.Height = height;
 		desc.DepthOrArraySize = 1;
-		desc.MipLevels = miplevels;
+		desc.MipLevels = images.size();
 		desc.Format = format;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
@@ -1755,15 +1751,17 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 
 	// Upload texture data
 	{
-		D3D12_SUBRESOURCE_DATA srcData;
-		srcData.pData = pData;
-		srcData.RowPitch = width * bytesPerPixel;
-		srcData.SlicePitch = height * srcData.RowPitch;
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(images.size());
+		for(int mipIndex = 0; mipIndex < images.size(); ++mipIndex)
+		{
+			srcData[mipIndex].pData = images[mipIndex].pixels;
+			srcData[mipIndex].RowPitch = images[mipIndex].rowPitch;
+			srcData[mipIndex].SlicePitch = images[mipIndex].slicePitch;
+		}
+
 		uploadContext->UpdateSubresources(
 			newTexture->m_resource->m_d3dResource,
-			0,
-			1,
-			&srcData,
+			srcData,
 			[resource = newTexture->m_resource, resourceState](FCommandList* cmdList)
 			{
 				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
@@ -1778,7 +1776,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = miplevels;
+		srvDesc.Texture2D.MipLevels = images.size();
 		srvDesc.Texture2D.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
@@ -1822,15 +1820,13 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuf
 
 	// Upload buffer data
 	{
-		D3D12_SUBRESOURCE_DATA srcData;
-		srcData.pData = pData;
-		srcData.RowPitch = size;
-		srcData.SlicePitch = size;
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
+		srcData[0].pData = pData;
+		srcData[0].RowPitch = size;
+		srcData[0].SlicePitch = size;
 		uploadContext->UpdateSubresources(
 			newBuffer->m_resource->m_d3dResource,
-			0,
-			1,
-			&srcData,
+			srcData,
 			[resource = newBuffer->m_resource, resourceState](FCommandList* cmdList)
 			{
 				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);

@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
+#include <DirectXTex.h>
 #include <winrt/base.h>
 #include <pix3.h>
 #include <vector>
@@ -126,9 +127,7 @@ public:
 
 	void UpdateSubresources(
 		D3DResource_t* destinationResource,
-		const uint32_t firstSubresource,
-		const uint32_t numSubresources,
-		D3D12_SUBRESOURCE_DATA* srcData,
+		const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 		std::function<void(FCommandList*)> transition);
 
 	D3DFence_t* SubmitUploads(FCommandList* owningCL);
@@ -206,9 +205,7 @@ namespace RenderBackend12
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
-		const size_t miplevels,
-		const size_t bytesPerPixel,
-		const uint8_t* pData,
+		const std::vector<DirectX::Image>& images,
 		D3D12_RESOURCE_STATES resourceState,
 		FResourceUploadContext* uploadContext);
 
