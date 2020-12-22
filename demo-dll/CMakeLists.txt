@@ -38,7 +38,8 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/tinygltf"
     "${CMAKE_SOURCE_DIR}/ext/json"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/inc"
-    "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime")
+    "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime"
+    "${CMAKE_SOURCE_DIR}/ext/directXTex/inc")
 
 # Macro defines
 add_compile_definitions(
@@ -73,11 +74,22 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND
                     ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.pdb)
 endif()
 
-target_link_directories(
-    libdemo 
-    PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
-    PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
-    PRIVATE "${CMAKE_SOURCE_DIR}/ext/pix/bin/x64")
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    target_link_directories(
+        libdemo 
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/pix/bin/x64"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/directXTex/lib/x64/debug")
+else()
+    target_link_directories(
+        libdemo 
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/pix/bin/x64"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/directXTex/lib/x64/release")
+
+endif()
 
 target_link_libraries(
     libdemo 
@@ -87,4 +99,5 @@ target_link_libraries(
     PRIVATE Ws2_32.lib
     PRIVATE dxcompiler.lib
     PRIVATE spookyhash.lib
-    PRIVATE WinPixEventRuntime.lib)
+    PRIVATE WinPixEventRuntime.lib
+    PRIVATE DirectXTex.lib)
