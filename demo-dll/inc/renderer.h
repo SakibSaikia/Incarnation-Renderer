@@ -43,14 +43,14 @@ struct FCamera
 
 struct FScene
 {
-	void Reload(const char* filePath);
+	void Reload(const std::string& filename);
 	void LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
 
 	// Scene file
-	std::string m_sceneFilePath = {};
+	std::string m_sceneFilename = {};
 
 	// Scene entity lists
 	std::vector<FRenderMesh> m_meshGeo;

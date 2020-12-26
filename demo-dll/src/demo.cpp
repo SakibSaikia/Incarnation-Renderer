@@ -164,11 +164,11 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 void Demo::Tick(float deltaTime)
 {
 	// Reload scene file if required
-	if (s_scene.m_sceneFilePath.empty() ||
-		s_scene.m_sceneFilePath != Settings::k_scenePath)
+	if (s_scene.m_sceneFilename.empty() ||
+		s_scene.m_sceneFilename != Settings::k_sceneFilename)
 	{
 		RenderBackend12::FlushGPU();
-		s_scene.Reload(Settings::k_scenePath);
+		s_scene.Reload(Settings::k_sceneFilename);
 		s_view.Reset(s_scene);
 	}
 
@@ -278,14 +278,14 @@ void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 //														Scene
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
-void FScene::Reload(const char* filePath)
+void FScene::Reload(const std::string& filename)
 {
 	tinygltf::TinyGLTF loader;
 	std::string errors, warnings;
 
 	// Load GLTF
 	tinygltf::Model model;
-	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, Settings::k_scenePath);
+	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, GetFilepathA(filename));
 
 	if (!warnings.empty())
 	{
@@ -298,7 +298,7 @@ void FScene::Reload(const char* filePath)
 	}
 
 	DebugAssert(ok, "Failed to parse glTF");
-	m_sceneFilePath = filePath;
+	m_sceneFilename = filename;
 
 	// Clear previous scene
 	Clear();
