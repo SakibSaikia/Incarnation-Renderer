@@ -97,12 +97,43 @@ namespace
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC GetNullSRVDesc(D3D12_SRV_DIMENSION viewDimension)
 	{
-		DXGI_FORMAT format = (viewDimension == D3D12_SRV_DIMENSION_BUFFER ? DXGI_FORMAT_R32_FLOAT : DXGI_FORMAT_R8G8B8A8_UNORM);
+		DXGI_FORMAT format = {};
+		switch (viewDimension)
+		{
+		case D3D12_SRV_DIMENSION_BUFFER: 
+			format = DXGI_FORMAT_R32_FLOAT; 
+			break;
+		case D3D12_SRV_DIMENSION_TEXTURE2D: 
+		case D3D12_SRV_DIMENSION_TEXTURECUBE:
+			format = DXGI_FORMAT_R8G8B8A8_UNORM; 
+			break;
+		default:
+			DebugAssert(false, "Unsupported");
+		}
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
 		desc.Format = format;
 		desc.ViewDimension = viewDimension;
 		desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		return desc;
+	}
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC GetNullUavDesc(D3D12_UAV_DIMENSION viewDimension)
+	{
+		DXGI_FORMAT format = {};
+		switch (viewDimension)
+		{
+		case D3D12_UAV_DIMENSION_TEXTURE2D:
+		case D3D12_UAV_DIMENSION_TEXTURE2DARRAY:
+			format = DXGI_FORMAT_R8G8B8A8_UNORM; 
+			break;
+		default:
+			DebugAssert(false, "Unsupported");
+		}
+
+		D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
+		desc.Format = format;
+		desc.ViewDimension = viewDimension;
 		return desc;
 	}
 
@@ -730,6 +761,8 @@ public:
 	void Initialize(D3DDescriptorHeap_t* bindlessHeap)
 	{
 		// Initialize with null descriptors and cache available indices
+
+		// Texture2D
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 		for (int i = (uint32_t)BindlessIndexRange::Texture2DBegin; i <= (uint32_t)BindlessIndexRange::Texture2DEnd; ++i)
 		{
@@ -741,6 +774,7 @@ public:
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(i);
 		}
 
+		// Buffer
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
 		for (int i = (uint32_t)BindlessIndexRange::BufferBegin; i <= (uint32_t)BindlessIndexRange::BufferEnd; ++i)
 		{
@@ -750,6 +784,42 @@ public:
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
 
 			m_indices[(uint32_t)BindlessResourceType::Buffer].push(i);
+		}
+
+		// Texture Cube
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
+		for (int i = (uint32_t)BindlessIndexRange::TextureCubeBegin; i <= (uint32_t)BindlessIndexRange::TextureCubeEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, srv);
+
+			m_indices[(uint32_t)BindlessResourceType::TextureCube].push(i);
+		}
+
+		// RWTexture2D
+		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
+		for (int i = (uint32_t)BindlessIndexRange::RWTexture2DBegin; i <= (uint32_t)BindlessIndexRange::RWTexture2DEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE uav;
+			uav.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, uav);
+
+			m_indices[(uint32_t)BindlessResourceType::RWTexture2D].push(i);
+		}
+
+		// RWTexture2DArray
+		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
+		for (int i = (uint32_t)BindlessIndexRange::RWTexture2DArrayBegin; i <= (uint32_t)BindlessIndexRange::RWTexture2DArrayEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE uav;
+			uav.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, uav);
+
+			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(i);
 		}
 	}
 
@@ -778,6 +848,28 @@ public:
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(index);
 		}
+		else if (index <= (uint32_t)BindlessIndexRange::TextureCubeEnd)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::TextureCube].push(index);
+		}
+		else if (index <= (uint32_t)BindlessIndexRange::RWTexture2DEnd)
+		{
+			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
+			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::RWTexture2D].push(index);
+		}
+		else if (index <= (uint32_t)BindlessIndexRange::RWTexture2DArrayEnd)
+		{
+			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
+			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(index);
+		}
+		else
+		{
+			DebugAssert(false, "Unsupported");
+		}
 	}
 
 	void Clear()
@@ -795,7 +887,16 @@ private:
 FBindlessResource::~FBindlessResource()
 {
 	delete m_resource;
-	GetBindlessPool()->ReturnIndex(m_srvIndex);
+
+	if (m_srvIndex != ~0u)
+	{
+		GetBindlessPool()->ReturnIndex(m_srvIndex);
+	}
+
+	if (m_uavIndex != ~0u)
+	{
+		GetBindlessPool()->ReturnIndex(m_uavIndex);
+	}
 }
 
 
@@ -960,6 +1061,7 @@ namespace RenderBackend12
 {
 #if defined (_DEBUG)
 	winrt::com_ptr<D3DDebug_t> s_debugController;
+	winrt::com_ptr<IDXGraphicsAnalysis> s_graphicsAnalysis;
 #endif
 
 	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
@@ -1054,11 +1156,14 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 {
 	UINT dxgiFactoryFlags = 0;
 
-	// Debug layer
 #if defined(_DEBUG)
+	// Debug Layer
 	AssertIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(s_debugController.put())));
 	s_debugController->EnableDebugLayer();
 	dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
+
+	// Programmatic Capture
+	DXGIGetDebugInterface1(0, IID_PPV_ARGS(s_graphicsAnalysis.put()));
 #endif
 
 	// DXGI Factory
@@ -1357,7 +1462,7 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, c
 	}
 }
 
-winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchGraphicsRootSignature(const FRootsigDesc& rootsig)
+winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(const FRootsigDesc& rootsig)
 {
 	IDxcBlob* rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
 	winrt::com_ptr<D3DRootSignature_t> rs;
@@ -1850,4 +1955,80 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuf
 	}
 
 	return std::move(newBuffer);
+}
+
+std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
+	const std::wstring& name,
+	const DXGI_FORMAT format,
+	const size_t width,
+	const size_t height,
+	const size_t arraySize)
+{
+	auto newUav = std::make_unique<FBindlessResource>();
+
+	// Create resource
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		D3D12_RESOURCE_DESC uavDesc = {};
+		uavDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		uavDesc.Width = width;
+		uavDesc.Height = (UINT)height;
+		uavDesc.DepthOrArraySize = (UINT16)arraySize;
+		uavDesc.MipLevels = 1;
+		uavDesc.Format = format;
+		uavDesc.SampleDesc.Count = 1;
+		uavDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+		uavDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+		newUav->m_resource = new FResource;
+		AssertIfFailed(newUav->m_resource->InitCommittedResource(name, heapProps, uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+	}
+
+	// Descriptor
+	{
+		newUav->m_uavIndex = GetBindlessPool()->FetchIndex(arraySize > 1 ? BindlessResourceType::RWTexture2DArray : BindlessResourceType::RWTexture2D);
+		D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newUav->m_uavIndex);
+
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		uavDesc.Format = format;
+
+		if (arraySize > 1)
+		{
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+			uavDesc.Texture2DArray.MipSlice = 0;
+			uavDesc.Texture2DArray.FirstArraySlice = 0;
+			uavDesc.Texture2DArray.ArraySize = arraySize;
+			uavDesc.Texture2DArray.PlaneSlice = 0;
+		}
+		else
+		{
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+			uavDesc.Texture2D.MipSlice = 0;
+			uavDesc.Texture2D.PlaneSlice = 0;
+		}
+	
+		GetDevice()->CreateUnorderedAccessView(newUav->m_resource->m_d3dResource, nullptr, &uavDesc, uav);
+	}
+
+	return std::move(newUav);
+}
+
+void RenderBackend12::BeginCapture()
+{
+	if (s_graphicsAnalysis)
+	{
+		s_graphicsAnalysis->BeginCapture();
+	}
+}
+
+void RenderBackend12::EndCapture()
+{
+	if (s_graphicsAnalysis)
+	{
+		s_graphicsAnalysis->EndCapture();
+	}
 }

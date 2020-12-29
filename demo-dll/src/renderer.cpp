@@ -29,7 +29,7 @@ namespace Jobs
 			depthBuffer->Transition(cmdList, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"rootsig.hlsl", L"graphics_rootsig_main" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			// Frame constant buffer
@@ -307,7 +307,7 @@ namespace Jobs
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
 			}
 
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchGraphicsRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"rootsig.hlsl", L"imgui_rootsig" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 			rootsig->SetName(L"imgui_rootsig");
 

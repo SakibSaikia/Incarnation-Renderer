@@ -7,6 +7,7 @@
 #include <DirectXTex.h>
 #include <winrt/base.h>
 #include <pix3.h>
+#include <DXProgrammableCapture.h>
 #include <vector>
 #include <string>
 #include <functional>
@@ -37,6 +38,9 @@ enum class BindlessResourceType
 {
 	Buffer,
 	Texture2D,
+	TextureCube,
+	RWTexture2D,
+	RWTexture2DArray,
 	Count
 };
 
@@ -46,6 +50,12 @@ enum class BindlessIndexRange : uint32_t
 	BufferEnd = BufferBegin + 999,
 	Texture2DBegin,
 	Texture2DEnd = Texture2DBegin + 999,
+	TextureCubeBegin,
+	TextureCubeEnd = TextureCubeBegin + 999,
+	RWTexture2DBegin,
+	RWTexture2DEnd = RWTexture2DBegin + 999,
+	RWTexture2DArrayBegin,
+	RWTexture2DArrayEnd = RWTexture2DArrayBegin + 999,
 	TotalCount
 };
 
@@ -95,6 +105,7 @@ struct FBindlessResource
 {
 	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
+	uint32_t m_uavIndex = ~0u;
 
 	~FBindlessResource();
 };
@@ -156,7 +167,7 @@ namespace RenderBackend12
 	D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
 
 	// Root Signatures
-	winrt::com_ptr<D3DRootSignature_t> FetchGraphicsRootSignature(const FRootsigDesc& rootsig);
+	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(const FRootsigDesc& rootsig);
 
 	// Pipeline States
 	D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
@@ -215,4 +226,15 @@ namespace RenderBackend12
 		const uint8_t* pData,
 		D3D12_RESOURCE_STATES resourceState,
 		FResourceUploadContext* uploadContext);
+
+	std::unique_ptr<FBindlessResource> CreateBindlessUavTexture(
+		const std::wstring& name,
+		const DXGI_FORMAT format,
+		const size_t width,
+		const size_t height,
+		const size_t arraySize);
+
+	// Programmatic Captures
+	void BeginCapture();
+	void EndCapture();
 }

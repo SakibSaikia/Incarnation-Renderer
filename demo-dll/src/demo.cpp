@@ -29,13 +29,15 @@ namespace
 
 struct FTextureCache
 {
-	uint32_t CacheTexture(
+	uint32_t CacheTexture2D(
 		FResourceUploadContext* uploadContext,
 		const std::wstring& name,
 		const DXGI_FORMAT format,
 		const int width,
 		const int height,
 		const std::vector<DirectX::Image>& images);
+
+	uint32_t CacheHdrTexture(const std::wstring& name);
 
 	void Clear();
 
@@ -172,6 +174,8 @@ void Demo::Tick(float deltaTime)
 		s_view.Reset(s_scene);
 	}
 
+	s_textureCache.CacheHdrTexture(L"lilienstein_2k.hdr");
+
 	// Tick components
 	s_controller.Tick(deltaTime);
 	s_view.Tick(deltaTime, &s_controller);
@@ -215,7 +219,7 @@ void Demo::Tick(float deltaTime)
 
 		AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
 
-		uint32_t fontSrvIndex = s_textureCache.CacheTexture(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, {img});
+		uint32_t fontSrvIndex = s_textureCache.CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, {img});
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -608,7 +612,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 
 	std::wstring name{ image.uri.begin(), image.uri.end() };
 	FResourceUploadContext uploader{ image.image.size() };
-	uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture(
+	uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
 		&uploader,
 		name,
 		compressedFormat,
@@ -785,7 +789,7 @@ void FView::UpdateViewTransform()
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
 // The returned index is offset to the beginning of the descriptor heap range
-uint32_t FTextureCache::CacheTexture(
+uint32_t FTextureCache::CacheTexture2D(
 	FResourceUploadContext* uploadContext, 
 	const std::wstring& name,
 	const DXGI_FORMAT format,
@@ -800,7 +804,87 @@ uint32_t FTextureCache::CacheTexture(
 	}
 	else
 	{
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, images, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, images, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, uploadContext);
+		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
+	}
+}
+
+uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
+{
+	auto search = m_cachedTextures.find(name);
+	if (search != m_cachedTextures.cend())
+	{
+		return search->second->m_srvIndex - (uint32_t)BindlessIndexRange::TextureCubeBegin;
+	}
+	else
+	{
+		RenderBackend12::BeginCapture();
+
+		// Read HDR spehere map from file
+		DirectX::TexMetadata metadata;
+		DirectX::ScratchImage scratch;
+		AssertIfFailed(DirectX::LoadFromHDRFile(GetFilepathW(name).c_str(), &metadata, scratch));
+
+		// Create the 2D sphere map texture for compute shader processing
+		FResourceUploadContext uploadContext{ scratch.GetPixelsSize() };
+		DirectX::Image image;
+		memcpy(&image, scratch.GetImage(0, 0, 0), sizeof(DirectX::Image));
+		auto srcHdrTex = RenderBackend12::CreateBindlessTexture(name, metadata.format, metadata.width, metadata.height, { image }, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &uploadContext);
+
+		// Compute CL
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		cmdList->SetName(L"hdr_to_cubemap");
+
+		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+		SCOPED_GPU_EVENT(cmdList, L"hdr_to_cubemap", 0);
+		uploadContext.SubmitUploads(cmdList);
+
+		size_t cubemapSize = metadata.height;
+		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"texcube_uav", metadata.format, cubemapSize, cubemapSize, 6);
+
+		// Root Signature
+		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig" });
+		d3dCmdList->SetComputeRootSignature(rootsig.get());
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"cubemapgen.hlsl", L"cs_main", L"" }, L"cs_6_4");
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig.get();
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		// Shader resources
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		struct CbLayout
+		{
+			uint32_t hdrTextureIndex;
+			uint32_t cubemapUavIndex;
+		} computeCb =
+		{
+			srcHdrTex->m_srvIndex,
+			texCubeUav->m_uavIndex
+		};
+
+		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
+		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::Texture2DBegin));
+		d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::RWTexture2DArrayBegin));
+
+		// Dispatch
+		size_t threadGroupCount = std::ceil(cubemapSize / 16);
+		d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+		RenderBackend12::EndCapture();
+
+		m_cachedTextures[name] = std::move(srcHdrTex);
 		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
 	}
 }
