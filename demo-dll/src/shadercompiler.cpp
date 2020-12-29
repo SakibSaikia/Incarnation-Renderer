@@ -9,7 +9,7 @@
 namespace Settings
 {
 #if defined (_DEBUG)
-	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-WX" };
+	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-Od", L"-WX" };
 #else
 	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr" };
 #endif
