@@ -866,10 +866,12 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 		{
 			uint32_t hdrTextureIndex;
 			uint32_t cubemapUavIndex;
+			uint32_t cubemapSize;
 		} computeCb =
 		{
 			srcHdrTex->m_srvIndex,
-			texCubeUav->m_uavIndex
+			texCubeUav->m_uavIndex,
+			(uint32_t)cubemapSize
 		};
 
 		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
