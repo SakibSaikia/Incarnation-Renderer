@@ -44,7 +44,16 @@ enum class BindlessResourceType
 	Count
 };
 
-enum class BindlessIndexRange : uint32_t
+enum class BindlessDescriptorType
+{
+	Buffer,
+	Texture2D,
+	TextureCube,
+	RWTexture2D,
+	RWTexture2DArray
+};
+
+enum class BindlessDescriptorRange : uint32_t
 {
 	BufferBegin,
 	BufferEnd = BufferBegin + 999,
@@ -184,8 +193,9 @@ namespace RenderBackend12
 
 	// Descriptor Management
 	D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();
-	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
-	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex);
+	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
+	uint32_t GetDescriptorTableOffset(BindlessDescriptorType descriptorType, uint32_t descriptorIndex);
 
 	// Resource Management
 	std::unique_ptr<FTransientBuffer> CreateTransientBuffer(

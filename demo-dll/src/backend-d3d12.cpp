@@ -764,7 +764,7 @@ public:
 
 		// Texture2D
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
-		for (int i = (uint32_t)BindlessIndexRange::Texture2DBegin; i <= (uint32_t)BindlessIndexRange::Texture2DEnd; ++i)
+		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -776,7 +776,7 @@ public:
 
 		// Buffer
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
-		for (int i = (uint32_t)BindlessIndexRange::BufferBegin; i <= (uint32_t)BindlessIndexRange::BufferEnd; ++i)
+		for (int i = (uint32_t)BindlessDescriptorRange::BufferBegin; i <= (uint32_t)BindlessDescriptorRange::BufferEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -788,7 +788,7 @@ public:
 
 		// Texture Cube
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
-		for (int i = (uint32_t)BindlessIndexRange::TextureCubeBegin; i <= (uint32_t)BindlessIndexRange::TextureCubeEnd; ++i)
+		for (int i = (uint32_t)BindlessDescriptorRange::TextureCubeBegin; i <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -800,7 +800,7 @@ public:
 
 		// RWTexture2D
 		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
-		for (int i = (uint32_t)BindlessIndexRange::RWTexture2DBegin; i <= (uint32_t)BindlessIndexRange::RWTexture2DEnd; ++i)
+		for (int i = (uint32_t)BindlessDescriptorRange::RWTexture2DBegin; i <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav;
 			uav.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -812,7 +812,7 @@ public:
 
 		// RWTexture2DArray
 		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
-		for (int i = (uint32_t)BindlessIndexRange::RWTexture2DArrayBegin; i <= (uint32_t)BindlessIndexRange::RWTexture2DArrayEnd; ++i)
+		for (int i = (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin; i <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav;
 			uav.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
@@ -836,31 +836,31 @@ public:
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, index);
 
-		if (index <= (uint32_t)BindlessIndexRange::BufferEnd)
+		if (index <= (uint32_t)BindlessDescriptorRange::BufferEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::Buffer].push(index);
 		}
-		else if (index <= (uint32_t)BindlessIndexRange::Texture2DEnd)
+		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(index);
 		}
-		else if (index <= (uint32_t)BindlessIndexRange::TextureCubeEnd)
+		else if (index <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::TextureCube].push(index);
 		}
-		else if (index <= (uint32_t)BindlessIndexRange::RWTexture2DEnd)
+		else if (index <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::RWTexture2D].push(index);
 		}
-		else if (index <= (uint32_t)BindlessIndexRange::RWTexture2DArrayEnd)
+		else if (index <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, descriptor);
@@ -1202,7 +1202,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	// Bindless SRV heap
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
-		cbvSrvUavHeapDesc.NumDescriptors = (uint32_t)BindlessIndexRange::TotalCount;
+		cbvSrvUavHeapDesc.NumDescriptors = (uint32_t)BindlessDescriptorRange::TotalCount;
 		cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		AssertIfFailed(
@@ -1600,22 +1600,54 @@ D3DDescriptorHeap_t* RenderBackend12::GetBindlessShaderResourceHeap()
 	return GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
+D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex)
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = GetDescriptorHeap(type)->GetCPUDescriptorHandleForHeapStart().ptr +
-		descriptorIndex * GetDescriptorSize(type);
+	descriptor.ptr = GetDescriptorHeap(descriptorHeapType)->GetCPUDescriptorHandleForHeapStart().ptr +
+		descriptorIndex * GetDescriptorSize(descriptorHeapType);
 
 	return descriptor;
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE type, uint32_t descriptorIndex)
+D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex)
 {
 	D3D12_GPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = GetDescriptorHeap(type)->GetGPUDescriptorHandleForHeapStart().ptr +
-		descriptorIndex * GetDescriptorSize(type);
+	descriptor.ptr = GetDescriptorHeap(descriptorHeapType)->GetGPUDescriptorHandleForHeapStart().ptr +
+		descriptorIndex * GetDescriptorSize(descriptorHeapType);
 
 	return descriptor;
+}
+
+uint32_t RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType descriptorType, uint32_t descriptorIndex)
+{
+	uint32_t offset = 0;
+
+	switch (descriptorType)
+	{
+	case BindlessDescriptorType::Buffer:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::BufferBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::BufferEnd);
+		return offset;
+	case BindlessDescriptorType::Texture2D:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DEnd);
+		return offset;
+	case BindlessDescriptorType::TextureCube:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::TextureCubeBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd);
+		return offset;
+	case BindlessDescriptorType::RWTexture2D:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::RWTexture2DBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd);
+		return offset;
+	case BindlessDescriptorType::RWTexture2DArray:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd);
+		return offset;
+	default:
+		DebugAssert("Not Implemented");
+		return offset;
+	}
 }
 
 std::unique_ptr<FTransientBuffer> RenderBackend12::CreateTransientBuffer(

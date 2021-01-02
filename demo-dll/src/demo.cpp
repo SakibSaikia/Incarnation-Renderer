@@ -788,7 +788,7 @@ void FView::UpdateViewTransform()
 //														Texture Cache
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
-// The returned index is offset to the beginning of the descriptor heap range
+// The returned index is offset to the beginning of the descriptor table range
 uint32_t FTextureCache::CacheTexture2D(
 	FResourceUploadContext* uploadContext, 
 	const std::wstring& name,
@@ -800,12 +800,12 @@ uint32_t FTextureCache::CacheTexture2D(
 	auto search = m_cachedTextures.find(name);
 	if (search != m_cachedTextures.cend())
 	{
-		return search->second->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
+		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, search->second->m_srvIndex);
 	}
 	else
 	{
 		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, images, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, uploadContext);
-		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
+		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, m_cachedTextures[name]->m_srvIndex);
 	}
 }
 
@@ -814,7 +814,7 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 	auto search = m_cachedTextures.find(name);
 	if (search != m_cachedTextures.cend())
 	{
-		return search->second->m_srvIndex - (uint32_t)BindlessIndexRange::TextureCubeBegin;
+		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, search->second->m_srvIndex);
 	}
 	else
 	{
@@ -869,14 +869,14 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 			uint32_t cubemapSize;
 		} computeCb =
 		{
-			srcHdrTex->m_srvIndex,
-			texCubeUav->m_uavIndex,
+			RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
+			RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndex),
 			(uint32_t)cubemapSize
 		};
 
 		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
-		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::Texture2DBegin));
-		d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessIndexRange::RWTexture2DArrayBegin));
+		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+		d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
 
 		// Dispatch
 		size_t threadGroupCount = std::ceil(cubemapSize / 16);
@@ -884,10 +884,12 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
+		RenderBackend12::FlushGPU();
+
 		RenderBackend12::EndCapture();
 
 		m_cachedTextures[name] = std::move(srcHdrTex);
-		return m_cachedTextures[name]->m_srvIndex - (uint32_t)BindlessIndexRange::Texture2DBegin;
+		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, m_cachedTextures[name]->m_srvIndex);
 	}
 }
 

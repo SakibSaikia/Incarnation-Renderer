@@ -16,6 +16,8 @@ Texture2D srvBindless2DTextures[] : register(t0);
 RWTexture2DArray<float3> uavBindless2DTextureArrays[] : register(u0);
 SamplerState bilinearSampler : register(s0);
 
+static const float PI = 3.14159265f;
+
 [numthreads(16,16,1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
@@ -25,11 +27,32 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (dispatchThreadId.x < computeConstants.cubemapSize && 
         dispatchThreadId.y < computeConstants.cubemapSize)
     {
-        float2 uv = dispatchThreadId.xy / (float)computeConstants.cubemapSize.xx;
-        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, 0)] = src.SampleLevel(bilinearSampler, uv, 0).rgb;
+        float2 destUV = dispatchThreadId.xy / (float)computeConstants.cubemapSize.xx;
+        float2 pos = 2.f * destUV - 1.xx;
+
+        float3 faces[6] = {
+            float3(1.f, pos.x, -pos.y),
+            float3(-1.f, pos.x, pos.y),
+            float3(pos.x, 1.f, -pos.y),
+            float3(pos.x, -1.f, pos.y),
+            float3(pos.x, pos.y, 1.f),
+            float3(-pos.x, pos.y, -1.f)
+        };
+
+        for (int i = 0; i < 6; ++i)
+        {
+            float3 p = faces[i];
+            float longitude = atan2(p.y, p.x);
+            float latitude = atan2(p.z, length(p.xy));
+            float2 srcUV = float2((longitude + PI) / (2 * PI), (latitude + 0.5 * PI) / PI);
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(bilinearSampler, srcUV, 0).rgb;
+        }
     }
     else
     {
-        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, 0)] = 0.xxx;
+        for (int i = 0; i < 6; ++i)
+        {
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = 0.xxx;
+        }
     }
 }
