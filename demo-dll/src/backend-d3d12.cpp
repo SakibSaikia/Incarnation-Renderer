@@ -893,9 +893,12 @@ FBindlessResource::~FBindlessResource()
 		GetBindlessPool()->ReturnIndex(m_srvIndex);
 	}
 
-	if (m_uavIndex != ~0u)
+	if (!m_uavIndices.empty())
 	{
-		GetBindlessPool()->ReturnIndex(m_uavIndex);
+		for (const uint32_t uavIndex : m_uavIndices)
+		{
+			GetBindlessPool()->ReturnIndex(uavIndex);
+		}
 	}
 }
 
@@ -1856,7 +1859,8 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
-	const std::vector<DirectX::Image>& images,
+	const DirectX::Image* images,
+	const size_t imageCount,
 	D3D12_RESOURCE_STATES resourceState,
 	FResourceUploadContext* uploadContext)
 {
@@ -1875,7 +1879,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 		desc.Width = width;
 		desc.Height = height;
 		desc.DepthOrArraySize = 1;
-		desc.MipLevels = images.size();
+		desc.MipLevels = imageCount;
 		desc.Format = format;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
@@ -1888,8 +1892,8 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 
 	// Upload texture data
 	{
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(images.size());
-		for(int mipIndex = 0; mipIndex < images.size(); ++mipIndex)
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(imageCount);
+		for(int mipIndex = 0; mipIndex < imageCount; ++mipIndex)
 		{
 			srcData[mipIndex].pData = images[mipIndex].pixels;
 			srcData[mipIndex].RowPitch = images[mipIndex].rowPitch;
@@ -1913,7 +1917,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = images.size();
+		srvDesc.Texture2D.MipLevels = imageCount;
 		srvDesc.Texture2D.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
@@ -1994,6 +1998,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
+	const size_t mipLevels,
 	const size_t arraySize)
 {
 	auto newUav = std::make_unique<FBindlessResource>();
@@ -2010,7 +2015,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 		uavDesc.Width = width;
 		uavDesc.Height = (UINT)height;
 		uavDesc.DepthOrArraySize = (UINT16)arraySize;
-		uavDesc.MipLevels = 1;
+		uavDesc.MipLevels = mipLevels;
 		uavDesc.Format = format;
 		uavDesc.SampleDesc.Count = 1;
 		uavDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -2020,10 +2025,11 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 		AssertIfFailed(newUav->m_resource->InitCommittedResource(name, heapProps, uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 	}
 
-	// Descriptor
+	// Descriptor(s)
+	for(int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
 	{
-		newUav->m_uavIndex = GetBindlessPool()->FetchIndex(arraySize > 1 ? BindlessResourceType::RWTexture2DArray : BindlessResourceType::RWTexture2D);
-		D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newUav->m_uavIndex);
+		uint32_t uavIndex = GetBindlessPool()->FetchIndex(arraySize > 1 ? BindlessResourceType::RWTexture2DArray : BindlessResourceType::RWTexture2D);
+		D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 
 		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		uavDesc.Format = format;
@@ -2031,7 +2037,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 		if (arraySize > 1)
 		{
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-			uavDesc.Texture2DArray.MipSlice = 0;
+			uavDesc.Texture2DArray.MipSlice = mipIndex;
 			uavDesc.Texture2DArray.FirstArraySlice = 0;
 			uavDesc.Texture2DArray.ArraySize = arraySize;
 			uavDesc.Texture2DArray.PlaneSlice = 0;
@@ -2039,11 +2045,12 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 		else
 		{
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-			uavDesc.Texture2D.MipSlice = 0;
+			uavDesc.Texture2D.MipSlice = mipIndex;
 			uavDesc.Texture2D.PlaneSlice = 0;
 		}
 	
 		GetDevice()->CreateUnorderedAccessView(newUav->m_resource->m_d3dResource, nullptr, &uavDesc, uav);
+		newUav->m_uavIndices.push_back(uavIndex);
 	}
 
 	return std::move(newUav);

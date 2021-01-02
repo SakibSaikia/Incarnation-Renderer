@@ -114,7 +114,7 @@ struct FBindlessResource
 {
 	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
-	uint32_t m_uavIndex = ~0u;
+	std::vector<uint32_t> m_uavIndices; // one for each mip level in resource
 
 	~FBindlessResource();
 };
@@ -226,7 +226,8 @@ namespace RenderBackend12
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
-		const std::vector<DirectX::Image>& images,
+		const DirectX::Image* images,
+		const size_t imageCount,
 		D3D12_RESOURCE_STATES resourceState,
 		FResourceUploadContext* uploadContext);
 
@@ -242,6 +243,7 @@ namespace RenderBackend12
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
+		const size_t mipLevels,
 		const size_t arraySize);
 
 	// Programmatic Captures

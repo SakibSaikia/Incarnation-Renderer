@@ -35,7 +35,8 @@ struct FTextureCache
 		const DXGI_FORMAT format,
 		const int width,
 		const int height,
-		const std::vector<DirectX::Image>& images);
+		const DirectX::Image* images,
+		const size_t imageCount);
 
 	uint32_t CacheHdrTexture(const std::wstring& name);
 
@@ -219,7 +220,7 @@ void Demo::Tick(float deltaTime)
 
 		AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
 
-		uint32_t fontSrvIndex = s_textureCache.CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, {img});
+		uint32_t fontSrvIndex = s_textureCache.CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, &img, 1);
 		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -604,21 +605,16 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 	DirectX::ScratchImage compressedScratch;
 	AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
-	std::vector<DirectX::Image> mipImages(numMips);
-	for (int mipIndex = 0; mipIndex < numMips; ++mipIndex)
-	{
-		memcpy(&mipImages[mipIndex], compressedScratch.GetImage(mipIndex, 0, 0), sizeof(DirectX::Image));
-	}
-
 	std::wstring name{ image.uri.begin(), image.uri.end() };
-	FResourceUploadContext uploader{ image.image.size() };
+	FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
 	uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
 		&uploader,
 		name,
 		compressedFormat,
 		srcImage.width,
 		srcImage.height,
-		mipImages);
+		compressedScratch.GetImages(),
+		compressedScratch.GetImageCount());
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
@@ -795,7 +791,8 @@ uint32_t FTextureCache::CacheTexture2D(
 	const DXGI_FORMAT format,
 	const int width,
 	const int height,
-	const std::vector<DirectX::Image>& images)
+	const DirectX::Image* images,
+	const size_t imageCount)
 {
 	auto search = m_cachedTextures.find(name);
 	if (search != m_cachedTextures.cend())
@@ -804,7 +801,7 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 	else
 	{
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, images, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, format, width, height, images, imageCount, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, uploadContext);
 		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, m_cachedTextures[name]->m_srvIndex);
 	}
 }
@@ -825,11 +822,23 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 		DirectX::ScratchImage scratch;
 		AssertIfFailed(DirectX::LoadFromHDRFile(GetFilepathW(name).c_str(), &metadata, scratch));
 
+		// Calculate mips upto 4x4 for block compression
+		int numMips = 0;
+		size_t width = metadata.width, height = metadata.height;
+		while (width >= 4 && height >= 4)
+		{
+			numMips++;
+			width = width >> 1;
+			height = height >> 1;
+		}
+
+		// Generate mips
+		DirectX::ScratchImage mipchain = {};
+		AssertIfFailed(DirectX::GenerateMipMaps(*scratch.GetImage(0,0,0), DirectX::TEX_FILTER_LINEAR, numMips, mipchain));
+
 		// Create the 2D sphere map texture for compute shader processing
-		FResourceUploadContext uploadContext{ scratch.GetPixelsSize() };
-		DirectX::Image image;
-		memcpy(&image, scratch.GetImage(0, 0, 0), sizeof(DirectX::Image));
-		auto srcHdrTex = RenderBackend12::CreateBindlessTexture(name, metadata.format, metadata.width, metadata.height, { image }, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &uploadContext);
+		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
+		auto srcHdrTex = RenderBackend12::CreateBindlessTexture(name, metadata.format, metadata.width, metadata.height, mipchain.GetImages(), mipchain.GetImageCount(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &uploadContext);
 
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -840,7 +849,7 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 		uploadContext.SubmitUploads(cmdList);
 
 		size_t cubemapSize = metadata.height;
-		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"texcube_uav", metadata.format, cubemapSize, cubemapSize, 6);
+		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"texcube_uav", metadata.format, cubemapSize, cubemapSize, numMips, 6);
 
 		// Root Signature
 		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig" });
@@ -864,23 +873,32 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 
 		struct CbLayout
 		{
+			uint32_t mipIndex;
 			uint32_t hdrTextureIndex;
 			uint32_t cubemapUavIndex;
 			uint32_t cubemapSize;
-		} computeCb =
-		{
-			RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
-			RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndex),
-			(uint32_t)cubemapSize
 		};
 
-		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
-		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
-		d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+		for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
+		{
+			CbLayout computeCb =
+			{
+				.mipIndex = mipIndex,
+				.hdrTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
+				.cubemapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[mipIndex]),
+				.cubemapSize = (uint32_t)cubemapSize
+			};
 
-		// Dispatch
-		size_t threadGroupCount = std::ceil(cubemapSize / 16);
-		d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
+			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+
+			// Dispatch
+			size_t threadGroupCount = std::max<size_t>(std::ceil(cubemapSize / 16), 1);
+			d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+
+			cubemapSize = cubemapSize >> 1;
+		}
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 

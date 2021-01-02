@@ -1,11 +1,12 @@
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
-    "RootConstants(b0, num32BitConstants=3, visibility = SHADER_VISIBILITY_ALL)," \
+    "RootConstants(b0, num32BitConstants=4, visibility = SHADER_VISIBILITY_ALL)," \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), " \
     "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), "
 
 struct CbLayout
 {
+    uint mipIndex;
     uint hdrSpehericalMapBindlessIndex;
     uint outputCubemapBindlessIndex;
     uint cubemapSize;
@@ -45,7 +46,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             float longitude = atan2(p.y, p.x);
             float latitude = atan2(p.z, length(p.xy));
             float2 srcUV = float2((longitude + PI) / (2 * PI), (latitude + 0.5 * PI) / PI);
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(bilinearSampler, srcUV, 0).rgb;
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(bilinearSampler, srcUV, computeConstants.mipIndex).rgb;
         }
     }
     else
