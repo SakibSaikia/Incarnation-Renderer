@@ -603,7 +603,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 
 	// Block compression
 	DirectX::ScratchImage compressedScratch;
-	AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_DEFAULT, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+	AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
 	std::wstring name{ image.uri.begin(), image.uri.end() };
 	FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
