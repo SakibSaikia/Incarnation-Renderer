@@ -1856,12 +1856,14 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 
 std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	const std::wstring& name,
+	const BindlessResourceType type,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
-	const DirectX::Image* images,
-	const size_t imageCount,
+	const size_t numMips,
+	const size_t numSlices,
 	D3D12_RESOURCE_STATES resourceState,
+	const DirectX::Image* images,
 	FResourceUploadContext* uploadContext)
 {
 	auto newTexture = std::make_unique<FBindlessResource>();
@@ -1878,8 +1880,8 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 		desc.Alignment = 0;
 		desc.Width = width;
 		desc.Height = height;
-		desc.DepthOrArraySize = 1;
-		desc.MipLevels = imageCount;
+		desc.DepthOrArraySize = numSlices;
+		desc.MipLevels = numMips;
 		desc.Format = format;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
@@ -1891,9 +1893,10 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	}
 
 	// Upload texture data
+	if(images && uploadContext)
 	{
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(imageCount);
-		for(int mipIndex = 0; mipIndex < imageCount; ++mipIndex)
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(numMips);
+		for(int mipIndex = 0; mipIndex < numMips; ++mipIndex)
 		{
 			srcData[mipIndex].pData = images[mipIndex].pixels;
 			srcData[mipIndex].RowPitch = images[mipIndex].rowPitch;
@@ -1910,17 +1913,30 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	}
 
 	// Descriptor
-	{
-		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+	newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(type);
+	D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	switch(type)
+	{
+	case BindlessResourceType::Texture2D:
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = imageCount;
+		srvDesc.Texture2D.MipLevels = numMips;
 		srvDesc.Texture2D.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+		break;
+	case BindlessResourceType::TextureCube:
+		srvDesc.Format = format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+		srvDesc.TextureCube.MipLevels = numMips;
+		srvDesc.TextureCube.MostDetailedMip = 0;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+		break;
+	default:
+		DebugAssert(false, "Not Implemented");
 	}
 
 	return std::move(newTexture);

@@ -223,13 +223,15 @@ namespace RenderBackend12
 
 	std::unique_ptr<FBindlessResource> CreateBindlessTexture(
 		const std::wstring& name, 
+		const BindlessResourceType type,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
-		const DirectX::Image* images,
-		const size_t imageCount,
+		const size_t numMips,
+		const size_t numSlices,
 		D3D12_RESOURCE_STATES resourceState,
-		FResourceUploadContext* uploadContext);
+		const DirectX::Image* images = nullptr,
+		FResourceUploadContext* uploadContext = nullptr);
 
 	std::unique_ptr<FBindlessResource> CreateBindlessByteAddressBuffer(
 		const std::wstring& name,
