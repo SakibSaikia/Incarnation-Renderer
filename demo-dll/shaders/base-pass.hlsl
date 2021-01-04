@@ -5,6 +5,7 @@ struct FrameCbLayout
 	uint scenePositionBufferBindlessIndex;
 	uint sceneNormalBufferBindlessIndex;
 	uint sceneUvBufferBindlessIndex;
+	int envmapTextureIndex;
 };
 
 struct ViewCbLayout
@@ -74,15 +75,17 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	return o;
 }
 
-Texture2D bindlessTextures[] : register(t0);
+Texture2D bindless2DTextures[] : register(t0);
+TextureCube bindlessCubeTextures[] : register(t2,space1);
 SamplerState anisoSampler : register(s0);
 ConstantBuffer<MaterialCbLayout> materialConstants : register(b1);
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-
+	float4 normal = normalize(input.normal);
 	float4 lightDir = float4(1, 1, -1, 0);
-	float3 baseColor = bindlessTextures[materialConstants.baseColorTextureIndex].Sample(anisoSampler, input.uv).rgb;
+	float3 baseColor = bindless2DTextures[materialConstants.baseColorTextureIndex].Sample(anisoSampler, input.uv).rgb;
+	baseColor *= bindlessCubeTextures[frameConstants.envmapTextureIndex].Sample(anisoSampler, normal.xyz).rgb;
 
-	return saturate(dot(lightDir, input.normal)) * float4(baseColor.rgb, 0.f);
+	return saturate(dot(lightDir, normal)) * float4(baseColor.rgb, 0.f);
 }

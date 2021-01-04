@@ -40,6 +40,7 @@ namespace Jobs
 				uint32_t scenePositionBufferBindlessIndex;
 				uint32_t sceneNormalBufferBindlessIndex;
 				uint32_t sceneUvBufferBindlessIndex;
+				int envmapTextureIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -54,6 +55,7 @@ namespace Jobs
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
 					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
 					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
+					cbDest->envmapTextureIndex = scene->m_envmapTextureIndex;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(3, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -82,6 +84,7 @@ namespace Jobs
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
 			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};

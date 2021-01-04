@@ -175,8 +175,6 @@ void Demo::Tick(float deltaTime)
 		s_view.Reset(s_scene);
 	}
 
-	s_textureCache.CacheHdrTexture(L"lilienstein_2k.hdr");
-
 	// Tick components
 	s_controller.Tick(deltaTime);
 	s_view.Tick(deltaTime, &s_controller);
@@ -389,6 +387,8 @@ void FScene::Reload(const std::string& filename)
 	delete[] m_scratchPositionBuffer;
 	delete[] m_scratchNormalBuffer;
 	delete[] m_scratchUvBuffer;
+
+	m_envmapTextureIndex = Demo::s_textureCache.CacheHdrTexture(L"lilienstein_2k.hdr");
 }
 
 void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
@@ -815,7 +815,7 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 	}
 	else
 	{
-		RenderBackend12::BeginCapture();
+		//RenderBackend12::BeginCapture();
 
 		// Read HDR spehere map from file
 		DirectX::TexMetadata metadata;
@@ -914,7 +914,7 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 
 		RenderBackend12::FlushGPU();
 
-		RenderBackend12::EndCapture();
+		//RenderBackend12::EndCapture();
 
 		m_cachedTextures[name] = std::move(cubemapTex);
 		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, m_cachedTextures[name]->m_srvIndex);

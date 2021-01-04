@@ -65,6 +65,9 @@ struct FScene
 	std::unique_ptr<FBindlessResource> m_meshUvBuffer;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
+	// Environment map
+	int m_envmapTextureIndex;
+
 	// Transform
 	Matrix m_rootTransform;
 
