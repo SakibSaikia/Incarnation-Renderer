@@ -40,7 +40,7 @@ struct MaterialCbLayout
 ConstantBuffer<FrameCbLayout> frameConstants : register(b3);
 ConstantBuffer<ViewCbLayout> viewConstants : register(b2);
 ConstantBuffer<MeshCbLayout> meshConstants : register(b0);
-ByteAddressBuffer bindlessBuffers[] : register(t1);
+ByteAddressBuffer bindlessBuffers[] : register(t1,space0);
 
 struct vs_to_ps
 {
@@ -75,7 +75,7 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	return o;
 }
 
-Texture2D bindless2DTextures[] : register(t0);
+Texture2D bindless2DTextures[] : register(t0,space0);
 TextureCube bindlessCubeTextures[] : register(t2,space1);
 SamplerState anisoSampler : register(s0);
 ConstantBuffer<MaterialCbLayout> materialConstants : register(b1);
