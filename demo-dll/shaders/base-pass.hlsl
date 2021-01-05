@@ -48,14 +48,14 @@ struct MaterialCbLayout
 	int normalSamplerIndex;
 };
 
-SamplerState anisoSampler : register(s0);
-ConstantBuffer<MeshCbLayout> meshConstants : register(b0);
-ConstantBuffer<MaterialCbLayout> materialConstants : register(b1);
-ConstantBuffer<ViewCbLayout> viewConstants : register(b2);
-ConstantBuffer<FrameCbLayout> frameConstants : register(b3);
-Texture2D bindless2DTextures[] : register(t0, space0);
-ByteAddressBuffer bindlessBuffers[] : register(t1, space0);
-TextureCube bindlessCubeTextures[] : register(t2, space1);
+SamplerState g_anisoSampler : register(s0);
+ConstantBuffer<MeshCbLayout> g_meshConstants : register(b0);
+ConstantBuffer<MaterialCbLayout> g_materialConstants : register(b1);
+ConstantBuffer<ViewCbLayout> g_viewConstants : register(b2);
+ConstantBuffer<FrameCbLayout> g_frameConstants : register(b3);
+Texture2D g_bindless2DTextures[] : register(t0, space0);
+ByteAddressBuffer g_bindlessBuffers[] : register(t1, space0);
+TextureCube g_bindlessCubeTextures[] : register(t2, space1);
 
 struct vs_to_ps
 {
@@ -69,22 +69,22 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	vs_to_ps o;
 
 	// size of 4 for 32 bit indices
-	uint index = bindlessBuffers[frameConstants.sceneIndexBufferBindlessIndex].Load(4*(vertexId + meshConstants.indexOffset));
+	uint index = g_bindlessBuffers[g_frameConstants.sceneIndexBufferBindlessIndex].Load(4*(vertexId + g_meshConstants.indexOffset));
 
 	// size of 12 for float3 positions
-	float3 position = bindlessBuffers[frameConstants.scenePositionBufferBindlessIndex].Load<float3>(12 * (index + meshConstants.positionOffset));
+	float3 position = g_bindlessBuffers[g_frameConstants.scenePositionBufferBindlessIndex].Load<float3>(12 * (index + g_meshConstants.positionOffset));
 
 	// size of 12 for float3 normals
-	float3 normal = bindlessBuffers[frameConstants.sceneNormalBufferBindlessIndex].Load<float3>(12 * (index + meshConstants.normalOffset));
+	float3 normal = g_bindlessBuffers[g_frameConstants.sceneNormalBufferBindlessIndex].Load<float3>(12 * (index + g_meshConstants.normalOffset));
 
 	// size of 8 for float2 uv's
-	float2 uv = bindlessBuffers[frameConstants.sceneUvBufferBindlessIndex].Load<float2>(8 * (index + meshConstants.uvOffset));
+	float2 uv = g_bindlessBuffers[g_frameConstants.sceneUvBufferBindlessIndex].Load<float2>(8 * (index + g_meshConstants.uvOffset));
 
-	float4x4 localToWorld = mul(meshConstants.localToWorld, frameConstants.sceneRotation);
+	float4x4 localToWorld = mul(g_meshConstants.localToWorld, g_frameConstants.sceneRotation);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
-	float4x4 viewProjTransform = mul(viewConstants.viewTransform, viewConstants.projectionTransform);
+	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
 	o.pos = mul(worldPos, viewProjTransform);
-	o.normal = mul(float4(normal, 0.f), meshConstants.localToWorld);
+	o.normal = mul(float4(normal, 0.f), g_meshConstants.localToWorld);
 	o.uv = uv;
 
 	return o;
@@ -94,8 +94,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 {
 	float4 normal = normalize(input.normal);
 	float4 lightDir = float4(1, 1, -1, 0);
-	float3 baseColor = bindless2DTextures[materialConstants.baseColorTextureIndex].Sample(anisoSampler, input.uv).rgb;
-	baseColor *= bindlessCubeTextures[frameConstants.envmapTextureIndex].Sample(anisoSampler, normal.xyz).rgb;
+	float3 baseColor = g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_anisoSampler, input.uv).rgb;
+	baseColor *= g_bindlessCubeTextures[g_frameConstants.envmapTextureIndex].Sample(g_anisoSampler, normal.xyz).rgb;
 
 	return saturate(dot(lightDir, normal)) * float4(baseColor.rgb, 0.f);
 }
