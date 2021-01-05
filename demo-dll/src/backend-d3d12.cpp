@@ -701,6 +701,8 @@ HRESULT FResource::InitReservedResource(const std::wstring& name, const D3D12_RE
 	return hr;
 }
 
+// A resources cannot be transitioned simultaneously on 2 or more CL's. A CL that recorded a transition must be executed
+// before a transition for the same resource can be recorded on another CL. Transitions on the same CL are trivially ordered and are ok.
 void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
 {
 	uint32_t subId = (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES ? 0 : subresourceIndex);
@@ -1024,7 +1026,14 @@ private:
 
 FRenderTexture::~FRenderTexture()
 {
-	GetRenderTexturePool()->Retire(this);
+	if (m_isSwapChainBuffer)
+	{
+		delete m_resource;
+	}
+	else
+	{
+		GetRenderTexturePool()->Retire(this);
+	}
 }
 
 void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
@@ -1071,7 +1080,7 @@ namespace RenderBackend12
 	winrt::com_ptr<D3DDevice_t> s_d3dDevice;
 
 	winrt::com_ptr<DXGISwapChain_t> s_swapChain;
-	std::unique_ptr<FResource> s_backBuffers[k_backBufferCount];
+	std::unique_ptr<FRenderTexture> s_backBuffers[k_backBufferCount];
 	uint32_t s_currentBufferIndex;
 
 	winrt::com_ptr<D3DFence_t> s_frameFence;
@@ -1284,21 +1293,25 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	// Back buffers
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
-		s_backBuffers[bufferIdx] = std::make_unique<FResource>();
-		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&s_backBuffers[bufferIdx]->m_d3dResource)));
+		s_backBuffers[bufferIdx] = std::make_unique<FRenderTexture>();
+		FRenderTexture* backBuffer = s_backBuffers[bufferIdx].get();
+		backBuffer->m_resource = new FResource;
+		backBuffer->m_isDepthStencil = true;
+		backBuffer->m_isSwapChainBuffer = true;
+		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&backBuffer->m_resource->m_d3dResource)));
 
 		std::wstringstream s;
 		s << L"back_buffer_" << bufferIdx;
-		s_backBuffers[bufferIdx]->SetName(s.str().c_str());
-
-		s_backBuffers[bufferIdx]->m_subresourceStates.push_back(D3D12_RESOURCE_STATE_PRESENT);
+		backBuffer->m_resource->SetName(s.str().c_str());
+		backBuffer->m_resource->m_subresourceStates.push_back(D3D12_RESOURCE_STATE_PRESENT);
 
 		uint32_t rtvIndex;
 		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
 		DebugAssert(ok, "Ran out of RTV descriptors");
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtvIndex);
-		s_d3dDevice->CreateRenderTargetView(s_backBuffers[bufferIdx]->m_d3dResource, nullptr, rtvDescriptor);
+		s_d3dDevice->CreateRenderTargetView(backBuffer->m_resource->m_d3dResource, nullptr, rtvDescriptor);
+		backBuffer->m_renderTextureIndices.push_back(rtvIndex);
 	}
 
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
@@ -1501,13 +1514,7 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 	}
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetBackBufferDescriptor()
-{
-	D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, s_currentBufferIndex);
-	return descriptor;
-}
-
-FResource* RenderBackend12::GetBackBufferResource()
+FRenderTexture* RenderBackend12::GetBackBuffer()
 {
 	return s_backBuffers[s_currentBufferIndex].get();
 }
@@ -1773,6 +1780,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	rt->m_renderTextureIndices = std::move(rtvIndices);
 	rt->m_srvDesc = std::move(srvDesc);
 	rt->m_isDepthStencil = false;
+	rt->m_isSwapChainBuffer = false;
 
 	return std::move(rt);
 }
@@ -1849,6 +1857,7 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	rt->m_renderTextureIndices = std::move(dsvIndices);
 	rt->m_srvDesc = std::move(srvDesc);
 	rt->m_isDepthStencil = true;
+	rt->m_isSwapChainBuffer = false;
 
 
 	return std::move(rt);

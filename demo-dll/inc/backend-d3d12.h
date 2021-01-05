@@ -134,6 +134,7 @@ struct FRenderTexture
 	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
 	uint32_t m_srvIndex = ~0u;
 	bool m_isDepthStencil;
+	bool m_isSwapChainBuffer;
 
 	~FRenderTexture();
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
@@ -183,8 +184,7 @@ namespace RenderBackend12
 	D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
 
 	// Swap chain and back buffers
-	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferDescriptor();
-	FResource* GetBackBufferResource();
+	FRenderTexture* GetBackBuffer();
 	void PresentDisplay();
 
 	// Shaders
