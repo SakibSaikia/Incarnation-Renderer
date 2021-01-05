@@ -1,46 +1,4 @@
-struct FrameCbLayout
-{
-	float4x4 sceneRotation;
-	uint sceneIndexBufferBindlessIndex;
-	uint scenePositionBufferBindlessIndex;
-	uint sceneNormalBufferBindlessIndex;
-	uint sceneUvBufferBindlessIndex;
-	int envmapTextureIndex;
-};
-
-struct ViewCbLayout
-{
-	float4x4 viewTransform;
-	float4x4 projectionTransform;
-};
-
-struct MeshCbLayout
-{
-	float4x4 localToWorld;
-	uint indexOffset;
-	uint positionOffset;
-	uint normalOffset;
-	uint uvOffset;
-};
-
-struct MaterialCbLayout
-{
-	float3 emissiveFactor;
-	float metallicFactor;
-	float3 baseColorFactor;
-	float roughnessFactor;
-	int baseColorTextureIndex;
-	int metallicRoughnessTextureIndex;
-	int normalTextureIndex;
-	int baseColorSamplerIndex;
-	int metallicRoughnessSamplerIndex;
-	int normalSamplerIndex;
-};
-
-ConstantBuffer<FrameCbLayout> frameConstants : register(b3);
-ConstantBuffer<ViewCbLayout> viewConstants : register(b2);
-ConstantBuffer<MeshCbLayout> meshConstants : register(b0);
-ByteAddressBuffer bindlessBuffers[] : register(t1,space0);
+#include <rootsignatures/rootsig.hlsl>
 
 struct vs_to_ps
 {
@@ -74,11 +32,6 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 
 	return o;
 }
-
-Texture2D bindless2DTextures[] : register(t0,space0);
-TextureCube bindlessCubeTextures[] : register(t2,space1);
-SamplerState anisoSampler : register(s0);
-ConstantBuffer<MaterialCbLayout> materialConstants : register(b1);
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {

@@ -9,10 +9,12 @@
 namespace Settings
 {
 #if defined (_DEBUG)
-	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-Od", L"-WX" };
+	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-Od", L"-WX", L"-I", SHADER_DIR};
 #else
-	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr" };
+	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-I", SHADER_DIR };
 #endif
+
+	std::vector<LPCWSTR> k_rootsigArguments = { L"-I", SHADER_DIR };
 }
 
 namespace ShaderCompiler
@@ -70,14 +72,14 @@ HRESULT ShaderCompiler::CompileShader(
 	const std::filesystem::path filepath = SearchShaderDir(filename);
 	DebugAssert(!filepath.empty(), "Shader source file not found");
 
-	winrt::com_ptr<IDxcLibrary> library;
-	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.put())));
+	winrt::com_ptr<IDxcUtils> utils;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(utils.put())));
 
 	winrt::com_ptr<IDxcBlobEncoding> source;
-	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.put()));
+	AssertIfFailed(utils->LoadFile(filepath.wstring().c_str(), nullptr, source.put()));
 
 	winrt::com_ptr<IDxcIncludeHandler> includeHandler;
-	AssertIfFailed(library->CreateIncludeHandler(includeHandler.put()));
+	AssertIfFailed(utils->CreateDefaultIncludeHandler(includeHandler.put()));
 
 	winrt::com_ptr<IDxcCompiler> compiler;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
@@ -126,8 +128,8 @@ HRESULT ShaderCompiler::CompileShader(
 			winrt::com_ptr<IDxcBlobEncoding> error;
 			result->GetErrorBuffer(error.put());
 
-			winrt::com_ptr<IDxcBlobEncoding> errorMessage;
-			library->GetBlobAsUtf16(error.get(), errorMessage.put());
+			winrt::com_ptr<IDxcBlobUtf16> errorMessage;
+			utils->GetBlobAsUtf16(error.get(), errorMessage.put());
 			OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
 
 			return hr;
@@ -148,14 +150,14 @@ HRESULT ShaderCompiler::CompileRootsignature(
 	const std::filesystem::path filepath = SearchShaderDir(filename);
 	DebugAssert(!filepath.empty(), "Rootsignature source file not found");
 
-	winrt::com_ptr<IDxcLibrary> library;
-	AssertIfFailed(DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(library.put())));
+	winrt::com_ptr<IDxcUtils> utils;
+	AssertIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(utils.put())));
 
 	winrt::com_ptr<IDxcBlobEncoding> source;
-	AssertIfFailed(library->CreateBlobFromFile(filepath.wstring().c_str(), nullptr, source.put()));
+	AssertIfFailed(utils->LoadFile(filepath.wstring().c_str(), nullptr, source.put()));
 
 	winrt::com_ptr<IDxcIncludeHandler> includeHandler;
-	AssertIfFailed(library->CreateIncludeHandler(includeHandler.put()));
+	AssertIfFailed(utils->CreateDefaultIncludeHandler(includeHandler.put()));
 
 	winrt::com_ptr<IDxcCompiler> compiler;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
@@ -166,7 +168,7 @@ HRESULT ShaderCompiler::CompileRootsignature(
 		filename.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
-		nullptr, 0,
+		Settings::k_rootsigArguments.data(), (UINT)Settings::k_rootsigArguments.size(),
 		nullptr, 0,
 		includeHandler.get(),
 		result.put()));
@@ -183,8 +185,8 @@ HRESULT ShaderCompiler::CompileRootsignature(
 		winrt::com_ptr<IDxcBlobEncoding> error;
 		result->GetErrorBuffer(error.put());
 
-		winrt::com_ptr<IDxcBlobEncoding> errorMessage;
-		library->GetBlobAsUtf16(error.get(), errorMessage.put());
+		winrt::com_ptr<IDxcBlobUtf16> errorMessage;
+		utils->GetBlobAsUtf16(error.get(), errorMessage.put());
 		OutputDebugString((LPCWSTR)errorMessage->GetBufferPointer());
 
 		return hr;
