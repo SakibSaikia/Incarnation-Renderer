@@ -1,5 +1,5 @@
 #define rootsig \
-    "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
+    "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
     "RootConstants(b0, num32BitConstants=4, visibility = SHADER_VISIBILITY_ALL)," \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), " \
     "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), "
@@ -12,48 +12,107 @@ struct CbLayout
     uint cubemapSize;
 };
 
-ConstantBuffer<CbLayout> computeConstants : register(b0);
-Texture2D srvBindless2DTextures[] : register(t0);
-RWTexture2DArray<float3> uavBindless2DTextureArrays[] : register(u0);
-SamplerState bilinearSampler : register(s0);
+ConstantBuffer<CbLayout> g_computeConstants : register(b0);
+Texture2D g_srvBindless2DTextures[] : register(t0);
+RWTexture2DArray<float3> g_uavBindless2DTextureArrays[] : register(u0);
+SamplerState g_bilinearSampler : register(s0);
 
 static const float PI = 3.14159265f;
+
+// Adapted from https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map
 
 [numthreads(16,16,1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    Texture2D src = srvBindless2DTextures[computeConstants.hdrSpehericalMapBindlessIndex];
-    RWTexture2DArray<float3> dest = uavBindless2DTextureArrays[computeConstants.outputCubemapBindlessIndex];
+    Texture2D src = g_srvBindless2DTextures[g_computeConstants.hdrSpehericalMapBindlessIndex];
+    RWTexture2DArray<float3> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputCubemapBindlessIndex];
 
-    if (dispatchThreadId.x < computeConstants.cubemapSize && 
-        dispatchThreadId.y < computeConstants.cubemapSize)
+    if (dispatchThreadId.x < g_computeConstants.cubemapSize && 
+        dispatchThreadId.y < g_computeConstants.cubemapSize)
     {
-        float2 destUV = dispatchThreadId.xy / (float)computeConstants.cubemapSize.xx;
-        float2 pos = 2.f * destUV - 1.xx;
-
-        float3 faces[6] = {
-            float3(1.f, pos.x, -pos.y),
-            float3(-1.f, pos.x, pos.y),
-            float3(pos.x, 1.f, -pos.y),
-            float3(pos.x, -1.f, pos.y),
-            float3(pos.x, pos.y, 1.f),
-            float3(-pos.x, pos.y, -1.f)
+        float2 faceTransform[6] = {
+           float2(0.5f * PI, 0.f),      // +X
+           float2(-0.5f * PI, 0.f),     // -X
+           float2(0, 0.5f * PI),        // +Y
+           float2(0.f, -0.5f * PI),     // -Y
+           float2(0.f, 0.f),            // +Z
+           float2(PI, 0.f)              // -Z
         };
+
+        // Calculate adjacent (ak) and opposite (an) of the triangle that is spanned from the sphere center to our cube face.
+        const float an = sin(0.25f * PI);
+        const float ak = cos(0.25f * PI);
+
+        float2 n = (dispatchThreadId.xy + 0.5.xx) / (float)g_computeConstants.cubemapSize.xx;
+        n = 2.f * n - 1.xx;
+        n *= an;
 
         for (int i = 0; i < 6; ++i)
         {
-            float3 p = faces[i];
-            float longitude = atan2(p.y, p.x);
-            float latitude = atan2(p.z, length(p.xy));
-            float2 srcUV = float2((longitude + PI) / (2 * PI), (latitude + 0.5 * PI) / PI);
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(bilinearSampler, srcUV, computeConstants.mipIndex).rgb;
+            float2 ft = faceTransform[i];
+            float2 uv;
+
+            if (ft.y == 0.f)
+            {
+                // center faces
+                uv.x = atan2(n.x, ak);
+                uv.y = atan2(n.y * cos(uv.x), ak);
+                uv.x += ft.x;
+            }
+            else if(ft.y < 0.f)
+            {
+                // bottom face
+                float d = length(n);
+                uv.y = 0.5f * PI - atan2(d, ak);
+                uv.x = 0.5f * PI + atan2(n.y, n.x);
+            }
+            else
+            {
+                // top face
+                float d = length(n);
+                uv.y = -0.5f * PI + atan2(d, ak);
+                uv.x = atan2(n.x, n.y);
+            }
+
+            // Map from angular coordinates to [-1, 1], respectively.
+            uv.x = uv.x / PI;
+            uv.y = uv.y / (0.5f * PI);
+
+            // Warp around, if our coordinates are out of bounds. 
+            while (uv.y < -1) 
+            {
+                uv.y += 2;
+                uv.x += 1;
+            }
+
+            while (uv.y > 1) 
+            {
+                uv.y -= 2;
+                uv.x += 1;
+            }
+
+            while (uv.x < -1) 
+            {
+                uv.x += 2;
+            }
+
+            while (uv.x > 1) 
+            {
+                uv.x -= 2;
+            }
+
+            // Map from [-1, 1] to in texture space
+            uv.x = 0.5f * uv.x + 0.5f;
+            uv.y = 0.5f * uv.y + 0.5f;
+
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex).rgb;
         }
     }
     else
     {
         for (int i = 0; i < 6; ++i)
         {
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = 0.xxx;
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = 1.xxx;
         }
     }
 }
