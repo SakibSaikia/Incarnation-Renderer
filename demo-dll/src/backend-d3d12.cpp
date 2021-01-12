@@ -1405,15 +1405,17 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std:
 	auto search = s_shaderCache.find(shaderDesc);
 	if (search != s_shaderCache.cend())
 	{
+		winrt::com_ptr<IDxcBlob> newBlob;
 		if (search->second.m_timestamp != currentTimestamp &&
 			SUCCEEDED(ShaderCompiler::CompileShader(
 				shaderDesc.m_filename,
 				shaderDesc.m_entrypoint,
 				shaderDesc.m_defines,
 				profile,
-				search->second.m_blob.put())))
+				newBlob.put())))
 		{
 			search->second.m_timestamp = currentTimestamp;
+			search->second.m_blob = newBlob;
 			return search->second.m_blob.get();
 		}
 		else
@@ -1446,14 +1448,16 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, c
 	auto search = s_rootsigCache.find(rootsigDesc);
 	if (search != s_rootsigCache.cend())
 	{
+		winrt::com_ptr<IDxcBlob> newBlob;
 		if (search->second.m_timestamp != currentTimestamp &&
-			ShaderCompiler::CompileRootsignature(
+			SUCCEEDED(ShaderCompiler::CompileRootsignature(
 				rootsigDesc.m_filename,
 				rootsigDesc.m_entrypoint,
 				profile,
-				search->second.m_blob.put()))
+				newBlob.put())))
 		{
 			search->second.m_timestamp = currentTimestamp;
+			search->second.m_blob = newBlob;
 			return search->second.m_blob.get();
 		}
 		else
