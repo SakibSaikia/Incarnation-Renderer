@@ -1,3 +1,5 @@
+#include "pbr.hlsli"
+
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
     "StaticSampler(s1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT, comparisonFunc = COMPARISON_LESS_EQUAL, addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
@@ -61,8 +63,17 @@ struct vs_to_ps
 {
 	float4 pos : SV_POSITION;
 	float4 normal : INTERPOLATED_WORLD_NORMAL;
+	float4 worldPos : INTERPOLATED_WORLD_POS;
 	float2 uv : INTERPOLATED_UV_0;
 };
+
+float3 Eye()
+{
+	return float3(
+		-g_viewConstants.viewTransform._41, 
+		-g_viewConstants.viewTransform._42, 
+		-g_viewConstants.viewTransform._43);
+}
 
 vs_to_ps vs_main(uint vertexId : SV_VertexID)
 {
@@ -83,8 +94,10 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	float4x4 localToWorld = mul(g_meshConstants.localToWorld, g_frameConstants.sceneRotation);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
+
 	o.pos = mul(worldPos, viewProjTransform);
 	o.normal = mul(float4(normal, 0.f), g_meshConstants.localToWorld);
+	o.worldPos = worldPos;
 	o.uv = uv;
 
 	return o;
@@ -92,10 +105,47 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	float4 normal = normalize(input.normal);
-	float4 lightDir = float4(1, 1, -1, 0);
-	float3 baseColor = g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_anisoSampler, input.uv).rgb;
-	baseColor *= g_bindlessCubeTextures[g_frameConstants.envmapTextureIndex].Sample(g_anisoSampler, normal.xyz).rgb;
+	float3 n = normalize(input.normal.xyz);
+	float3 l = normalize(float3(1, 1, -1));
+	float3 h = normalize(n + l);
+	float3 v = normalize(Eye() - input.worldPos.xyz / input.worldPos.w);
 
-	return saturate(dot(lightDir, normal)) * float4(baseColor.rgb, 0.f);
+	float NoV = abs(dot(n, v)) + 1e-5;
+	float NoL = saturate(dot(n, l));
+	float NoH = saturate(dot(n, h));
+	float LoH = saturate(dot(l, h));
+
+	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ? g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_anisoSampler, input.uv).rgb : g_materialConstants.baseColorFactor;
+	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_anisoSampler, input.uv).bg : 1.f.xx;
+	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
+	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
+
+	// Remapping
+	float3 f0 = metallic * baseColor + (1.f - metallic) * 0.04;
+	float3 albedo = (1.f - metallic) * baseColor;
+	float roughness = perceptualRoughness * perceptualRoughness;
+
+	float D = D_GGX(NoH, roughness);
+	float3 F = F_Schlick(LoH, f0);
+	float V = V_SmithGGXCorrelated(NoV, NoL, roughness);
+
+	// Specular BRDF
+	float3 Fr = D * V * F;
+
+	// diffuse BRDF
+	float3 Fd = albedo * Fd_Lambert();
+
+	// Apply lighting
+	const float lightIntensity = 100000.f;
+	float illuminance = lightIntensity * NoL;
+	float3 luminance = (Fr + Fd) * illuminance;
+
+	// Exposure. Computes the exposure normalization from the camera's EV100
+	int ev100 = 15;
+	float e = exposure(ev100);
+
+	// Normalized luminance
+	luminance *= e;
+
+	return float4(luminance, 1.f);
 }
