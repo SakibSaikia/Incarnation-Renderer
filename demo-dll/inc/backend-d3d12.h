@@ -197,6 +197,9 @@ namespace RenderBackend12
 	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
 	uint32_t GetDescriptorTableOffset(BindlessDescriptorType descriptorType, uint32_t descriptorIndex);
 
+	// Feature Support
+	uint32_t GetLaneCount();
+
 	// Resource Management
 	std::unique_ptr<FTransientBuffer> CreateTransientBuffer(
 		const std::wstring& name,
@@ -233,12 +236,12 @@ namespace RenderBackend12
 		const DirectX::Image* images = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FBindlessResource> CreateBindlessByteAddressBuffer(
+	std::unique_ptr<FBindlessResource> CreateBindlessBuffer(
 		const std::wstring& name,
 		const size_t size,
-		const uint8_t* pData,
 		D3D12_RESOURCE_STATES resourceState,
-		FResourceUploadContext* uploadContext);
+		const uint8_t* pData = nullptr,
+		FResourceUploadContext* uploadContext = nullptr);
 
 	std::unique_ptr<FBindlessResource> CreateBindlessUavTexture(
 		const std::wstring& name,
@@ -247,6 +250,10 @@ namespace RenderBackend12
 		const size_t height,
 		const size_t mipLevels,
 		const size_t arraySize);
+
+	std::unique_ptr<FBindlessResource> CreateBindlessUavBuffer(
+		const std::wstring& name,
+		const size_t size);
 
 	// Programmatic Captures
 	void BeginCapture();

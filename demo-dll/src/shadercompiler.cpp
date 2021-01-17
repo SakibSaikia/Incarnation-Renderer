@@ -65,7 +65,7 @@ FILETIME ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
 HRESULT ShaderCompiler::CompileShader(
 	const std::wstring& filename, 
 	const std::wstring& entrypoint, 
-	const std::wstring& arguments,
+	const std::wstring& defineStr,
 	const std::wstring& profile,
 	IDxcBlob** compiledBlob)
 {
@@ -84,6 +84,36 @@ HRESULT ShaderCompiler::CompileShader(
 	winrt::com_ptr<IDxcCompiler> compiler;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
 
+	std::vector<DxcDefine> defines;
+	std::wstring str = defineStr;
+	size_t index = str.find_first_of(' ');
+	while(!str.empty())
+	{
+		DxcDefine macro = {};
+
+		std::wstring subString = str.substr(0, index);
+		size_t subIndex = subString.find_first_of('=');
+
+		if (subIndex != std::wstring::npos)
+		{
+			macro.Name = _wcsdup(subString.substr(0, subIndex).c_str());
+			macro.Value = _wcsdup(subString.substr(subIndex + 1, subString.length()).c_str());
+		}
+		else
+		{
+			macro.Name = _wcsdup(subString.c_str());
+		}
+
+		defines.push_back(macro);
+
+		str.erase(0, index + 1);
+		index = str.find_first_of(' ');
+		if (index == std::wstring::npos)
+		{
+			index = str.length();
+		}
+	}
+
 	winrt::com_ptr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
 		source.get(),
@@ -91,9 +121,15 @@ HRESULT ShaderCompiler::CompileShader(
 		entrypoint.c_str(),
 		profile.c_str(),
 		Settings::k_compilerArguments.data(), (UINT)Settings::k_compilerArguments.size(),
-		nullptr, 0, 
+		defines.data(), defines.size(), 
 		includeHandler.get(),
 		result.put()));
+
+	for (auto& def : defines)
+	{
+		delete def.Name;
+		delete def.Value;
+	}
 
 	HRESULT hr;
 	if (result && SUCCEEDED(result->GetStatus(&hr)))

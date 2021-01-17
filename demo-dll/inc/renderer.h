@@ -68,6 +68,10 @@ struct FScene
 	// Environment map
 	int m_envmapTextureIndex;
 
+	// Light probes
+	int m_shRadianceBufferIndex;
+	int m_prefilteredEnvmapTextureIndex;
+
 	// Transform
 	Matrix m_rootTransform;
 

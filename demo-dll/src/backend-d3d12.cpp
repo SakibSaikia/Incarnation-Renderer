@@ -1079,6 +1079,8 @@ namespace RenderBackend12
 	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
 	winrt::com_ptr<D3DDevice_t> s_d3dDevice;
 
+	D3D12_FEATURE_DATA_D3D12_OPTIONS1 s_waveOpsInfo;
+
 	winrt::com_ptr<DXGISwapChain_t> s_swapChain;
 	std::unique_ptr<FRenderTexture> s_backBuffers[k_backBufferCount];
 	uint32_t s_currentBufferIndex;
@@ -1189,6 +1191,11 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		adapter.get(),
 		D3D_FEATURE_LEVEL_12_1,
 		IID_PPV_ARGS(s_d3dDevice.put())));
+
+	// Feature Support
+	s_waveOpsInfo = {};
+	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &s_waveOpsInfo, sizeof(s_waveOpsInfo)));
+	DebugAssert(s_waveOpsInfo.WaveOps == TRUE, "Wave Intrinsics not supported");
 
 	// Cache descriptor sizes
 	for (int typeId = 0; typeId < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++typeId)
@@ -1955,11 +1962,11 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessTexture(
 	return std::move(newTexture);
 }
 
-std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessByteAddressBuffer(
+std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessBuffer(
 	const std::wstring& name,
 	const size_t size,
-	const uint8_t* pData,
 	D3D12_RESOURCE_STATES resourceState,
+	const uint8_t* pData,
 	FResourceUploadContext* uploadContext)
 {
 	auto newBuffer = std::make_unique<FBindlessResource>();
@@ -2030,7 +2037,7 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 	const size_t mipLevels,
 	const size_t arraySize)
 {
-	auto newUav = std::make_unique<FBindlessResource>();
+	auto newTexture = std::make_unique<FBindlessResource>();
 
 	// Create resource
 	{
@@ -2050,8 +2057,8 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 		uavDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 		uavDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-		newUav->m_resource = new FResource;
-		AssertIfFailed(newUav->m_resource->InitCommittedResource(name, heapProps, uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+		newTexture->m_resource = new FResource;
+		AssertIfFailed(newTexture->m_resource->InitCommittedResource(name, heapProps, uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 	}
 
 	// Descriptor(s)
@@ -2078,11 +2085,60 @@ std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavTexture(
 			uavDesc.Texture2D.PlaneSlice = 0;
 		}
 	
-		GetDevice()->CreateUnorderedAccessView(newUav->m_resource->m_d3dResource, nullptr, &uavDesc, uav);
-		newUav->m_uavIndices.push_back(uavIndex);
+		GetDevice()->CreateUnorderedAccessView(newTexture->m_resource->m_d3dResource, nullptr, &uavDesc, uav);
+		newTexture->m_uavIndices.push_back(uavIndex);
 	}
 
-	return std::move(newUav);
+	return std::move(newTexture);
+}
+
+std::unique_ptr<FBindlessResource> RenderBackend12::CreateBindlessUavBuffer(
+	const std::wstring& name,
+	const size_t size)
+{
+	auto newBuffer = std::make_unique<FBindlessResource>();
+
+	// Create resource
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		D3D12_RESOURCE_DESC desc = {};
+		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+		desc.Alignment = 0;
+		desc.Width = size;
+		desc.Height = 1;
+		desc.DepthOrArraySize = 1;
+		desc.MipLevels = 1;
+		desc.Format = DXGI_FORMAT_UNKNOWN;
+		desc.SampleDesc.Count = 1;
+		desc.SampleDesc.Quality = 0;
+		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+		desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+		newBuffer->m_resource = new FResource;
+		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, D3D12_RESOURCE_STATE_COPY_DEST));
+	}
+
+	// Descriptor
+	{
+		uint32_t uavIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
+		D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
+
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
+		uavDesc.Buffer.StructureByteStride = 0;
+		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+		GetDevice()->CreateUnorderedAccessView(newBuffer->m_resource->m_d3dResource, nullptr, &uavDesc, uav);
+		newBuffer->m_uavIndices.push_back(uavIndex);
+	}
+
+	return std::move(newBuffer);
 }
 
 void RenderBackend12::BeginCapture()
@@ -2099,4 +2155,9 @@ void RenderBackend12::EndCapture()
 	{
 		s_graphicsAnalysis->EndCapture();
 	}
+}
+
+uint32_t RenderBackend12::GetLaneCount()
+{
+	return s_waveOpsInfo.WaveLaneCountMin;
 }
