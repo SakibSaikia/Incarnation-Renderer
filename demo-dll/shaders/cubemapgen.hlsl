@@ -6,15 +6,11 @@
     #define THREAD_GROUP_SIZE_Y 1
 #endif
 
-#ifndef THREAD_GROUP_SIZE_Z
-    #define THREAD_GROUP_SIZE_Z 1
-#endif
-
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
     "RootConstants(b0, num32BitConstants=4, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), " \
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), "
+    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
+    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
 
 struct CbLayout
 {
@@ -26,7 +22,7 @@ struct CbLayout
 
 ConstantBuffer<CbLayout> g_computeConstants : register(b0);
 Texture2D g_srvBindless2DTextures[] : register(t0);
-RWTexture2DArray<float3> g_uavBindless2DTextureArrays[] : register(u0);
+RWTexture2DArray<float4> g_uavBindless2DTextureArrays[] : register(u0);
 SamplerState g_bilinearSampler : register(s0);
 
 static const float PI = 3.14159265f;
@@ -34,10 +30,10 @@ static const float PI = 3.14159265f;
 // Adapted from https://stackoverflow.com/questions/29678510/convert-21-equirectangular-panorama-to-cube-map
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y,1)]
-void cs_cubemapgen(uint3 dispatchThreadId : SV_DispatchThreadID)
+void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     Texture2D src = g_srvBindless2DTextures[g_computeConstants.hdrSpehericalMapBindlessIndex];
-    RWTexture2DArray<float3> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputCubemapBindlessIndex];
+    RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputCubemapBindlessIndex];
 
     if (dispatchThreadId.x < g_computeConstants.cubemapSize && 
         dispatchThreadId.y < g_computeConstants.cubemapSize)
@@ -117,36 +113,14 @@ void cs_cubemapgen(uint3 dispatchThreadId : SV_DispatchThreadID)
             uv.x = 0.5f * uv.x + 0.5f;
             uv.y = 0.5f * uv.y + 0.5f;
 
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex).rgb;
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex);
         }
     }
     else
     {
         for (int i = 0; i < 6; ++i)
         {
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = 1.xxx;
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = 1.xxxx;
         }
-    }
-}
-
-#define NUM_SLICES THREAD_GROUP_SIZE_Z
-groupshared float3 g_total[NUM_SLICES];
-
-[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
-void cs_sphericalharmonics_projection(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID)
-{
-    float3 total = WaveActiveSum(sh);
-
-    if (WaveGetLaneIndex() == 0)
-    {
-        g_total[groupThreadId.z] = total;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    [unroll]
-    for (int i = 0; i < NUM_SLICES; ++i)
-    {
-
     }
 }

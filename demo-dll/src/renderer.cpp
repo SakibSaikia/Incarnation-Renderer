@@ -57,7 +57,7 @@ namespace RenderJob
 				uint32_t scenePositionBufferBindlessIndex;
 				uint32_t sceneNormalBufferBindlessIndex;
 				uint32_t sceneUvBufferBindlessIndex;
-				int envmapTextureIndex;
+				FLightProbe sceneProbeData;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -72,7 +72,7 @@ namespace RenderJob
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
 					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
 					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
-					cbDest->envmapTextureIndex = scene->m_envmapTextureIndex;
+					cbDest->sceneProbeData = scene->m_globalLightProbe;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(3, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -357,7 +357,7 @@ namespace RenderJob
 			parallaxViewMatrix.Translation(Vector3::Zero);
 
 			CbLayout constants{};
-			constants.envmapTextureIndex = passDesc.scene->m_envmapTextureIndex;
+			constants.envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 			constants.invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(CbLayout) / 4, &constants, 0);
 

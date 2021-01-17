@@ -1,4 +1,5 @@
 #include "pbr.hlsli"
+#include "spherical-harmonics.hlsli"
 
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
@@ -11,6 +12,13 @@
     "DescriptorTable(SRV(t1, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_VERTEX), " \
     "DescriptorTable(SRV(t2, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL) "
 
+struct LightProbeData
+{
+	int envmapTextureIndex;
+	int shTextureIndex;
+	int prefilteredEnvmapTextureIndex;
+};
+
 struct FrameCbLayout
 {
 	float4x4 sceneRotation;
@@ -18,7 +26,7 @@ struct FrameCbLayout
 	uint scenePositionBufferBindlessIndex;
 	uint sceneNormalBufferBindlessIndex;
 	uint sceneUvBufferBindlessIndex;
-	int envmapTextureIndex;
+	LightProbeData sceneLightProbe;
 };
 
 struct ViewCbLayout
@@ -96,7 +104,7 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
 
 	o.pos = mul(worldPos, viewProjTransform);
-	o.normal = mul(float4(normal, 0.f), g_meshConstants.localToWorld);
+	o.normal = mul(float4(normal, 0.f), localToWorld);
 	o.worldPos = worldPos;
 	o.uv = uv;
 
@@ -135,10 +143,10 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	// diffuse BRDF
 	float3 Fd = albedo * Fd_Lambert();
 
-	// Apply lighting
+	// Apply direct lighting
 	const float lightIntensity = 100000.f;
 	float illuminance = lightIntensity * NoL;
-	float3 luminance = (Fr + Fd) * illuminance;
+	float3 luminance = (Fr + Fd)* illuminance;
 
 	// Exposure. Computes the exposure normalization from the camera's EV100
 	int ev100 = 15;
@@ -146,6 +154,22 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 	// Normalized luminance
 	luminance *= e;
+
+	// Indirect diffuse (pre-exposed)
+	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
+	{
+		SH9Color shRadiance;
+		Texture2D shTex = g_bindless2DTextures[g_frameConstants.sceneLightProbe.shTextureIndex];
+
+		[UNROLL]
+		for (int i = 0; i < SH_COEFFICIENTS; ++i)
+		{
+			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
+		}
+
+		float3 shDiffuse = Fd * ShIrradiance(n, shRadiance);
+		luminance += shDiffuse;
+	}
 
 	return float4(luminance, 1.f);
 }

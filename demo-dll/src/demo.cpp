@@ -38,7 +38,7 @@ struct FTextureCache
 		const DirectX::Image* images,
 		const size_t imageCount);
 
-	uint32_t CacheHdrTexture(const std::wstring& name);
+	FLightProbe CacheHdrTexture(const std::wstring& name);
 
 	void Clear();
 
@@ -388,7 +388,7 @@ void FScene::Reload(const std::string& filename)
 	delete[] m_scratchNormalBuffer;
 	delete[] m_scratchUvBuffer;
 
-	m_envmapTextureIndex = Demo::s_textureCache.CacheHdrTexture(L"lilienstein_2k.hdr");
+	m_globalLightProbe = Demo::s_textureCache.CacheHdrTexture(L"lilienstein_2k.hdr");
 }
 
 void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
@@ -806,16 +806,24 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 }
 
-uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
+FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 {
-	auto search = m_cachedTextures.find(name);
-	if (search != m_cachedTextures.cend())
+	const std::wstring envmapTextureName = name + L".envmap";
+	const std::wstring shTextureName = name + L".shtex";
+
+	auto search0 = m_cachedTextures.find(envmapTextureName);
+	auto search1 = m_cachedTextures.find(shTextureName);
+	if (search0 != m_cachedTextures.cend() && search1 != m_cachedTextures.cend())
 	{
-		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, search->second->m_srvIndex);
+		return FLightProbe{
+			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, search0->second->m_srvIndex),
+			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, search1->second->m_srvIndex),
+			-1
+		};
 	}
 	else
 	{
-		//RenderBackend12::BeginCapture();
+		RenderBackend12::BeginCapture();
 
 		// Read HDR spehere map from file
 		DirectX::TexMetadata metadata;
@@ -856,118 +864,255 @@ uint32_t FTextureCache::CacheHdrTexture(const std::wstring& name)
 		const size_t cubemapSize = metadata.height;
 		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"texcube_uav", metadata.format, cubemapSize, cubemapSize, numMips, 6);
 
-		// Root Signature
-		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"hdri.hlsl", L"rootsig" });
-		d3dCmdList->SetComputeRootSignature(rootsig.get());
-
-		// PSO
-		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"hdri.hlsl", L"cs_cubemapgen", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_4");
-
-		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = rootsig.get();
-		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
-		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
-		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
-		d3dCmdList->SetPipelineState(pso);
-
-		// Shader resources
-		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
-		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
-		struct CbLayout
 		{
-			uint32_t mipIndex;
-			uint32_t hdrTextureIndex;
-			uint32_t cubemapUavIndex;
-			uint32_t cubemapSize;
-		};
+			// Root Signature
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig" });
+			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
-		// Convert from sperical map to cube map
-		uint32_t mipSize = cubemapSize;
-		for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
-		{
-			CbLayout computeCb =
+			// PSO
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"cubemapgen.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_4");
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Shader resources
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			struct CbLayout
 			{
-				.mipIndex = mipIndex,
-				.hdrTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
-				.cubemapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[mipIndex]),
-				.cubemapSize = (uint32_t)mipSize
+				uint32_t mipIndex;
+				uint32_t hdrTextureIndex;
+				uint32_t cubemapUavIndex;
+				uint32_t cubemapSize;
 			};
 
-			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
-			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
-			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+			// Convert from sperical map to cube map
+			uint32_t mipSize = cubemapSize;
+			for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
+			{
+				CbLayout computeCb =
+				{
+					.mipIndex = mipIndex,
+					.hdrTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
+					.cubemapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[mipIndex]),
+					.cubemapSize = (uint32_t)mipSize
+				};
 
-			// Dispatch
-			size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
-			d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
+				d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+				d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
 
-			mipSize = mipSize >> 1;
+				// Dispatch
+				size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
+				d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+
+				mipSize = mipSize >> 1;
+			}
 		}
 
 		// Copy from UAV to destination cubemap texture
 		texCubeUav->m_resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto cubemapTex = RenderBackend12::CreateBindlessTexture(name, BindlessResourceType::TextureCube, metadata.format, cubemapSize, cubemapSize, numMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto cubemapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, BindlessResourceType::TextureCube, metadata.format, cubemapSize, cubemapSize, numMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(cubemapTex->m_resource->m_d3dResource, texCubeUav->m_resource->m_d3dResource);
 		cubemapTex->m_resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-		m_cachedTextures[name] = std::move(cubemapTex);
+		m_cachedTextures[envmapTextureName] = std::move(cubemapTex);
 
 		// ---------------------------------------------------------------------------------------------------------
-		// Compute SH radiance coefficients
+		// Project radiance to SH basis
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
-		auto shBufferUav = RenderBackend12::CreateBindlessUavTexture(L"ShTex_uav", DXGI_FORMAT_R32_FLOAT, metadata.width, metadata.width, 1, numCoefficients);
+		constexpr uint32_t srcMipIndex = 2;
+		auto shTexureUav0 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_uav0", metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, numCoefficients);
 
-		// See https://gpuopen.com/wp-content/uploads/2017/07/GDC2017-Wave-Programming-D3D12-Vulkan.pdf
-		const uint32_t laneCount = RenderBackend12::GetLaneCount();
-		uint32_t threadGroupSizeX = 4 / (64 / laneCount);
-		uint32_t threadGroupSizeY = 16;
-		uint32_t threadGroupSizeZ = 4 * (64 / laneCount);
-		std::wstringstream s;
-		s << "THREAD_GROUP_SIZE_X=" << threadGroupSizeX <<
-			" THREAD_GROUP_SIZE_Y=" << threadGroupSizeY <<
-			" THREAD_GROUP_SIZE_Z=" << threadGroupSizeZ;
-
-		// PSO
-		csBlob = RenderBackend12::CacheShader({ L"hdri.hlsl", L"cs_sphericalharmonics_projection", s.str() }, L"cs_6_4");
-
-		psoDesc = {};
-		psoDesc.pRootSignature = rootsig.get();
-		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
-		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
-		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-		pso = RenderBackend12::FetchComputePipelineState(psoDesc);
-		d3dCmdList->SetPipelineState(pso);
-
-		// Dispatch (Reduction)
-		width = metadata.width, height = metadata.height;
-		while (width > (threadGroupSizeX * threadGroupSizeZ) || 
-			height > threadGroupSizeY)
 		{
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(width / (threadGroupSizeX * threadGroupSizeZ)), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(height / threadGroupSizeY), 1);
+			// Root Signature
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-projection.hlsl", L"rootsig" });
+			d3dCmdList->SetComputeRootSignature(rootsig.get());
+
+			// PSO
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-projection.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_4");
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Shader resources
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			struct CbLayout
+			{
+				uint32_t inputHdriIndex;
+				uint32_t outputUavIndex;
+				uint32_t hdriWidth;
+				uint32_t hdriHeight;
+				uint32_t srcMip;
+			} cb =
+			{
+				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
+				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, shTexureUav0->m_uavIndices[0]),
+				metadata.width,
+				metadata.height,
+				srcMipIndex
+			};
+
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
+			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(metadata.width / 16), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(metadata.height / 16), 1);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
-			width /= (threadGroupSizeX * threadGroupSizeZ);
-			height /= threadGroupSizeY;
 		}
 
-		// Copy from UAV to destination buffer
-		/*shBufferUav->m_resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto shBuffer = RenderBackend12::CreateBindlessBuffer(L"SH_buffer", numCoefficients * sizeof(float), D3D12_RESOURCE_STATE_COPY_DEST);
-		d3dCmdList->CopyResource(shBuffer->m_resource->m_d3dResource, shBufferUav->m_resource->m_d3dResource);
-		shBuffer->m_resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);*/
+		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
+		auto shTexureUav1 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_uav1", metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, numCoefficients);
+
+		// Ping-pong UAVs
+		FBindlessResource* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
+		int src = 0, dest = 1;
+
+		{
+			// Root Signature
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-integration.hlsl", L"rootsig" });
+			d3dCmdList->SetComputeRootSignature(rootsig.get());
+
+			// See https://gpuopen.com/wp-content/uploads/2017/07/GDC2017-Wave-Programming-D3D12-Vulkan.pdf
+			const uint32_t laneCount = RenderBackend12::GetLaneCount();
+			uint32_t threadGroupSizeX = 4 / (64 / laneCount);
+			uint32_t threadGroupSizeY = 16;
+			uint32_t threadGroupSizeZ = 4 * (64 / laneCount);
+			std::wstringstream s;
+			s << "THREAD_GROUP_SIZE_X=" << threadGroupSizeX <<
+				" THREAD_GROUP_SIZE_Y=" << threadGroupSizeY <<
+				" THREAD_GROUP_SIZE_Z=" << threadGroupSizeZ;
+
+			// PSO
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-integration.hlsl", L"cs_main", s.str() }, L"cs_6_4");
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Shader resources
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			// Dispatch (Reduction)
+			width = metadata.width >> srcMipIndex, height = metadata.height >> srcMipIndex;
+			uavs[src]->m_resource->UavBarrier(cmdList);
+
+			while (width >= (threadGroupSizeX * threadGroupSizeZ) ||
+				height >= threadGroupSizeY)
+			{
+				struct CbLayout
+				{
+					uint32_t srcUavIndex;
+					uint32_t destUavIndex;
+				} cb =
+				{
+					RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, uavs[src]->m_uavIndices[0]),
+					RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, uavs[dest]->m_uavIndices[0])
+				};
+
+				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
+				d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+
+				// Reduce by 16 x 16 on each iteration
+				size_t threadGroupCountX = std::max<size_t>(std::ceil(width / (threadGroupSizeX * threadGroupSizeZ)), 1);
+				size_t threadGroupCountY = std::max<size_t>(std::ceil(height / threadGroupSizeY), 1);
+
+				d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+
+				uavs[dest]->m_resource->UavBarrier(cmdList);
+
+				width = threadGroupCountX;
+				height = threadGroupCountY;
+				std::swap(src, dest);
+			}
+		}
+
+		auto shTexureUavAccum = RenderBackend12::CreateBindlessUavTexture(L"ShAccum_uav", metadata.format, numCoefficients, 1, 1, 1);
+
+		{
+			// Root Signature
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-accumulation.hlsl", L"rootsig" });
+			d3dCmdList->SetComputeRootSignature(rootsig.get());
+
+			std::wstringstream s;
+			s << "THREAD_GROUP_SIZE_X=" << width <<
+				" THREAD_GROUP_SIZE_Y=" << height;
+
+			// PSO
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-accumulation.hlsl", L"cs_main", s.str() }, L"cs_6_4");
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Shader resources
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			struct CbLayout
+			{
+				uint32_t srcIndex;
+				uint32_t destIndex;
+				float normalizationFactor;
+			} cb =
+			{
+				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, uavs[src]->m_uavIndices[0]),
+				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2D, shTexureUavAccum->m_uavIndices[0]),
+				1.f / (float)((metadata.width >> srcMipIndex) * (metadata.height >> srcMipIndex))
+			};
+
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
+			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DBegin));
+			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+			d3dCmdList->Dispatch(1, 1, 1);
+		}
+
+		// Copy from UAV to destination texture
+		shTexureUavAccum->m_resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		auto shTex = RenderBackend12::CreateBindlessTexture(shTextureName, BindlessResourceType::Texture2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
+		shTex->m_resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_cachedTextures[shTextureName] = std::move(shTex);
 
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 		RenderBackend12::FlushGPU();
 
-		//RenderBackend12::EndCapture();
+		RenderBackend12::EndCapture();
 
-		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, m_cachedTextures[name]->m_srvIndex);
+		return FLightProbe{
+			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, m_cachedTextures[envmapTextureName]->m_srvIndex),
+			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, m_cachedTextures[shTextureName]->m_srvIndex),
+			-1
+		};
 	}
 }
 

@@ -747,6 +747,14 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 		});
 }
 
+void FResource::UavBarrier(FCommandList* cmdList)
+{
+	D3D12_RESOURCE_BARRIER barrierDesc = {};
+	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrierDesc.UAV.pResource = m_d3dResource;
+	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
+}
+
 FTransientBuffer::~FTransientBuffer()
 {
 	GetUploadBufferPool()->Retire(m_resource, m_dependentCmdlist);

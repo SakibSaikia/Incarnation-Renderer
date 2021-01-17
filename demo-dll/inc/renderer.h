@@ -41,6 +41,13 @@ struct FCamera
 	Matrix m_projectionTransform;
 };
 
+struct FLightProbe
+{
+	int m_envmapTextureIndex;
+	int m_shTextureIndex;
+	int m_prefilteredEnvmapTextureIndex;
+};
+
 struct FScene
 {
 	void Reload(const std::string& filename);
@@ -65,12 +72,8 @@ struct FScene
 	std::unique_ptr<FBindlessResource> m_meshUvBuffer;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
-	// Environment map
-	int m_envmapTextureIndex;
-
-	// Light probes
-	int m_shRadianceBufferIndex;
-	int m_prefilteredEnvmapTextureIndex;
+	// Image based lighting
+	FLightProbe m_globalLightProbe;
 
 	// Transform
 	Matrix m_rootTransform;
