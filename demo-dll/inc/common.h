@@ -3,7 +3,7 @@
 
 namespace Settings
 {
-	constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+	constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	constexpr char k_sceneFilename[] = "MetalRoughSpheres.gltf";
 }
 

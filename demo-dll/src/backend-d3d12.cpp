@@ -1286,7 +1286,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Width = resX;
 	swapChainDesc.Height = resY;
-	swapChainDesc.Format = Settings::k_backBufferFormat;
+	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	swapChainDesc.Scaling = DXGI_SCALING_NONE;
 	swapChainDesc.SampleDesc.Quality = 0;
 	swapChainDesc.SampleDesc.Count = 1;
@@ -1305,13 +1305,17 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 
 	AssertIfFailed(swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
 
+	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.Format = Settings::k_backBufferFormat;
+	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+
 	// Back buffers
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
 		s_backBuffers[bufferIdx] = std::make_unique<FRenderTexture>();
 		FRenderTexture* backBuffer = s_backBuffers[bufferIdx].get();
 		backBuffer->m_resource = new FResource;
-		backBuffer->m_isDepthStencil = true;
+		backBuffer->m_isDepthStencil = false;
 		backBuffer->m_isSwapChainBuffer = true;
 		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&backBuffer->m_resource->m_d3dResource)));
 
@@ -1325,7 +1329,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		DebugAssert(ok, "Ran out of RTV descriptors");
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtvIndex);
-		s_d3dDevice->CreateRenderTargetView(backBuffer->m_resource->m_d3dResource, nullptr, rtvDescriptor);
+		s_d3dDevice->CreateRenderTargetView(backBuffer->m_resource->m_d3dResource, &rtvDesc, rtvDescriptor);
 		backBuffer->m_renderTextureIndices.push_back(rtvIndex);
 	}
 

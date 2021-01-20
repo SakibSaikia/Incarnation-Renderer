@@ -43,5 +43,5 @@ float4 ps_main(PS_INPUT input) : SV_Target
 {
     Texture2D texture0 = g_bindlessTextures[g_textureIndex];
     float4 out_col = input.col * texture0.Sample(g_sampler0, input.uv);
-    return out_col;
+    return pow(out_col, 2.2f);
 }
