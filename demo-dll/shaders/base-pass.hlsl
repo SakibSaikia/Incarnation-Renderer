@@ -138,7 +138,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float V = V_SmithGGXCorrelated(NoV, NoL, roughness);
 
 	// Specular BRDF
-	float3 Fr = D * V * F;
+	//float3 Fr = (D * V * F) / (4.f * NoV * NoL);
+	float3 Fr = (D * V * F);
 
 	// diffuse BRDF
 	float3 Fd = albedo * Fd_Lambert();
@@ -148,14 +149,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float illuminance = lightIntensity * NoL;
 	float3 luminance = (Fr + Fd)* illuminance;
 
-	// Exposure. Computes the exposure normalization from the camera's EV100
-	int ev100 = 15;
-	float e = exposure(ev100);
-
-	// Normalized luminance
-	luminance *= e;
-
-	// Indirect diffuse (pre-exposed)
+	// Indirect diffuse
 	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
 	{
 		SH9Color shRadiance;
@@ -170,6 +164,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 shDiffuse = Fd * ShIrradiance(n, shRadiance);
 		luminance += shDiffuse;
 	}
+
+	// Exposure. Computes the exposure normalization from the camera's EV100
+	int ev100 = 15;
+	float e = exposure(ev100);
+
+	// Normalized luminance
+	luminance *= e;
 
 	return float4(luminance, 1.f);
 }
