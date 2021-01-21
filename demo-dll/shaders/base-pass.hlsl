@@ -165,12 +165,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		luminance += shDiffuse;
 	}
 
-	// Exposure. Computes the exposure normalization from the camera's EV100
-	int ev100 = 15;
+	// Exposure correction. Computes the exposure normalization from the camera's EV100
+	int ev100 = 13;
 	float e = exposure(ev100);
-
-	// Normalized luminance
 	luminance *= e;
 
-	return float4(luminance, 1.f);
+	// Tonemapping
+	float3 ldrColor = Reinhard(luminance);
+
+	return float4(ldrColor, 1.f);
 }
