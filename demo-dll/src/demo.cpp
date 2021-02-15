@@ -42,7 +42,7 @@ struct FTextureCache
 
 	void Clear();
 
-	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessResource>> m_cachedTextures;
+	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessShaderResource>> m_cachedTextures;
 };
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -981,7 +981,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		auto shTexureUav1 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_uav1", metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, numCoefficients);
 
 		// Ping-pong UAVs
-		FBindlessResource* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
+		FBindlessUav* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
 		int src = 0, dest = 1;
 
 		{

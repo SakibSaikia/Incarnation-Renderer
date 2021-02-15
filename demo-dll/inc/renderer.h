@@ -66,10 +66,10 @@ struct FScene
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::unique_ptr<FBindlessResource> m_meshIndexBuffer;
-	std::unique_ptr<FBindlessResource> m_meshPositionBuffer;
-	std::unique_ptr<FBindlessResource> m_meshNormalBuffer;
-	std::unique_ptr<FBindlessResource> m_meshUvBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshIndexBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshPositionBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshNormalBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshUvBuffer;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Image based lighting

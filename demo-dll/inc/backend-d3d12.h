@@ -111,13 +111,23 @@ struct FResource
 	void UavBarrier(FCommandList* cmdList);
 };
 
-struct FBindlessResource
+struct FBindlessShaderResource
 {
 	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
-	std::vector<uint32_t> m_uavIndices; // one for each mip level in resource
 
-	~FBindlessResource();
+	~FBindlessShaderResource();
+};
+
+struct FBindlessUav
+{
+	FResource* m_resource;
+	std::vector<uint32_t> m_uavIndices; // one for each mip level
+	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
+	uint32_t m_srvIndex = ~0u;
+
+	~FBindlessUav();
+	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 struct FTransientBuffer
@@ -225,7 +235,7 @@ namespace RenderBackend12
 		const size_t mipLevels,
 		const size_t sampleCount);
 
-	std::unique_ptr<FBindlessResource> CreateBindlessTexture(
+	std::unique_ptr<FBindlessShaderResource> CreateBindlessTexture(
 		const std::wstring& name, 
 		const BindlessResourceType type,
 		const DXGI_FORMAT format,
@@ -237,14 +247,14 @@ namespace RenderBackend12
 		const DirectX::Image* images = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FBindlessResource> CreateBindlessBuffer(
+	std::unique_ptr<FBindlessShaderResource> CreateBindlessBuffer(
 		const std::wstring& name,
 		const size_t size,
 		D3D12_RESOURCE_STATES resourceState,
 		const uint8_t* pData = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FBindlessResource> CreateBindlessUavTexture(
+	std::unique_ptr<FBindlessUav> CreateBindlessUavTexture(
 		const std::wstring& name,
 		const DXGI_FORMAT format,
 		const size_t width,
@@ -252,7 +262,7 @@ namespace RenderBackend12
 		const size_t mipLevels,
 		const size_t arraySize);
 
-	std::unique_ptr<FBindlessResource> CreateBindlessUavBuffer(
+	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
 		const std::wstring& name,
 		const size_t size);
 
