@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
+#include <d3dx12.h>
 #include <DirectXTex.h>
 #include <winrt/base.h>
 #include <pix3.h>
@@ -38,6 +39,7 @@ enum class BindlessResourceType
 {
 	Buffer,
 	Texture2D,
+	Texture2DArray,
 	TextureCube,
 	RWTexture2D,
 	RWTexture2DArray,
@@ -48,6 +50,7 @@ enum class BindlessDescriptorType
 {
 	Buffer,
 	Texture2D,
+	Texture2DArray,
 	TextureCube,
 	RWTexture2D,
 	RWTexture2DArray
@@ -59,6 +62,8 @@ enum class BindlessDescriptorRange : uint32_t
 	BufferEnd = BufferBegin + 999,
 	Texture2DBegin,
 	Texture2DEnd = Texture2DBegin + 999,
+	Texture2DArrayBegin,
+	Texture2DArrayEnd = Texture2DArrayBegin + 999,
 	TextureCubeBegin,
 	TextureCubeEnd = TextureCubeBegin + 999,
 	RWTexture2DBegin,
@@ -107,8 +112,12 @@ struct FResource
 	void SetName(const std::wstring& name);
 	HRESULT InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue = nullptr);
 	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
+
+private:
+	friend struct FBindlessShaderResource;
+	friend struct FBindlessUav;
+	friend struct FRenderTexture;
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
-	void UavBarrier(FCommandList* cmdList);
 };
 
 struct FBindlessShaderResource
@@ -117,6 +126,7 @@ struct FBindlessShaderResource
 	uint32_t m_srvIndex = ~0u;
 
 	~FBindlessShaderResource();
+	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 struct FBindlessUav
@@ -128,6 +138,7 @@ struct FBindlessUav
 
 	~FBindlessUav();
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	void UavBarrier(FCommandList* cmdList);
 };
 
 struct FTransientBuffer
@@ -186,6 +197,7 @@ namespace RenderBackend12
 	// Command Lists
 	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
 	D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
+	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures
 	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(const FRootsigDesc& rootsig);

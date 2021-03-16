@@ -40,7 +40,7 @@ namespace RenderJob
 
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-			SCOPED_GPU_EVENT(cmdList, L"base_pass", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"base_pass", 0);
 
 			passDesc.colorTarget->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.depthStencilTarget->Transition(cmdList, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
@@ -258,7 +258,7 @@ namespace RenderJob
 
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-			SCOPED_GPU_EVENT(cmdList, L"background_pass", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"background_pass", 0);
 
 			passDesc.colorTarget->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.depthStencilTarget->Transition(cmdList, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
@@ -376,7 +376,7 @@ namespace RenderJob
 
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-			SCOPED_GPU_EVENT(cmdList, L"post_process", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"post_process", 0);
 
 			// MSAA resolve
 			passDesc.colorSource->Transition(cmdList, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
@@ -400,7 +400,7 @@ namespace RenderJob
 			cmdList->SetName(L"imgui_job");
 
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-			SCOPED_GPU_EVENT(cmdList, L"imgui_commands", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"imgui_commands", 0);
 
 			ImDrawData* drawData = ImGui::GetDrawData();
 			size_t vtxBufferSize = 0;

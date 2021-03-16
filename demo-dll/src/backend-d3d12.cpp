@@ -91,8 +91,7 @@ namespace
 
 	bool IsShaderResource(D3D12_RESOURCE_STATES state)
 	{
-		return state == D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE || 
-			state == D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+		return state & (D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC GetNullSRVDesc(D3D12_SRV_DIMENSION viewDimension)
@@ -104,6 +103,7 @@ namespace
 			format = DXGI_FORMAT_R32_FLOAT; 
 			break;
 		case D3D12_SRV_DIMENSION_TEXTURE2D: 
+		case D3D12_SRV_DIMENSION_TEXTURE2DARRAY:
 		case D3D12_SRV_DIMENSION_TEXTURECUBE:
 			format = DXGI_FORMAT_R8G8B8A8_UNORM; 
 			break;
@@ -309,18 +309,6 @@ bool operator==(const DXGI_SAMPLE_DESC& lhs, const DXGI_SAMPLE_DESC& rhs)
 	return lhs.Count == rhs.Count && lhs.Quality == rhs.Quality;
 }
 
-bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
-{
-	return lhs.Dimension == rhs.Dimension &&
-		lhs.Width == rhs.Width &&
-		lhs.Height == rhs.Height &&
-		lhs.DepthOrArraySize == rhs.DepthOrArraySize &&
-		lhs.MipLevels == rhs.MipLevels &&
-		lhs.Format == rhs.Format &&
-		lhs.SampleDesc == rhs.SampleDesc &&
-		lhs.Layout == rhs.Layout &&
-		lhs.Flags == rhs.Flags;
-}
 #pragma endregion
 #pragma region Command_Lists
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -678,7 +666,7 @@ HRESULT FResource::InitCommittedResource(
 	SetName(name);
 
 	m_subresourceStates.clear();
-	for (int i = 0; i < resourceDesc.MipLevels; ++i)
+	for (int i = 0; i < resourceDesc.MipLevels * resourceDesc.DepthOrArraySize; ++i)
 	{
 		m_subresourceStates.push_back(initialState);
 	}
@@ -720,17 +708,55 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 		cmdList->m_pendingTransitions.erase(pendingResourceTransition);
 	}
 
-	D3D12_RESOURCE_STATES beforeState = m_subresourceStates[subId];
-	if (beforeState == destState)
-		return;
+	bool bAllSubresourcesHaveSameBeforeState = true;
+	if (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+	{
+		D3D12_RESOURCE_STATES state = m_subresourceStates[0];
+		for (int i = 1; i < m_subresourceStates.size(); ++i)
+		{
+			if (m_subresourceStates[i] != state)
+			{
+				bAllSubresourcesHaveSameBeforeState = false;
+				break;
+			}
+		}
+	}
 
-	D3D12_RESOURCE_BARRIER barrierDesc = {};
-	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrierDesc.Transition.pResource = m_d3dResource;
-	barrierDesc.Transition.StateBefore = beforeState;
-	barrierDesc.Transition.StateAfter = destState;
-	barrierDesc.Transition.Subresource = subresourceIndex;
-	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
+	if (bAllSubresourcesHaveSameBeforeState)
+	{
+		// Do a single barrier call for all subresources
+		D3D12_RESOURCE_STATES beforeState = m_subresourceStates[subId];
+		if (beforeState == destState)
+			return;
+
+		D3D12_RESOURCE_BARRIER barrierDesc = {};
+		barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrierDesc.Transition.pResource = m_d3dResource;
+		barrierDesc.Transition.StateBefore = beforeState;
+		barrierDesc.Transition.StateAfter = destState;
+		barrierDesc.Transition.Subresource = subresourceIndex;
+		cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
+	}
+	else
+	{
+		DebugAssert(subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+
+		// Do individual barrier calls for each subresource
+		for (int i = 0; i < m_subresourceStates.size(); ++i)
+		{
+			D3D12_RESOURCE_STATES beforeState = m_subresourceStates[i];
+			if (beforeState != destState)
+			{
+				D3D12_RESOURCE_BARRIER barrierDesc = {};
+				barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+				barrierDesc.Transition.pResource = m_d3dResource;
+				barrierDesc.Transition.StateBefore = beforeState;
+				barrierDesc.Transition.StateAfter = destState;
+				barrierDesc.Transition.Subresource = i;
+				cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
+			}
+		}
+	}
 
 	// Update CPU side tracking of current state
 	cmdList->m_pendingTransitions.emplace(
@@ -751,14 +777,6 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 		});
 }
 
-void FResource::UavBarrier(FCommandList* cmdList)
-{
-	D3D12_RESOURCE_BARRIER barrierDesc = {};
-	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-	barrierDesc.UAV.pResource = m_d3dResource;
-	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
-}
-
 FTransientBuffer::~FTransientBuffer()
 {
 	GetUploadBufferPool()->Retire(m_resource, m_dependentCmdlist);
@@ -770,12 +788,39 @@ FTransientBuffer::~FTransientBuffer()
 //														Bindless
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
+BindlessResourceType GetBindlessSrvResourceType(D3D12_SRV_DIMENSION descType)
+{
+	switch (descType)
+	{
+	case D3D12_SRV_DIMENSION_BUFFER: return BindlessResourceType::Buffer;
+	case D3D12_SRV_DIMENSION_TEXTURE2D: return BindlessResourceType::Texture2D;
+	case D3D12_SRV_DIMENSION_TEXTURE2DARRAY: return BindlessResourceType::Texture2DArray;
+	case D3D12_SRV_DIMENSION_TEXTURECUBE: return BindlessResourceType::TextureCube;
+	default:
+		DebugAssert("Unsupported");
+	}
+
+	return BindlessResourceType::Count;
+}
+
 class FBindlessIndexPool
 {
 public:
 	void Initialize(D3DDescriptorHeap_t* bindlessHeap)
 	{
 		// Initialize with null descriptors and cache available indices
+
+		// Buffer
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
+		for (int i = (uint32_t)BindlessDescriptorRange::BufferBegin; i <= (uint32_t)BindlessDescriptorRange::BufferEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
+
+			m_indices[(uint32_t)BindlessResourceType::Buffer].push(i);
+		}
 
 		// Texture2D
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
@@ -789,16 +834,16 @@ public:
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(i);
 		}
 
-		// Buffer
-		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
-		for (int i = (uint32_t)BindlessDescriptorRange::BufferBegin; i <= (uint32_t)BindlessDescriptorRange::BufferEnd; ++i)
+		// Texture2DArray
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DArrayDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
+		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DArrayBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv;
 			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
 				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, srv);
 
-			m_indices[(uint32_t)BindlessResourceType::Buffer].push(i);
+			m_indices[(uint32_t)BindlessResourceType::Texture2DArray].push(i);
 		}
 
 		// Texture Cube
@@ -862,6 +907,12 @@ public:
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(index);
+		}
+		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DArrayDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::Texture2DArray].push(index);
 		}
 		else if (index <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd)
 		{
@@ -948,7 +999,7 @@ public:
 		heapDesc.Type = D3D12_HEAP_TYPE_DEFAULT;
 		heapDesc.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
-		// New render texture
+		// New resource
 		auto newRt = std::make_unique<FResource>();
 		AssertIfFailed(newRt->InitCommittedResource(name, heapDesc, desc, initialState, clearValue));
 
@@ -1053,7 +1104,7 @@ private:
 	std::mutex m_mutex;
 	winrt::com_ptr<D3DHeap_t> m_heap;
 	winrt::com_ptr<D3DFence_t> m_fence;
-	size_t m_fenceValue = 0;
+	std::atomic_size_t m_fenceValue = 0;
 	std::list<std::unique_ptr<FResource>> m_freeList;
 	std::list<std::unique_ptr<FResource>> m_useList;
 };
@@ -1064,12 +1115,37 @@ private:
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 FBindlessShaderResource::~FBindlessShaderResource()
 {
-	delete m_resource;
-
-	if (m_srvIndex != ~0u)
+	auto waitForFenceTask = concurrency::create_task([this]() mutable
 	{
-		GetBindlessPool()->ReturnIndex(m_srvIndex);
-	}
+		winrt::com_ptr<D3DFence_t> fence;
+		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
+
+		GetGraphicsQueue()->Signal(fence.get(), 1);
+		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+		if (event)
+		{
+			fence->SetEventOnCompletion(1, event);
+			WaitForSingleObject(event, INFINITE);
+		}
+	});
+
+	// Make a copy of the resource contents as it will be cleaned up by the destructor
+	auto freeResource = [resource = m_resource, srvIndex = m_srvIndex]() mutable
+	{
+		if (srvIndex != ~0u)
+		{
+			GetBindlessPool()->ReturnIndex(srvIndex);
+		}
+
+		delete resource;
+	};
+
+	waitForFenceTask.then(freeResource);
+}
+
+void FBindlessShaderResource::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+{
+	m_resource->Transition(cmdList, subresourceIndex, destState);
 }
 
 FBindlessUav::~FBindlessUav()
@@ -1079,23 +1155,35 @@ FBindlessUav::~FBindlessUav()
 
 void FBindlessUav::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
 {
-	if (m_srvIndex == ~0u && IsShaderResource(destState))
+	if (IsShaderResource(destState))
 	{
-		m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_srvIndex);
-		GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
-		m_resource->Transition(cmdList, subresourceIndex, destState);
-	}
-	else if (m_srvIndex != ~0u && destState == D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-	{
-		GetBindlessPool()->ReturnIndex(m_srvIndex);
-		m_srvIndex = ~0u;
+		if (m_srvIndex == ~0u)
+		{
+			m_srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(m_srvDesc.ViewDimension));
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_srvIndex);
+			GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
+		}
+
 		m_resource->Transition(cmdList, subresourceIndex, destState);
 	}
 	else
 	{
+		if (m_srvIndex != ~0u)
+		{
+			GetBindlessPool()->ReturnIndex(m_srvIndex);
+			m_srvIndex = ~0u;
+		}
+
 		m_resource->Transition(cmdList, subresourceIndex, destState);
 	}
+}
+
+void FBindlessUav::UavBarrier(FCommandList* cmdList)
+{
+	D3D12_RESOURCE_BARRIER barrierDesc = {};
+	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrierDesc.UAV.pResource = m_resource->m_d3dResource;
+	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
 }
 
 FRenderTexture::~FRenderTexture()
@@ -1114,7 +1202,7 @@ void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourc
 {
 	if (m_srvIndex == ~0u && IsShaderResource(destState))
 	{
-		m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Texture2D);
+		m_srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(m_srvDesc.ViewDimension));
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_srvIndex);
 		GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
 		m_resource->Transition(cmdList, subresourceIndex, destState);
@@ -1629,22 +1717,8 @@ D3DFence_t* RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE c
 		}
 	}
 
-	// Figure out which command queue to use
-	D3DCommandQueue_t* activeCommandQueue{};
-	switch (commandQueueType)
-	{
-	case D3D12_COMMAND_LIST_TYPE_DIRECT:
-		activeCommandQueue = s_graphicsQueue.get();
-		break;
-	case D3D12_COMMAND_LIST_TYPE_COMPUTE:
-		activeCommandQueue = s_computeQueue.get();
-		break;
-	case D3D12_COMMAND_LIST_TYPE_COPY:
-		activeCommandQueue = s_copyQueue.get();
-		break;
-	}
-
 	// Execute commands, signal the CL fences and retire the CLs
+	D3DCommandQueue_t* activeCommandQueue = GetCommandQueue(commandQueueType);
 	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
 	for (FCommandList* cl : commandLists)
 	{
@@ -1668,6 +1742,21 @@ D3DFence_t* RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE c
 
 	// Return the latest fence
 	return latestFence;
+}
+
+D3DCommandQueue_t* RenderBackend12::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type)
+{
+	switch (type)
+	{
+	case D3D12_COMMAND_LIST_TYPE_DIRECT:
+		return RenderBackend12::s_graphicsQueue.get();
+	case D3D12_COMMAND_LIST_TYPE_COMPUTE:
+		return RenderBackend12::s_computeQueue.get();
+	case D3D12_COMMAND_LIST_TYPE_COPY:
+		return RenderBackend12::s_copyQueue.get();
+	}
+
+	return nullptr;
 }
 
 void RenderBackend12::PresentDisplay()
@@ -1731,6 +1820,10 @@ uint32_t RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType descri
 	case BindlessDescriptorType::Texture2D:
 		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DBegin;
 		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DEnd);
+		return offset;
+	case BindlessDescriptorType::Texture2DArray:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DArrayBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd);
 		return offset;
 	case BindlessDescriptorType::TextureCube:
 		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::TextureCubeBegin;
@@ -2005,9 +2098,9 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 		uploadContext->UpdateSubresources(
 			newTexture->m_resource->m_d3dResource,
 			srcData,
-			[resource = newTexture->m_resource, resourceState](FCommandList* cmdList)
+			[texture = newTexture.get(), resourceState](FCommandList* cmdList)
 			{
-				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				texture->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
@@ -2083,9 +2176,9 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessBuffer(
 		uploadContext->UpdateSubresources(
 			newBuffer->m_resource->m_d3dResource,
 			srcData,
-			[resource = newBuffer->m_resource, resourceState](FCommandList* cmdList)
+			[buffer = newBuffer.get(), resourceState](FCommandList* cmdList)
 			{
-				resource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				buffer->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
@@ -2163,11 +2256,20 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 	{
 		srvDesc.Format = format;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		if (arraySize > 1)
+		if (arraySize == 6)
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+			srvDesc.TextureCube.MipLevels = mipLevels;
+			srvDesc.TextureCube.MostDetailedMip = 0;
+		}
+		else if (arraySize > 1)
 		{
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-			srvDesc.Texture3D.MipLevels = mipLevels;
-			srvDesc.Texture3D.MostDetailedMip = 0;
+			srvDesc.Texture2DArray.MipLevels = mipLevels;
+			srvDesc.Texture2DArray.FirstArraySlice = 0;
+			srvDesc.Texture2DArray.ArraySize = arraySize;
+			srvDesc.Texture2DArray.MostDetailedMip = 0;
+			srvDesc.Texture2DArray.PlaneSlice = 0;
 		}
 		else
 		{
@@ -2236,18 +2338,22 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 
 void RenderBackend12::BeginCapture()
 {
+#if defined (_DEBUG)
 	if (s_graphicsAnalysis)
 	{
 		s_graphicsAnalysis->BeginCapture();
 	}
+#endif
 }
 
 void RenderBackend12::EndCapture()
 {
+#if defined (_DEBUG)
 	if (s_graphicsAnalysis)
 	{
 		s_graphicsAnalysis->EndCapture();
 	}
+#endif
 }
 
 uint32_t RenderBackend12::GetLaneCount()

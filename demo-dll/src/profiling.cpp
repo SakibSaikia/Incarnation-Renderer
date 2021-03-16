@@ -45,7 +45,7 @@ Profiling::ScopedCpuEvent::~ScopedCpuEvent()
 	MicroProfileLeaveInternal(m_uprofToken, m_uprofTick);
 }
 
-Profiling::ScopedGpuEvent::ScopedGpuEvent(FCommandList* cmdList, const wchar_t* eventName, uint64_t color) :
+Profiling::ScopedCommandListEvent::ScopedCommandListEvent(FCommandList* cmdList, const wchar_t* eventName, uint64_t color) :
 	m_cmdList{ cmdList }
 {
 	//ThreadId currentThreadId = GetCurrentThreadId();
@@ -66,7 +66,7 @@ Profiling::ScopedGpuEvent::ScopedGpuEvent(FCommandList* cmdList, const wchar_t* 
 	//m_uprofTick = MicroProfileGpuEnterInternal(m_uprofLog, m_uprofToken);
 }
 
-Profiling::ScopedGpuEvent::~ScopedGpuEvent()
+Profiling::ScopedCommandListEvent::~ScopedCommandListEvent()
 {
 	/*MicroProfileGpuLeaveInternal(m_uprofLog, m_uprofToken, m_uprofTick);*/
 
@@ -79,6 +79,17 @@ Profiling::ScopedGpuEvent::~ScopedGpuEvent()
 			MICROPROFILE_GPU_SUBMIT(uprofQueue, fence);
 		}
 	);*/
+}
+
+Profiling::ScopedCommandQueueEvent::ScopedCommandQueueEvent(D3D12_COMMAND_LIST_TYPE queueType, const wchar_t* eventName, uint64_t color)
+{
+	m_cmdQueue = RenderBackend12::GetCommandQueue(queueType);
+	PIXBeginEvent(m_cmdQueue, color, eventName);
+}
+
+Profiling::ScopedCommandQueueEvent::~ScopedCommandQueueEvent()
+{
+	PIXEndEvent(m_cmdQueue);
 }
 
 void Profiling::Initialize()
