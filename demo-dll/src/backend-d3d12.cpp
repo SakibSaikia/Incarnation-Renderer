@@ -103,6 +103,7 @@ namespace
 			format = DXGI_FORMAT_R32_FLOAT; 
 			break;
 		case D3D12_SRV_DIMENSION_TEXTURE2D: 
+		case D3D12_SRV_DIMENSION_TEXTURE2DMS:
 		case D3D12_SRV_DIMENSION_TEXTURE2DARRAY:
 		case D3D12_SRV_DIMENSION_TEXTURECUBE:
 			format = DXGI_FORMAT_R8G8B8A8_UNORM; 
@@ -794,6 +795,7 @@ BindlessResourceType GetBindlessSrvResourceType(D3D12_SRV_DIMENSION descType)
 	{
 	case D3D12_SRV_DIMENSION_BUFFER: return BindlessResourceType::Buffer;
 	case D3D12_SRV_DIMENSION_TEXTURE2D: return BindlessResourceType::Texture2D;
+	case D3D12_SRV_DIMENSION_TEXTURE2DMS: return BindlessResourceType::Texture2DMultisample;
 	case D3D12_SRV_DIMENSION_TEXTURE2DARRAY: return BindlessResourceType::Texture2DArray;
 	case D3D12_SRV_DIMENSION_TEXTURECUBE: return BindlessResourceType::TextureCube;
 	default:
@@ -832,6 +834,18 @@ public:
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, srv);
 
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(i);
+		}
+
+		// Texture2DMultisample
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DMultisampleDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DMS);
+		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DMultisampleBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, srv);
+
+			m_indices[(uint32_t)BindlessResourceType::Texture2DMultisample].push(i);
 		}
 
 		// Texture2DArray
@@ -907,6 +921,12 @@ public:
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(index);
+		}
+		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DMultisampleDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DMS);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::Texture2DMultisample].push(index);
 		}
 		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd)
 		{
@@ -1020,7 +1040,7 @@ public:
 			}
 		});
 
-		auto addToFreePool = [this, resource = rt->m_resource, depthStencil = rt->m_isDepthStencil, textureIndices = std::move(rt->m_renderTextureIndices)]() mutable
+		auto addToFreePool = [this, resource = rt->m_resource, depthStencil = rt->m_isDepthStencil, textureIndices = std::move(rt->m_renderTextureIndices), srvIndex = rt->m_srvIndex]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -1028,6 +1048,11 @@ public:
 			for (uint32_t descriptorIndex : textureIndices)
 			{
 				descriptorIndexPool.push(descriptorIndex);
+			}
+
+			if (srvIndex != ~0u)
+			{
+				GetBindlessPool()->ReturnIndex(srvIndex);
 			}
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
@@ -1061,13 +1086,18 @@ public:
 			}
 		});
 
-		auto addToFreePool = [this, resource = uav->m_resource, uavIndices = std::move(uav->m_uavIndices)]() mutable
+		auto addToFreePool = [this, resource = uav->m_resource, uavIndices = std::move(uav->m_uavIndices), srvIndex = uav->m_srvIndex]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
 			for (uint32_t descriptorIndex : uavIndices)
 			{
 				GetBindlessPool()->ReturnIndex(descriptorIndex);
+			}
+
+			if (srvIndex != ~0u)
+			{
+				GetBindlessPool()->ReturnIndex(srvIndex);
 			}
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
@@ -1155,27 +1185,7 @@ FBindlessUav::~FBindlessUav()
 
 void FBindlessUav::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
 {
-	if (IsShaderResource(destState))
-	{
-		if (m_srvIndex == ~0u)
-		{
-			m_srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(m_srvDesc.ViewDimension));
-			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_srvIndex);
-			GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
-		}
-
-		m_resource->Transition(cmdList, subresourceIndex, destState);
-	}
-	else
-	{
-		if (m_srvIndex != ~0u)
-		{
-			GetBindlessPool()->ReturnIndex(m_srvIndex);
-			m_srvIndex = ~0u;
-		}
-
-		m_resource->Transition(cmdList, subresourceIndex, destState);
-	}
+	m_resource->Transition(cmdList, subresourceIndex, destState);
 }
 
 void FBindlessUav::UavBarrier(FCommandList* cmdList)
@@ -1200,25 +1210,7 @@ FRenderTexture::~FRenderTexture()
 
 void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
 {
-	if (m_srvIndex == ~0u && IsShaderResource(destState))
-	{
-		m_srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(m_srvDesc.ViewDimension));
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_srvIndex);
-		GetDevice()->CreateShaderResourceView(m_resource->m_d3dResource, &m_srvDesc, srv);
-		m_resource->Transition(cmdList, subresourceIndex, destState);
-	}
-	else if (m_srvIndex != ~0u && 
-		(destState == D3D12_RESOURCE_STATE_RENDER_TARGET || destState == D3D12_RESOURCE_STATE_DEPTH_WRITE || destState == D3D12_RESOURCE_STATE_DEPTH_READ))
-	{
-		GetBindlessPool()->ReturnIndex(m_srvIndex);
-		m_srvIndex = ~0u;
-		m_resource->Transition(cmdList, subresourceIndex, destState);
-	}
-	else
-	{
-		m_resource->Transition(cmdList, subresourceIndex, destState);
-	}
-
+	m_resource->Transition(cmdList, subresourceIndex, destState);
 }
 
 struct FTimestampedBlob
@@ -1821,6 +1813,10 @@ uint32_t RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType descri
 		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DBegin;
 		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DEnd);
 		return offset;
+	case BindlessDescriptorType::Texture2DMultisample:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DMultisampleBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd);
+		return offset;
 	case BindlessDescriptorType::Texture2DArray:
 		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DArrayBegin;
 		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd);
@@ -1879,7 +1875,8 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 	const size_t height,
 	const size_t mipLevels,
 	const size_t depth,
-	const size_t sampleCount)
+	const size_t sampleCount,
+	const bool bCreateSRV)
 {
 
 	D3D12_RESOURCE_DESC rtDesc = {};
@@ -1932,9 +1929,11 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 		rtvIndices.push_back(rtvIndex);
 	}
 
-	// Cache SRV Description
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	// SRV Descriptor
+	uint32_t srvIndex = ~0u;
+	if(bCreateSRV)
 	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		if (depth == 1)
@@ -1956,12 +1955,16 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 			srvDesc.Texture3D.MipLevels = mipLevels;
 			srvDesc.Texture3D.MostDetailedMip = 0;
 		}
+
+		srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(srvDesc.ViewDimension));
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
+		GetDevice()->CreateShaderResourceView(rtResource->m_d3dResource, &srvDesc, srv);
 	}
 
 	auto rt = std::make_unique<FRenderTexture>();
 	rt->m_resource = rtResource;
 	rt->m_renderTextureIndices = std::move(rtvIndices);
-	rt->m_srvDesc = std::move(srvDesc);
+	rt->m_srvIndex = srvIndex;
 	rt->m_isDepthStencil = false;
 	rt->m_isSwapChainBuffer = false;
 
@@ -1974,7 +1977,8 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 	const size_t width,
 	const size_t height,
 	const size_t mipLevels,
-	const size_t sampleCount)
+	const size_t sampleCount,
+	const bool bCreateSRV)
 {
 	D3D12_RESOURCE_DESC dsDesc = {};
 	dsDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -2020,25 +2024,34 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
 		dsvIndices.push_back(dsvIndex);
 	}
 
-	// Cache SRV Description
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Format = GetSrvDepthFormat(format);
+	// SRV Descriptor
+	uint32_t srvIndex = ~0u;
+	if(bCreateSRV)
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = GetSrvDepthFormat(format);
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-	if (sampleCount > 1)
-	{
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-	}
-	else
-	{
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = mipLevels;
-		srvDesc.Texture2D.MostDetailedMip = 0;
+		if (sampleCount > 1)
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+		}
+		else
+		{
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MipLevels = mipLevels;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+		}
+
+		srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(srvDesc.ViewDimension));
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
+		GetDevice()->CreateShaderResourceView(rtResource->m_d3dResource, &srvDesc, srv);
 	}
 
 	auto rt = std::make_unique<FRenderTexture>();
 	rt->m_resource = rtResource;
 	rt->m_renderTextureIndices = std::move(dsvIndices);
-	rt->m_srvDesc = std::move(srvDesc);
+	rt->m_srvIndex = srvIndex;
 	rt->m_isDepthStencil = true;
 	rt->m_isSwapChainBuffer = false;
 
@@ -2207,7 +2220,8 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 	const size_t width,
 	const size_t height,
 	const size_t mipLevels,
-	const size_t arraySize)
+	const size_t arraySize,
+	const bool bCreateSRV)
 {
 	D3D12_RESOURCE_DESC uavDesc = {};
 	uavDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -2251,9 +2265,11 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 		uavIndices.push_back(uavIndex);
 	}
 
-	// Cache SRV Description
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	// SRV Descriptor
+	uint32_t srvIndex = ~0u;
+	if(bCreateSRV)
 	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		if (arraySize == 6)
@@ -2277,19 +2293,24 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 			srvDesc.Texture2D.MipLevels = mipLevels;
 			srvDesc.Texture2D.MostDetailedMip = 0;
 		}
+
+		srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(srvDesc.ViewDimension));
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
+		GetDevice()->CreateShaderResourceView(uavResource->m_d3dResource, &srvDesc, srv);
 	}
 
 	auto uav = std::make_unique<FBindlessUav>();
 	uav->m_resource = uavResource;
 	uav->m_uavIndices = std::move(uavIndices);
-	uav->m_srvDesc = std::move(srvDesc);
+	uav->m_srvIndex = srvIndex;
 
 	return std::move(uav);
 }
 
 std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	const std::wstring& name,
-	const size_t size)
+	const size_t size,
+	const bool bCreateSRV)
 {
 	D3D12_RESOURCE_DESC desc = {};
 	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -2319,19 +2340,27 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 	GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, descriptor);
 
-	// Cache SRV Description
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-	srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-	srvDesc.Buffer.FirstElement = 0;
-	srvDesc.Buffer.NumElements = size / 4;
-	srvDesc.Buffer.StructureByteStride = 0;
-	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+	// SRV Descriptor
+	uint32_t srvIndex = ~0u;
+	if (bCreateSRV)
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = size / 4;
+		srvDesc.Buffer.StructureByteStride = 0;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+
+		srvIndex = GetBindlessPool()->FetchIndex(GetBindlessSrvResourceType(srvDesc.ViewDimension));
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
+		GetDevice()->CreateShaderResourceView(uavResource->m_d3dResource, &srvDesc, srv);
+	}
 
 	auto uav = std::make_unique<FBindlessUav>();
 	uav->m_resource = uavResource;
 	uav->m_uavIndices.push_back(uavIndex);
-	uav->m_srvDesc = std::move(srvDesc);
+	uav->m_srvIndex = srvIndex;
 
 	return std::move(uav);
 }

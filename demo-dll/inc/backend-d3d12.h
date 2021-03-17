@@ -39,6 +39,7 @@ enum class BindlessResourceType
 {
 	Buffer,
 	Texture2D,
+	Texture2DMultisample,
 	Texture2DArray,
 	TextureCube,
 	RWTexture2D,
@@ -50,6 +51,7 @@ enum class BindlessDescriptorType
 {
 	Buffer,
 	Texture2D,
+	Texture2DMultisample,
 	Texture2DArray,
 	TextureCube,
 	RWTexture2D,
@@ -62,6 +64,8 @@ enum class BindlessDescriptorRange : uint32_t
 	BufferEnd = BufferBegin + 999,
 	Texture2DBegin,
 	Texture2DEnd = Texture2DBegin + 999,
+	Texture2DMultisampleBegin,
+	Texture2DMultisampleEnd = Texture2DMultisampleBegin + 999,
 	Texture2DArrayBegin,
 	Texture2DArrayEnd = Texture2DArrayBegin + 999,
 	TextureCubeBegin,
@@ -112,11 +116,6 @@ struct FResource
 	void SetName(const std::wstring& name);
 	HRESULT InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue = nullptr);
 	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
-
-private:
-	friend struct FBindlessShaderResource;
-	friend struct FBindlessUav;
-	friend struct FRenderTexture;
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
@@ -133,8 +132,7 @@ struct FBindlessUav
 {
 	FResource* m_resource;
 	std::vector<uint32_t> m_uavIndices; // one for each mip level
-	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
-	uint32_t m_srvIndex = ~0u;
+	uint32_t m_srvIndex;
 
 	~FBindlessUav();
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
@@ -153,8 +151,7 @@ struct FRenderTexture
 {
 	FResource* m_resource;
 	std::vector<uint32_t> m_renderTextureIndices; // one for each mip level
-	D3D12_SHADER_RESOURCE_VIEW_DESC m_srvDesc;
-	uint32_t m_srvIndex = ~0u;
+	uint32_t m_srvIndex;
 	bool m_isDepthStencil;
 	bool m_isSwapChainBuffer;
 
@@ -237,7 +234,8 @@ namespace RenderBackend12
 		const size_t height,
 		const size_t mipLevels,
 		const size_t depth,
-		const size_t sampleCount);
+		const size_t sampleCount,
+		const bool bCreateSRV = true);
 
 	std::unique_ptr<FRenderTexture> CreateDepthStencilTexture(
 		const std::wstring& name,
@@ -245,7 +243,8 @@ namespace RenderBackend12
 		const size_t width,
 		const size_t height,
 		const size_t mipLevels,
-		const size_t sampleCount);
+		const size_t sampleCount,
+		const bool bCreateSRV = true);
 
 	std::unique_ptr<FBindlessShaderResource> CreateBindlessTexture(
 		const std::wstring& name, 
@@ -272,11 +271,13 @@ namespace RenderBackend12
 		const size_t width,
 		const size_t height,
 		const size_t mipLevels,
-		const size_t arraySize);
+		const size_t arraySize,
+		const bool bCreateSRV = true);
 
 	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
 		const std::wstring& name,
-		const size_t size);
+		const size_t size,
+		const bool bCreateSRV = true);
 
 	// Programmatic Captures
 	void BeginCapture();
