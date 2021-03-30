@@ -866,6 +866,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"texcube_uav", metadata.format, cubemapSize, cubemapSize, numMips, 6);
 
 		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"cubemap_gen", 0);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
@@ -925,6 +927,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 5, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_cubemap", 0);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter.hlsl", L"rootsig" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
@@ -998,6 +1002,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		auto shTexureUav0 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_uav0", metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, numCoefficients);
 
 		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_projection", 0);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-projection.hlsl", L"rootsig" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
@@ -1051,6 +1057,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		int src = 0, dest = 1;
 
 		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_integration", 0);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-integration.hlsl", L"rootsig" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
@@ -1118,6 +1126,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		auto shTexureUavAccum = RenderBackend12::CreateBindlessUavTexture(L"ShAccum_uav", metadata.format, numCoefficients, 1, 1, 1);
 
 		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_accum", 0);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-accumulation.hlsl", L"rootsig" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
