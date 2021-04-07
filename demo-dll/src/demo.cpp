@@ -972,7 +972,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 						.envmapSrvIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, texCubeUav->m_srvIndex),
 						.uavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[mipIndex]),
 						.sampleCount = 1024,
-						.roughness = (float)mipIndex
+						.roughness = mipIndex / (float)numMips
 					};
 
 					d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
