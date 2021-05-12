@@ -39,7 +39,8 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/json"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/inc"
     "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime"
-    "${CMAKE_SOURCE_DIR}/ext/directXTex/inc")
+    "${CMAKE_SOURCE_DIR}/ext/directXTex/inc"
+    "${CMAKE_SOURCE_DIR}/ext/d3d12.1.4.9/include")
 
 # Macro defines
 add_compile_definitions(

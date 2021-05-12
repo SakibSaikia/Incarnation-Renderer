@@ -5,6 +5,10 @@
 #include <filesystem>
 #include <cassert>
 
+// D3D12 Agility SDK hooks
+extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 4; }
+extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = D3D_SDK_RELATIVE_PATH; }
+
 struct ModuleProcs
 {
 	decltype(Demo::Initialize)* init;
