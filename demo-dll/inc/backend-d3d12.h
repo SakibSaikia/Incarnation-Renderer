@@ -4,7 +4,6 @@
 #include <windows.h>
 #include <dxgi1_4.h>
 #include <d3d12.h>
-#include <d3dx12.h>
 #include <DirectXTex.h>
 #include <winrt/base.h>
 #include <pix3.h>
@@ -180,6 +179,18 @@ private:
 	size_t m_currentOffset;
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														RenderUtils12
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+namespace RenderUtils12
+{
+	// From d3dx12.h
+	inline constexpr uint32_t CalcSubresource(uint32_t MipSlice, uint32_t ArraySlice, uint32_t PlaneSlice, uint32_t MipLevels, uint32_t ArraySize) noexcept
+	{
+		return MipSlice + ArraySlice * MipLevels + PlaneSlice * MipLevels * ArraySize;
+	}
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														RenderBackend12

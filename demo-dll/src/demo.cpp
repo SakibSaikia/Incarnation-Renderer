@@ -919,12 +919,12 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 
 		// Transition mip 0 of the cubemap (https://docs.microsoft.com/en-us/windows/win32/direct3d12/subresources)
-		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 0, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 1, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 2, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 3, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 4, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, D3D12CalcSubresource(0, 5, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 0, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 1, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 2, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 3, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 4, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 5, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_cubemap", 0);

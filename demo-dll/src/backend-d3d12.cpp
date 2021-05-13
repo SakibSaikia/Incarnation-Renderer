@@ -310,6 +310,19 @@ bool operator==(const DXGI_SAMPLE_DESC& lhs, const DXGI_SAMPLE_DESC& rhs)
 	return lhs.Count == rhs.Count && lhs.Quality == rhs.Quality;
 }
 
+bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
+{
+	return lhs.Dimension == rhs.Dimension &&
+		lhs.Width == rhs.Width &&
+		lhs.Height == rhs.Height &&
+		lhs.DepthOrArraySize == rhs.DepthOrArraySize &&
+		lhs.MipLevels == rhs.MipLevels &&
+		lhs.Format == rhs.Format &&
+		lhs.SampleDesc == rhs.SampleDesc &&
+		lhs.Layout == rhs.Layout &&
+		lhs.Flags == rhs.Flags;
+}
+
 #pragma endregion
 #pragma region Command_Lists
 //-----------------------------------------------------------------------------------------------------------------------------------------------
