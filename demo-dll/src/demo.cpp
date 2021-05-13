@@ -873,7 +873,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"cubemapgen.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_4");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"cubemapgen.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -934,7 +934,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_4");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1009,7 +1009,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-projection.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_4");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-projection.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1074,7 +1074,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 				" THREAD_GROUP_SIZE_Z=" << threadGroupSizeZ;
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-integration.hlsl", L"cs_main", s.str() }, L"cs_6_4");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-integration.hlsl", L"cs_main", s.str() }, L"cs_6_6");
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1137,7 +1137,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 				" THREAD_GROUP_SIZE_Y=" << height;
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-accumulation.hlsl", L"cs_main", s.str() }, L"cs_6_4");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-accumulation.hlsl", L"cs_main", s.str() }, L"cs_6_6");
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
