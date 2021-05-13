@@ -38,7 +38,7 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/tinygltf"
     "${CMAKE_SOURCE_DIR}/ext/json"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/inc"
-    "${CMAKE_SOURCE_DIR}/ext/pix/Include/WinPixEventRuntime"
+    "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/Include/WinPixEventRuntime"
     "${CMAKE_SOURCE_DIR}/ext/directXTex/inc"
     "${CMAKE_SOURCE_DIR}/ext/d3d12.1.4.9/include")
 
@@ -80,14 +80,14 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
         libdemo 
         PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
         PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/pix/bin/x64"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/bin/x64"
         PRIVATE "${CMAKE_SOURCE_DIR}/ext/directXTex/lib/x64/debug")
 else()
     target_link_directories(
         libdemo 
         PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
         PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/pix/bin/x64"
+        PRIVATE "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/bin/x64"
         PRIVATE "${CMAKE_SOURCE_DIR}/ext/directXTex/lib/x64/release")
 
 endif()
