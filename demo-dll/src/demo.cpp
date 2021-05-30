@@ -824,8 +824,6 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 	}
 	else
 	{
-		RenderBackend12::BeginCapture();
-
 		// Read HDR spehere map from file
 		DirectX::TexMetadata metadata;
 		DirectX::ScratchImage scratch;
@@ -894,6 +892,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 				uint32_t hdrTextureIndex;
 				uint32_t cubemapUavIndex;
 				uint32_t cubemapSize;
+				float radianceScale;
 			};
 
 			// Convert from sperical map to cube map
@@ -902,7 +901,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 				.mipIndex = 0,
 				.hdrTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
 				.cubemapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[0]),
-				.cubemapSize = (uint32_t)cubemapSize
+				.cubemapSize = (uint32_t)cubemapSize,
+				.radianceScale = 25000.f
 			};
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
@@ -1177,9 +1177,8 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		shTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);
 
-
+		RenderBackend12::BeginCapture();
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
 		RenderBackend12::EndCapture();
 
 		return FLightProbe{

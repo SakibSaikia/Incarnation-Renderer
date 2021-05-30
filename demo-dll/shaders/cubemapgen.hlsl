@@ -8,7 +8,7 @@
 
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
-    "RootConstants(b0, num32BitConstants=4, visibility = SHADER_VISIBILITY_ALL)," \
+    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL)," \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
     "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
 
@@ -18,6 +18,7 @@ struct CbLayout
     uint hdrSpehericalMapBindlessIndex;
     uint outputCubemapBindlessIndex;
     uint cubemapSize;
+    float radianceScale;
 };
 
 ConstantBuffer<CbLayout> g_computeConstants : register(b0);
@@ -113,7 +114,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             uv.x = 0.5f * uv.x + 0.5f;
             uv.y = 0.5f * uv.y + 0.5f;
 
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex);
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = g_computeConstants.radianceScale * src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex);
         }
     }
     else

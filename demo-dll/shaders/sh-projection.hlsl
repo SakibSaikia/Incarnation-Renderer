@@ -32,8 +32,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
     SH9 sh = ShEvaluate(theta, phi);
 
     // Sample radiance from the HDRI
-    const float lightIntensity = 25000.f;
-    float4 radiance = lightIntensity * g_srvBindless2DTextures[g_constants.inputHdriIndex].Load(int3(dispatchThreadId.x, dispatchThreadId.y, g_constants.hdriMip));
+    float4 radiance = g_srvBindless2DTextures[g_constants.inputHdriIndex].Load(int3(dispatchThreadId.x, dispatchThreadId.y, g_constants.hdriMip));
 
     // Project radiance to SH basis
     RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_constants.outputUavIndex];

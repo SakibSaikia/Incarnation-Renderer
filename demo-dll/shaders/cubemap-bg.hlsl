@@ -1,3 +1,4 @@
+#include "pbr.hlsli"
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
     "RootConstants(b0, num32BitConstants=17, visibility = SHADER_VISIBILITY_PIXEL)," \
@@ -43,5 +44,15 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float4 worldPos = mul(input.pixelPos, g_invParallaxViewProjMatrix);
 	worldPos /= worldPos.w;
 
-	return g_bindlessCubeTextures[g_envmapTextureIndex].Sample(g_anisoSampler, worldPos.xyz);
+	float3 luminance = g_bindlessCubeTextures[g_envmapTextureIndex].Sample(g_anisoSampler, worldPos.xyz).rgb;
+
+	// Exposure correction. Computes the exposure normalization from the camera's EV100
+	int ev100 = 13;
+	float e = exposure(ev100);
+	luminance *= e;
+
+	// Tonemapping
+	float3 ldrColor = Reinhard(luminance);
+
+	return float4(ldrColor, 1.f);
 }
