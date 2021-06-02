@@ -51,31 +51,35 @@ float3 GetEnvDir(uint face, float2 uv)
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    uint face = g_computeConstants.faceIndex;
-    float3 R = GetEnvDir(face, dispatchThreadId.xy / g_computeConstants.mipSize);
-
-    float3 N = R;
-    float3 V = R;
-    float3 PrefilteredColor = 0;
-    float TotalWeight = 0;
-    const uint NumSamples = g_computeConstants.sampleCount;
-    const float Roughness = g_computeConstants.roughness;
-    TextureCube EnvMap = g_srvBindlessCubeTextures[g_computeConstants.envmapIndex];
-
-    for (uint i = 0; i < NumSamples; i++)
+    if (dispatchThreadId.x < g_computeConstants.mipSize &&
+        dispatchThreadId.y < g_computeConstants.mipSize)
     {
-        float2 Xi = Hammersley(i, NumSamples);
-        float3 H = ImportanceSampleGGX(Xi, Roughness, N);
-        float3 L = 2 * dot(V, H) * H - V;
-        float NoL = saturate(dot(N, L));
+        uint face = g_computeConstants.faceIndex;
+        float3 R = GetEnvDir(face, dispatchThreadId.xy / float(g_computeConstants.mipSize));
 
-        if (NoL > 0)
+        float3 N = R;
+        float3 V = R;
+        float3 PrefilteredColor = 0;
+        float TotalWeight = 0;
+        const uint NumSamples = g_computeConstants.sampleCount;
+        const float Roughness = g_computeConstants.roughness;
+        TextureCube EnvMap = g_srvBindlessCubeTextures[g_computeConstants.envmapIndex];
+
+        for (uint i = 0; i < NumSamples; i++)
         {
-            PrefilteredColor += EnvMap.SampleLevel(g_bilinearSampler, L, 0).rgb * NoL;
-            TotalWeight += NoL;
-        }
-    }
+            float2 Xi = Hammersley(i, NumSamples);
+            float3 H = ImportanceSampleGGX(Xi, Roughness, N);
+            float3 L = normalize(2 * dot(V, H) * H - V);
+            float NoL = saturate(dot(N, L));
 
-    RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputUavIndex];
-    dest[uint3(dispatchThreadId.x, dispatchThreadId.y, face)] = float4(PrefilteredColor / TotalWeight, 1.f);
+            if (NoL > 0.f)
+            {
+                PrefilteredColor += EnvMap.SampleLevel(g_bilinearSampler, L, 0).rgb * NoL;
+                TotalWeight += NoL;
+            }
+        }
+
+        RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputUavIndex];
+        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, face)] = float4(PrefilteredColor / TotalWeight, 1.f);
+    }
 }

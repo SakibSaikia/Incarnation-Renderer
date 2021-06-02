@@ -50,12 +50,12 @@ float Fd_Burley(float NoV, float NoL, float LoH, float roughness)
 float2 Hammersley(uint i, float numSamples)
 {
     uint bits = i;
-    bits = (bits << 16) | (bits >> 16);
-    bits = ((bits & 0x55555555) << 1) | ((bits & 0xAAAAAAAA) >> 1);
-    bits = ((bits & 0x33333333) << 2) | ((bits & 0xCCCCCCCC) >> 2);
-    bits = ((bits & 0x0F0F0F0F) << 4) | ((bits & 0xF0F0F0F0) >> 4);
-    bits = ((bits & 0x00FF00FF) << 8) | ((bits & 0xFF00FF00) >> 8);
-    return float2(i / numSamples, bits / exp2(32));
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float2(float(i) / numSamples, float(bits) / exp2(32));
 }
 
 // Real Shading in Unreal Engine 4 coursenotes by Brian Karis, Epic Games
@@ -63,21 +63,23 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
 {
     float a = Roughness * Roughness;
 
+    // Construct spherical coordinates from input Low Descrepancy Sequence Xi
     float Phi = 2 * PI * Xi.x;
-    float CosTheta = sqrt((1 - Xi.y) / (1 + (a * a - 1) * Xi.y));
-    float SinTheta = sqrt(1 - CosTheta * CosTheta);
+    float CosTheta = sqrt((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
+    float SinTheta = sqrt(1.f - CosTheta * CosTheta);
 
+    // Convert from spherical coordinates to cartesian coordinates
     float3 H;
     H.x = SinTheta * cos(Phi);
     H.y = SinTheta * sin(Phi);
     H.z = CosTheta;
 
-    float3 UpVector = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
-    float3 TangentX = normalize(cross(UpVector, N));
-    float3 TangentY = cross(N, TangentX);
+    // Convert from tangent space to world space sample vector
+    float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 tangent = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
 
-    // Tangent to world space
-    return TangentX * H.x + TangentY * H.y + N * H.z;
+    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
 // Computes the exposure normalization factor from the camera's EV100
