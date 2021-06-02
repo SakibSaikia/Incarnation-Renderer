@@ -37,10 +37,10 @@ float3 GetEnvDir(uint face, float2 uv)
 
     switch (face)
     {
-    case 0: return normalize(float3(1.f, -v.y, v.x));   // +X
+    case 0: return normalize(float3(1.f, v.y, -v.x));   // +X
     case 1: return normalize(float3(-1.f, v.y, v.x));   // -X
-    case 2: return normalize(float3(v.y, 1.f, v.x));    // +Y
-    case 3: return normalize(float3(v.y, -1.f, -v.x));  // -Y
+    case 2: return normalize(float3(v.x, 1.f, -v.y));   // +Y
+    case 3: return normalize(float3(v.x, -1.f, v.y));   // -Y
     case 4: return normalize(float3(v.x, v.y, 1.f));    // +Z
     case 5: return normalize(float3(-v.x, v.y, -1.f));  // -Z
     }
