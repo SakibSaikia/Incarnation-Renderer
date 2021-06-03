@@ -2,13 +2,6 @@
 
 static const float PI = 3.14159265f;
 
-float D_GGX(float NoH, float roughness) 
-{
-    float a = NoH * roughness;
-    float k = roughness / (1.0 - NoH * NoH + a * a);
-    return k * k * (1.0 / PI);
-}
-
 float V_SmithGGXCorrelated(float NoV, float NoL, float roughness) 
 {
     float a2 = roughness * roughness;
@@ -80,6 +73,19 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
     float3 bitangent = cross(N, tangent);
 
     return normalize(tangent * H.x + bitangent * H.y + N * H.z);
+}
+
+// https://learnopengl.com/PBR/Theory
+float D_GGX(float NoH, float Roughness)
+{
+    float a = Roughness * Roughness;
+    float a2 = a * a;
+
+    float nom = a2;
+    float denom = (NoH * NoH * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+
+    return nom / denom;
 }
 
 // Computes the exposure normalization factor from the camera's EV100

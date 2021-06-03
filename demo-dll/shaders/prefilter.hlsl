@@ -9,14 +9,15 @@
 #endif
 
 #define rootsig \
-    "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
-    "RootConstants(b0, num32BitConstants=6, visibility = SHADER_VISIBILITY_ALL)," \
+    "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
+    "RootConstants(b0, num32BitConstants=7, visibility = SHADER_VISIBILITY_ALL)," \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
     "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
 
 struct CbLayout
 {
     uint mipSize;
+    uint cubemapSize;
     uint faceIndex;
     uint envmapIndex;
     uint outputUavIndex;
@@ -27,7 +28,7 @@ struct CbLayout
 ConstantBuffer<CbLayout> g_computeConstants : register(b0);
 TextureCube g_srvBindlessCubeTextures[] : register(t0);
 RWTexture2DArray<float4> g_uavBindless2DTextureArrays[] : register(u0);
-SamplerState g_bilinearSampler : register(s0);
+SamplerState g_trilinearSampler : register(s0);
 
 float3 GetEnvDir(uint face, float2 uv)
 {   
@@ -63,6 +64,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float TotalWeight = 0;
         const uint NumSamples = g_computeConstants.sampleCount;
         const float Roughness = g_computeConstants.roughness;
+        const float Resolution = float(g_computeConstants.cubemapSize);
         TextureCube EnvMap = g_srvBindlessCubeTextures[g_computeConstants.envmapIndex];
 
         for (uint i = 0; i < NumSamples; i++)
@@ -74,7 +76,17 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             if (NoL > 0.f)
             {
-                PrefilteredColor += EnvMap.SampleLevel(g_bilinearSampler, L, 0).rgb * NoL;
+                // Use PDF to select mip level. Samples with low PDF choose a smaller mip to get averaged results. This helps avoid fireflies
+                // See : https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-20-gpu-based-importance-sampling and https://learnopengl.com/PBR/IBL/Specular-IBL
+                float NoH = max(dot(N, H), 0.0);
+                float VoH = max(dot(V, H), 0.0);
+                float D = D_GGX(NoH, Roughness);
+                float pdf = (D * NoH / (4.0 * VoH)) + 0.0001;
+                float saTexel = 4.f * PI / (6.0 * Resolution * Resolution);
+                float saSample = 1.f / (float(NumSamples) * pdf + 0.0001);
+                float mipLevel = (Roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel));
+                
+                PrefilteredColor += EnvMap.SampleLevel(g_trilinearSampler, L, mipLevel).rgb * NoL;
                 TotalWeight += NoL;
             }
         }

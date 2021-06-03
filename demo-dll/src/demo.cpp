@@ -861,7 +861,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		// Generate environment cubemap
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t cubemapSize = metadata.height;
-		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"texcube_uav", metadata.format, cubemapSize, cubemapSize, numMips, 6);
+		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"src_cubemap", metadata.format, cubemapSize, cubemapSize, numMips, 6);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, L"cubemap_gen", 0);
@@ -886,48 +886,49 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
-			struct CbLayout
-			{
-				uint32_t mipIndex;
-				uint32_t hdrTextureIndex;
-				uint32_t cubemapUavIndex;
-				uint32_t cubemapSize;
-				float radianceScale;
-			};
-
 			// Convert from sperical map to cube map
-			CbLayout computeCb =
+			for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
 			{
-				.mipIndex = 0,
-				.hdrTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
-				.cubemapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[0]),
-				.cubemapSize = (uint32_t)cubemapSize,
-				.radianceScale = 25000.f
-			};
+				uint32_t mipSize = cubemapSize >> mipIndex;
 
-			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
-			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
-			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+				struct CbLayout
+				{
+					uint32_t mipIndex;
+					uint32_t hdrTextureIndex;
+					uint32_t cubemapUavIndex;
+					uint32_t mipSize;
+					float radianceScale;
+				};
 
-			// Dispatch
-			size_t threadGroupCount = std::max<size_t>(std::ceil(cubemapSize / 16), 1);
-			d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+				CbLayout computeCb =
+				{
+					.mipIndex = mipIndex,
+					.hdrTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
+					.cubemapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[mipIndex]),
+					.mipSize = (uint32_t)mipSize,
+					.radianceScale = 25000.f
+				};
+
+				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
+				d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+				d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin));
+
+				// Dispatch
+				size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
+				d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+			}
 		}
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Prefilter Environment map
 		// ---------------------------------------------------------------------------------------------------------
-
-		// Transition mip 0 of the cubemap (https://docs.microsoft.com/en-us/windows/win32/direct3d12/subresources)
-		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 0, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 1, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 2, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 3, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 4, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		texCubeUav->Transition(cmdList, RenderUtils12::CalcSubresource(0, 5, 0, numMips, 6), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		const size_t filteredEnvmapSize = cubemapSize >> 1;
+		const int filteredEnvmapMips = numMips - 1;
+		auto texFilteredEnvmapUav = RenderBackend12::CreateBindlessUavTexture(L"filtered_envmap", metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6);
+		texCubeUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_cubemap", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_envmap", 0);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter.hlsl", L"rootsig" });
@@ -952,6 +953,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 			struct CbLayout
 			{
 				uint32_t mipSize;
+				uint32_t cubemapSize;
 				uint32_t faceIndex;
 				uint32_t envmapSrvIndex;
 				uint32_t uavIndex;
@@ -959,18 +961,19 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 				float roughness;
 			};
 
-			for (uint32_t mipIndex = 1; mipIndex < numMips; ++mipIndex)
+			for (uint32_t mipIndex = 0; mipIndex < filteredEnvmapMips; ++mipIndex)
 			{
-				uint32_t mipSize = cubemapSize >> mipIndex;
+				uint32_t mipSize = filteredEnvmapSize >> mipIndex;
 
 				for (uint32_t faceIndex = 0; faceIndex < 6; ++faceIndex)
 				{
 					CbLayout computeCb =
 					{
 						.mipSize = mipSize,
+						.cubemapSize = (uint32_t)cubemapSize,
 						.faceIndex = faceIndex,
 						.envmapSrvIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, texCubeUav->m_srvIndex),
-						.uavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texCubeUav->m_uavIndices[mipIndex]),
+						.uavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, texFilteredEnvmapUav->m_uavIndices[mipIndex]),
 						.sampleCount = 1024,
 						.roughness = mipIndex / (float)numMips
 					};
@@ -988,18 +991,18 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 
 
 		// Copy from UAV to destination cubemap texture
-		texCubeUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto cubemapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, BindlessResourceType::TextureCube, metadata.format, cubemapSize, cubemapSize, numMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
-		d3dCmdList->CopyResource(cubemapTex->m_resource->m_d3dResource, texCubeUav->m_resource->m_d3dResource);
-		cubemapTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-		m_cachedTextures[envmapTextureName] = std::move(cubemapTex);
+		texFilteredEnvmapUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		auto filteredEnvmapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, BindlessResourceType::TextureCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
+		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
+		filteredEnvmapTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Project radiance to SH basis
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
 		constexpr uint32_t srcMipIndex = 2;
-		auto shTexureUav0 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_uav0", metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, numCoefficients);
+		auto shTexureUav0 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_0", metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, numCoefficients);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_projection", 0);
@@ -1050,7 +1053,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 		}
 
 		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
-		auto shTexureUav1 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_uav1", metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, numCoefficients);
+		auto shTexureUav1 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_1", metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, numCoefficients);
 
 		// Ping-pong UAVs
 		FBindlessUav* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
@@ -1123,7 +1126,7 @@ FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
 			}
 		}
 
-		auto shTexureUavAccum = RenderBackend12::CreateBindlessUavTexture(L"ShAccum_uav", metadata.format, numCoefficients, 1, 1, 1);
+		auto shTexureUavAccum = RenderBackend12::CreateBindlessUavTexture(L"ShAccum", metadata.format, numCoefficients, 1, 1, 1);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_accum", 0);
