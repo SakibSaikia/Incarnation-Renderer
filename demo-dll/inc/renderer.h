@@ -115,4 +115,5 @@ namespace Demo
 {
 	const FScene* GetScene();
 	const FView* GetView();
+	std::unique_ptr<FBindlessShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height);
 }

@@ -135,6 +135,7 @@ namespace Demo
 	FController s_controller;
 	FTextureCache s_textureCache;
 	float s_aspectRatio;
+	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 
 	const FScene* GetScene()
 	{
@@ -155,6 +156,8 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 
 	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);
 	ok = ok && ShaderCompiler::Initialize();
+
+	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();

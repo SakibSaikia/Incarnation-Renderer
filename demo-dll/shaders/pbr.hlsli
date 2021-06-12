@@ -33,7 +33,7 @@ float F_Schlick(float u, float f0, float f90)
 // k  is a remapping of α based on whether we're using the geometry function for either direct lighting or IBL lighting
 float G_SchlickGGX(float u, float k)
 {
-    return u / (u * (1.f - k) + k)
+    return u / (u * (1.f - k) + k);
 }
 
 // Smith Geometry function for direct lighting
