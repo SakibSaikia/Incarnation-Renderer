@@ -1,4 +1,4 @@
-// Adapted from https://google.github.io/filament/Filament.html
+﻿// Adapted from https://google.github.io/filament/Filament.html
 
 static const float PI = 3.14159265f;
 
@@ -15,22 +15,54 @@ float3 F_Schlick(float u, float3 f0, float f90)
     return f0 + (f90.xxx - f0) * pow(1.0 - u, 5.0);
 }
 
+// u = LoH == VoH by property of half-vector
 float3 F_Schlick(float u, float3 f0) 
 {
     float f = pow(1.0 - u, 5.0);
     return f + f0 * (1.0 - f);
 }
 
-float F_Schlick(float u, float f0, float f90) 
+// u = LoH == VoH by property of half-vector
+float F_Schlick(float u, float f0, float f90)
 {
     return f0 + (f90 - f0) * pow(1.0 - u, 5.0);
 }
 
+// Geometry function based on GGX and Schlick-Bechmann approximation
+// u == NoV for masking and u == NoL for shadowing
+// k  is a remapping of α based on whether we're using the geometry function for either direct lighting or IBL lighting
+float G_SchlickGGX(float u, float k)
+{
+    return u / (u * (1.f - k) + k)
+}
+
+// Smith Geometry function for direct lighting
+float G_Smith_Direct(float NoV, float NoL, float roughness)
+{
+    float a2 = roughness * roughness;
+    float k = (a2 + 1) * (a2 + 1) / 8.f;
+    float masking = G_SchlickGGX(NoL, k);
+    float shadowing = G_SchlickGGX(NoV, k);
+    return masking * shadowing;
+}
+
+// Smith Geometry function for IBL
+float G_Smith_IBL(float NoV, float NoL, float roughness)
+{
+    float a2 = roughness * roughness;
+    float k = 0.5f * a2 * a2;
+    float masking = G_SchlickGGX(NoL, k);
+    float shadowing = G_SchlickGGX(NoV, k);
+    return masking * shadowing;
+}
+
+// Lambert Diffuse BRDF
 float Fd_Lambert() 
 {
     return 1.0 / PI;
 }
 
+// Burley Diffuse BRDF
 float Fd_Burley(float NoV, float NoL, float LoH, float roughness) 
 {
     float f90 = 0.5 + 2.0 * roughness * LoH * LoH;
@@ -39,6 +71,8 @@ float Fd_Burley(float NoV, float NoL, float LoH, float roughness)
     return lightScatter * viewScatter * (1.0 / PI);
 }
 
+// Hammersley Low Discrepancy Sequence used for biased Monte Carlo Estimation
+// (Quasi-Monte Carlo Integration)
 // https://google.github.io/filament/Filament.html#annex/hammersleysequence
 float2 Hammersley(uint i, float numSamples)
 {
