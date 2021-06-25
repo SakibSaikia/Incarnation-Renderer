@@ -38,7 +38,7 @@ struct FTextureCache
 		const DirectX::Image* images,
 		const size_t imageCount);
 
-	FLightProbe CacheHdrTexture(const std::wstring& name);
+	FLightProbe CacheHDRI(const std::wstring& name);
 
 	void Clear();
 
@@ -392,7 +392,7 @@ void FScene::Reload(const std::string& filename)
 	delete[] m_scratchNormalBuffer;
 	delete[] m_scratchUvBuffer;
 
-	m_globalLightProbe = Demo::s_textureCache.CacheHdrTexture(L"lilienstein_2k.hdr");
+	m_globalLightProbe = Demo::s_textureCache.CacheHDRI(L"lilienstein_2k.hdr");
 }
 
 void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
@@ -810,7 +810,7 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 }
 
-FLightProbe FTextureCache::CacheHdrTexture(const std::wstring& name)
+FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 {
 	const std::wstring envmapTextureName = name + L".envmap";
 	const std::wstring shTextureName = name + L".shtex";
