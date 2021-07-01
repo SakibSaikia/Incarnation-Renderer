@@ -146,6 +146,11 @@ namespace Demo
 	{
 		return &s_view;
 	}
+
+	uint32_t GetEnvBrdfBindlessIndex()
+	{
+		return s_envBRDF->m_srvIndex;
+	}
 }
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
@@ -822,7 +827,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		return FLightProbe{
 			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, search0->second->m_srvIndex),
 			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, search1->second->m_srvIndex),
-			-1
 		};
 	}
 	else
@@ -1183,14 +1187,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		shTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);
 
-		RenderBackend12::BeginCapture();
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-		RenderBackend12::EndCapture();
 
 		return FLightProbe{
 			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::TextureCube, m_cachedTextures[envmapTextureName]->m_srvIndex),
 			(int)RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, m_cachedTextures[shTextureName]->m_srvIndex),
-			-1
 		};
 	}
 }

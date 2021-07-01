@@ -3,7 +3,7 @@
 
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
-    "StaticSampler(s1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT, comparisonFunc = COMPARISON_LESS_EQUAL, addressU = TEXTURE_ADDRESS_BORDER, addressV = TEXTURE_ADDRESS_BORDER, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
+    "StaticSampler(s1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
     "RootConstants(b0, num32BitConstants=20, visibility = SHADER_VISIBILITY_VERTEX)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_PIXEL"), \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
@@ -16,7 +16,6 @@ struct LightProbeData
 {
 	int envmapTextureIndex;
 	int shTextureIndex;
-	int prefilteredEnvmapTextureIndex;
 };
 
 struct FrameCbLayout
@@ -27,6 +26,7 @@ struct FrameCbLayout
 	uint sceneNormalBufferBindlessIndex;
 	uint sceneUvBufferBindlessIndex;
 	LightProbeData sceneLightProbe;
+	uint envBrdfTextureIndex;
 };
 
 struct ViewCbLayout
@@ -59,6 +59,7 @@ struct MaterialCbLayout
 };
 
 SamplerState g_anisoSampler : register(s0);
+SamplerState g_trilinearSampler : register(s1);
 ConstantBuffer<MeshCbLayout> g_meshConstants : register(b0);
 ConstantBuffer<MaterialCbLayout> g_materialConstants : register(b1);
 ConstantBuffer<ViewCbLayout> g_viewConstants : register(b2);
@@ -113,15 +114,15 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	float3 n = normalize(input.normal.xyz);
-	float3 l = normalize(float3(1, 1, -1));
-	float3 h = normalize(n + l);
-	float3 v = normalize(Eye() - input.worldPos.xyz / input.worldPos.w);
+	float3 N = normalize(input.normal.xyz);
+	float3 L = normalize(float3(1, 1, -1));
+	float3 H = normalize(N + L);
+	float3 V = normalize(Eye() - input.worldPos.xyz / input.worldPos.w);
 
-	float NoV = abs(dot(n, v)) + 1e-5;
-	float NoL = saturate(dot(n, l));
-	float NoH = saturate(dot(n, h));
-	float LoH = saturate(dot(l, h));
+	float NoV = abs(dot(N, V)) + 1e-5;
+	float NoL = saturate(dot(N, L));
+	float NoH = saturate(dot(N, H));
+	float LoH = saturate(dot(L, H));
 
 	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ? g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_anisoSampler, input.uv).rgb : g_materialConstants.baseColorFactor;
 	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_anisoSampler, input.uv).bg : 1.f.xx;
@@ -129,17 +130,17 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
 
 	// Remapping
-	float3 f0 = metallic * baseColor + (1.f - metallic) * 0.04;
+	float3 F0 = metallic * baseColor + (1.f - metallic) * 0.04;
 	float3 albedo = (1.f - metallic) * baseColor;
 	float roughness = perceptualRoughness * perceptualRoughness;
 
 	float D = D_GGX(NoH, roughness);
-	float3 F = F_Schlick(LoH, f0);
-	float V = V_SmithGGXCorrelated(NoV, NoL, roughness);
+	float3 F = F_Schlick(LoH, F0);
+	float G = G_SmithGGXCorrelated(NoV, NoL, roughness);
 
 	// Specular BRDF
-	//float3 Fr = (D * V * F) / (4.f * NoV * NoL);
-	float3 Fr = (D * V * F);
+	//float3 Fr = (D * F * G) / (4.f * NoV * NoL);
+	float3 Fr = (D * F * G);
 
 	// diffuse BRDF
 	float3 Fd = albedo * Fd_Lambert();
@@ -149,7 +150,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float illuminance = lightIntensity * NoL;
 	float3 luminance = (Fr + Fd)* illuminance;
 
-	// Indirect diffuse
+	// Diffuse IBL
 	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
 	{
 		SH9Color shRadiance;
@@ -161,8 +162,24 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
 		}
 
-		float3 shDiffuse = Fd * ShIrradiance(n, shRadiance);
+		float3 shDiffuse = Fd * ShIrradiance(N, shRadiance);
 		luminance += shDiffuse;
+	}
+
+	// Specular IBL
+	if (g_frameConstants.sceneLightProbe.envmapTextureIndex != -1 &&
+		g_frameConstants.envBrdfTextureIndex != -1)
+	{
+		TextureCube prefilteredEnvMap = g_bindlessCubeTextures[g_frameConstants.sceneLightProbe.envmapTextureIndex];
+		Texture2D envBrdfTex = g_bindless2DTextures[g_frameConstants.envBrdfTextureIndex];
+
+		float texWidth, texHeight, mipCount;
+		prefilteredEnvMap.GetDimensions(0, texWidth, texHeight, mipCount);
+
+		float3 R = reflect(-V, N);
+		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
+		float2 envBrdf = envBrdfTex.Sample(g_trilinearSampler, float2(NoV, roughness)).rg;
+		luminance += prefilteredColor + (F * envBrdf.x + envBrdf.y);
 	}
 
 	// Exposure correction. Computes the exposure normalization from the camera's EV100

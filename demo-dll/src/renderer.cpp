@@ -58,6 +58,7 @@ namespace RenderJob
 				uint32_t sceneNormalBufferBindlessIndex;
 				uint32_t sceneUvBufferBindlessIndex;
 				FLightProbe sceneProbeData;
+				uint32_t envBrdfTextureIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -72,6 +73,7 @@ namespace RenderJob
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
 					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
 					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
+					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfBindlessIndex();
 					cbDest->sceneProbeData = scene->m_globalLightProbe;
 				});
 
@@ -717,7 +719,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
 {
-	auto brdfUav = RenderBackend12::CreateBindlessUavTexture(L"env_brdf_uav", DXGI_FORMAT_R8G8_UNORM, width, height, 1, 1);
+	auto brdfUav = RenderBackend12::CreateBindlessUavTexture(L"env_brdf_uav", DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1);
 
 	// Compute CL
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -773,13 +775,11 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 
 	// Copy from UAV to destination texture
 	brdfUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-	auto brdfTex = RenderBackend12::CreateBindlessTexture(L"env_brdf_tex", BindlessResourceType::Texture2D, DXGI_FORMAT_R8G8_UNORM, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	auto brdfTex = RenderBackend12::CreateBindlessTexture(L"env_brdf_tex", BindlessResourceType::Texture2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 	d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
 	brdfTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-	RenderBackend12::BeginCapture();
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-	RenderBackend12::EndCapture();
 
 	return std::move(brdfTex);
 }

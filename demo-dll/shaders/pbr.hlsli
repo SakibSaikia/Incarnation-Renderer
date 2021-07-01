@@ -2,7 +2,7 @@
 
 static const float PI = 3.14159265f;
 
-float V_SmithGGXCorrelated(float NoV, float NoL, float roughness) 
+float G_SmithGGXCorrelated(float NoV, float NoL, float roughness) 
 {
     float a2 = roughness * roughness;
     float GGXV = NoL * sqrt(NoV * NoV * (1.0 - a2) + a2);

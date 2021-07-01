@@ -45,7 +45,6 @@ struct FLightProbe
 {
 	int m_envmapTextureIndex;
 	int m_shTextureIndex;
-	int m_prefilteredEnvmapTextureIndex;
 };
 
 struct FScene
@@ -115,5 +114,6 @@ namespace Demo
 {
 	const FScene* GetScene();
 	const FView* GetView();
+	uint32_t GetEnvBrdfBindlessIndex();
 	std::unique_ptr<FBindlessShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height);
 }
