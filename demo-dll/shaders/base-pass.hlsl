@@ -3,7 +3,7 @@
 
 #define rootsig \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
-    "StaticSampler(s1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
+    "StaticSampler(s1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
     "RootConstants(b0, num32BitConstants=20, visibility = SHADER_VISIBILITY_VERTEX)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_PIXEL"), \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
@@ -119,7 +119,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 H = normalize(N + L);
 	float3 V = normalize(Eye() - input.worldPos.xyz / input.worldPos.w);
 
-	float NoV = abs(dot(N, V)) + 1e-5;
+	float NoV = saturate(dot(N, V));
 	float NoL = saturate(dot(N, L));
 	float NoH = saturate(dot(N, H));
 	float LoH = saturate(dot(L, H));
@@ -178,7 +178,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 		float3 R = reflect(-V, N);
 		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
-		float2 envBrdf = envBrdfTex.Sample(g_trilinearSampler, float2(NoV, roughness)).rg;
+		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
 		luminance += prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
 	}
 
