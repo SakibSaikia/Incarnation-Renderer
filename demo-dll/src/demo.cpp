@@ -147,9 +147,9 @@ namespace Demo
 		return &s_view;
 	}
 
-	uint32_t GetEnvBrdfBindlessIndex()
+	uint32_t GetEnvBrdfSrvIndex()
 	{
-		return s_envBRDF->m_srvIndex;
+		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, s_envBRDF->m_srvIndex);
 	}
 }
 

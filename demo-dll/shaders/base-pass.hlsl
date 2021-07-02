@@ -179,7 +179,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 R = reflect(-V, N);
 		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
 		float2 envBrdf = envBrdfTex.Sample(g_trilinearSampler, float2(NoV, roughness)).rg;
-		luminance += prefilteredColor + (F * envBrdf.x + envBrdf.y);
+		luminance += prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
 	}
 
 	// Exposure correction. Computes the exposure normalization from the camera's EV100

@@ -73,7 +73,7 @@ namespace RenderJob
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
 					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
 					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
-					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfBindlessIndex();
+					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
 					cbDest->sceneProbeData = scene->m_globalLightProbe;
 				});
 
