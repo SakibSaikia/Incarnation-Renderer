@@ -2,6 +2,8 @@
 
 static const float PI = 3.14159265f;
 
+// When using correlated Smith, make sure that NoL is not clamped to (0.0, 1.0) as otherwise
+// this function can generate an inf response when NoL is 0.
 float G_SmithGGXCorrelated(float NoV, float NoL, float roughness) 
 {
     float a2 = roughness * roughness;

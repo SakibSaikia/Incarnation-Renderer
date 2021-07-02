@@ -136,7 +136,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 	float D = D_GGX(NoH, roughness);
 	float3 F = F_Schlick(LoH, F0);
-	float G = G_SmithGGXCorrelated(NoV, NoL, roughness);
+	float G = G_Smith_Direct(NoV, NoL, roughness);
 
 	// Specular BRDF
 	//float3 Fr = (D * F * G) / (4.f * NoV * NoL);
