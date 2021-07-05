@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <sstream>
 
-namespace Settings
+namespace
 {
 #if defined (_DEBUG)
 	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-Od", L"-WX", L"-I", SHADER_DIR};
@@ -120,7 +120,7 @@ HRESULT ShaderCompiler::CompileShader(
 		filename.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
-		Settings::k_compilerArguments.data(), (UINT)Settings::k_compilerArguments.size(),
+		k_compilerArguments.data(), (UINT)k_compilerArguments.size(),
 		defines.data(), defines.size(), 
 		includeHandler.get(),
 		result.put()));
@@ -204,7 +204,7 @@ HRESULT ShaderCompiler::CompileRootsignature(
 		filename.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
-		Settings::k_rootsigArguments.data(), (UINT)Settings::k_rootsigArguments.size(),
+		k_rootsigArguments.data(), (UINT)k_rootsigArguments.size(),
 		nullptr, 0,
 		includeHandler.get(),
 		result.put()));

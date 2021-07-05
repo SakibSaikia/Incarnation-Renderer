@@ -199,10 +199,10 @@ void Demo::Tick(float deltaTime)
 {
 	// Reload scene file if required
 	if (s_scene.m_sceneFilename.empty() ||
-		s_scene.m_sceneFilename != Settings::k_sceneFilename)
+		s_scene.m_sceneFilename != Settings::g_sceneFilename)
 	{
 		RenderBackend12::FlushGPU();
-		s_scene.Reload(Settings::k_sceneFilename);
+		s_scene.Reload(Settings::g_sceneFilename);
 		RenderBackend12::FlushGPU();
 		s_view.Reset(s_scene);
 	}
@@ -295,16 +295,17 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
-			static int selectedIndex = 0;
-			const char* comboLabel = s_modelList[selectedIndex].c_str();
+			static int curModelIndex = 0;
+			const char* comboLabel = s_modelList[curModelIndex].c_str();
 			if (ImGui::BeginCombo("Model", comboLabel, ImGuiComboFlags_None))
 			{
 				for (int n = 0; n < s_modelList.size(); n++)
 				{
-					const bool bSelected = (selectedIndex == n);
+					const bool bSelected = (curModelIndex == n);
 					if (ImGui::Selectable(s_modelList[n].c_str(), bSelected))
 					{
-						selectedIndex = n;
+						curModelIndex = n;
+						Settings::g_sceneFilename = s_modelList[n];
 					}
 
 					if (bSelected)
@@ -316,15 +317,16 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::EndCombo();
 			}
 
-			comboLabel = s_hdriList[selectedIndex].c_str();
+			static int curHdriIndex = 0;
+			comboLabel = s_hdriList[curHdriIndex].c_str();
 			if (ImGui::BeginCombo("Background", comboLabel, ImGuiComboFlags_None))
 			{
 				for (int n = 0; n < s_hdriList.size(); n++)
 				{
-					const bool bSelected = (selectedIndex == n);
+					const bool bSelected = (curHdriIndex == n);
 					if (ImGui::Selectable(s_hdriList[n].c_str(), bSelected))
 					{
-						selectedIndex = n;
+						curHdriIndex = n;
 					}
 
 					if (bSelected)

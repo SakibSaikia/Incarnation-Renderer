@@ -1,11 +1,11 @@
 #pragma once
 #include <filesystem>
 
-namespace Settings
+struct Settings
 {
-	constexpr DXGI_FORMAT k_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	constexpr char k_sceneFilename[] = "MetalRoughSpheres.gltf";
-}
+	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	static inline std::string g_sceneFilename = "MetalRoughSpheres.gltf";
+};
 
 inline void AssertIfFailed(HRESULT hr)
 {
