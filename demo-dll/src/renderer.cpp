@@ -641,8 +641,8 @@ namespace RenderJob
 					}
 				}
 
-				vertexOffset += imguiCmdList->IdxBuffer.Size;
-				indexOffset += imguiCmdList->VtxBuffer.Size;
+				vertexOffset += imguiCmdList->VtxBuffer.Size;
+				indexOffset += imguiCmdList->IdxBuffer.Size;
 			}
 
 			return cmdList;
