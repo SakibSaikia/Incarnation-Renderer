@@ -137,6 +137,9 @@ namespace Demo
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 
+	std::vector<std::string> s_modelList;
+	std::vector<std::string> s_hdriList;
+
 	const FScene* GetScene()
 	{
 		return &s_scene;
@@ -151,6 +154,8 @@ namespace Demo
 	{
 		return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, s_envBRDF->m_srvIndex);
 	}
+
+	void UpdateUI(float deltaTime);
 }
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
@@ -168,6 +173,24 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
 	ImGui_ImplWin32_Init(windowHandle);
+
+	// List of models
+	for (auto& entry : std::filesystem::recursive_directory_iterator(CONTENT_DIR))
+	{
+		if (entry.is_regular_file() && entry.path().extension().string() == ".gltf")
+		{
+			s_modelList.push_back(entry.path().filename().string());
+		}
+	}
+
+	// List of HDRIs
+	for (auto& entry : std::filesystem::recursive_directory_iterator(CONTENT_DIR))
+	{
+		if (entry.is_regular_file() && entry.path().extension().string() == ".hdr")
+		{
+			s_hdriList.push_back(entry.path().filename().string());
+		}
+	}
 
 	return ok;
 }
@@ -211,57 +234,7 @@ void Demo::Tick(float deltaTime)
 		s_scene.m_rootTransform = rotation;
 	}
 
-	{
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
-
-		uint8_t* pixels;
-		int bpp, width, height;
-		ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
-
-		DirectX::Image img;
-		img.width = width;
-		img.height = height;
-		img.format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		img.pixels = pixels;
-
-		AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
-
-		uint32_t fontSrvIndex = s_textureCache.CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, &img, 1);
-		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
-		uploader.SubmitUploads(cmdList);
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-
-		static bool show_demo_window = true;
-		static bool show_another_window = false;
-		static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-		static float f = 0.0f;
-		static int counter = 0;
-
-		ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-		ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-		ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-		ImGui::Checkbox("Another Window", &show_another_window);
-
-		ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-		ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-		if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-			counter++;
-		ImGui::SameLine();
-		ImGui::Text("counter = %d", counter);
-
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::End();
-
-		ImGui::EndFrame();
-		ImGui::Render();
-	}
+	UpdateUI(deltaTime);
 }
 
 void Demo::Teardown(HWND& windowHandle)
@@ -283,7 +256,91 @@ void Demo::Teardown(HWND& windowHandle)
 
 void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 {
-	s_controller.MouseMove(buttonState, POINT{ x, y });
+	ImGuiIO& io = ImGui::GetIO();
+	if (!io.WantCaptureMouse)
+	{
+		s_controller.MouseMove(buttonState, POINT{ x, y });
+	}
+}
+
+void Demo::UpdateUI(float deltaTime)
+{
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FResourceUploadContext uploader{ 32 * 1024 * 1024 };
+
+	uint8_t* pixels;
+	int bpp, width, height;
+	ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
+
+	DirectX::Image img;
+	img.width = width;
+	img.height = height;
+	img.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	img.pixels = pixels;
+
+	AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
+
+	uint32_t fontSrvIndex = s_textureCache.CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, &img, 1);
+	ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	ImGui::Begin("Menu");
+	{
+		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::Spacing();
+
+		if (ImGui::CollapsingHeader("Scene"))
+		{
+			static int selectedIndex = 0;
+			const char* comboLabel = s_modelList[selectedIndex].c_str();
+			if (ImGui::BeginCombo("Model", comboLabel, ImGuiComboFlags_None))
+			{
+				for (int n = 0; n < s_modelList.size(); n++)
+				{
+					const bool bSelected = (selectedIndex == n);
+					if (ImGui::Selectable(s_modelList[n].c_str(), bSelected))
+					{
+						selectedIndex = n;
+					}
+
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+
+				ImGui::EndCombo();
+			}
+
+			comboLabel = s_hdriList[selectedIndex].c_str();
+			if (ImGui::BeginCombo("Background", comboLabel, ImGuiComboFlags_None))
+			{
+				for (int n = 0; n < s_hdriList.size(); n++)
+				{
+					const bool bSelected = (selectedIndex == n);
+					if (ImGui::Selectable(s_hdriList[n].c_str(), bSelected))
+					{
+						selectedIndex = n;
+					}
+
+					if (bSelected)
+					{
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+
+				ImGui::EndCombo();
+			}
+		}
+	}
+	ImGui::End();
+
+	ImGui::EndFrame();
+	ImGui::Render();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
