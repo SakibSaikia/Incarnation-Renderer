@@ -1241,6 +1241,7 @@ namespace RenderBackend12
 {
 #if defined (_DEBUG)
 	winrt::com_ptr<D3DDebug_t> s_debugController;
+	winrt::com_ptr<D3DInfoQueue_t> s_infoQueue;
 	winrt::com_ptr<IDXGraphicsAnalysis> s_graphicsAnalysis;
 #endif
 
@@ -1359,6 +1360,27 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		adapter.get(),
 		D3D_FEATURE_LEVEL_12_1,
 		IID_PPV_ARGS(s_d3dDevice.put())));
+
+#if defined(_DEBUG)
+	// Info Queue
+	if (SUCCEEDED(s_d3dDevice->QueryInterface(IID_PPV_ARGS(s_infoQueue.put()))))
+	{
+		// Filter messages
+		D3D12_MESSAGE_ID hide[] =
+		{
+			D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE
+		};
+
+		D3D12_INFO_QUEUE_FILTER filter = {};
+		filter.DenyList.NumIDs = _countof(hide);
+		filter.DenyList.pIDList = hide;
+		AssertIfFailed(s_infoQueue->AddStorageFilterEntries(&filter));
+
+		// Break
+		AssertIfFailed(s_infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true));
+		AssertIfFailed(s_infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true));
+	}
+#endif
 
 	// Feature Support
 	s_waveOpsInfo = {};
