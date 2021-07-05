@@ -386,6 +386,11 @@ void FScene::Reload(const std::string& filename)
 	m_scratchNormalBuffer = new uint8_t[maxSize];
 	m_scratchUvBuffer = new uint8_t[maxSize];
 
+	m_scratchIndexBufferOffset = 0;
+	m_scratchPositionBufferOffset = 0;
+	m_scratchNormalBufferOffset = 0;
+	m_scratchUvBufferOffset = 0;
+
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
 	Matrix RH2LH = Matrix
 	{
