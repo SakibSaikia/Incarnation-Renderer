@@ -84,6 +84,7 @@ namespace RenderJob
 			{
 				Matrix viewTransform;
 				Matrix projectionTransform;
+				Vector3 eyePos;
 			};
 
 			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
@@ -95,6 +96,7 @@ namespace RenderJob
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewTransform = view->m_viewTransform;
 					cbDest->projectionTransform = view->m_projectionTransform;
+					cbDest->eyePos = view->m_position;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

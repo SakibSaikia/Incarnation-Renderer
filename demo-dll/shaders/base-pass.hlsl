@@ -33,6 +33,7 @@ struct ViewCbLayout
 {
 	float4x4 viewTransform;
 	float4x4 projectionTransform;
+	float3 eyePos;
 };
 
 struct MeshCbLayout
@@ -76,14 +77,6 @@ struct vs_to_ps
 	float2 uv : INTERPOLATED_UV_0;
 };
 
-float3 Eye()
-{
-	return float3(
-		-g_viewConstants.viewTransform._41, 
-		-g_viewConstants.viewTransform._42, 
-		-g_viewConstants.viewTransform._43);
-}
-
 vs_to_ps vs_main(uint vertexId : SV_VertexID)
 {
 	vs_to_ps o;
@@ -117,7 +110,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 N = normalize(input.normal.xyz);
 	float3 L = normalize(float3(1, 1, -1));
 	float3 H = normalize(N + L);
-	float3 V = normalize(Eye() - input.worldPos.xyz / input.worldPos.w);
+	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
 
 	float NoV = saturate(dot(N, V));
 	float NoL = saturate(dot(N, L));
