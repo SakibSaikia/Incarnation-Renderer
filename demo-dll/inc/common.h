@@ -8,6 +8,7 @@ struct Config
 	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	static inline std::wstring g_modelFilename = L"MetalRoughSpheres.gltf";
 	static inline std::wstring g_environmentFilename = L"lilienstein_2k.hdr";
+	static inline float g_fov = 0.25f * DirectX::XM_PI;
 };
 
 inline void AssertIfFailed(HRESULT hr)

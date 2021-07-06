@@ -104,6 +104,7 @@ struct FView
 	Vector3 m_right;
 	Vector3 m_up;
 	Vector3 m_look;
+	float m_fov;
 
 	Matrix m_viewTransform;
 	Matrix m_projectionTransform;

@@ -348,6 +348,13 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::EndCombo();
 			}
 		}
+
+		if (ImGui::CollapsingHeader("Camera"))
+		{
+			static float fovDeg = DirectX::XMConvertToDegrees(Config::g_fov);
+			ImGui::SliderFloat("FOV", &fovDeg, 0.0f, 140.0f);
+			Config::g_fov = DirectX::XMConvertToRadians(fovDeg);
+		}
 	}
 	ImGui::End();
 
@@ -826,6 +833,12 @@ void FView::Tick(const float deltaTime, const FController* controller)
 	{
 		UpdateViewTransform();
 	}
+
+	if (m_fov != Config::g_fov)
+	{
+		m_fov = Config::g_fov;
+		m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(m_fov, Demo::s_aspectRatio, 1.f);
+	}
 }
 
 void FView::Reset(const FScene& scene)
@@ -848,9 +861,10 @@ void FView::Reset(const FScene& scene)
 		m_right = { 1.f, 0.f, 0.f };
 		m_up = { 0.f, 1.f, 0.f };
 		m_look = { 0.f, 0.f, 1.f };
-
 		UpdateViewTransform();
-		m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(0.25f * DirectX::XM_PI, Demo::s_aspectRatio, 1.f);
+
+		m_fov = Config::g_fov;
+		m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(m_fov, Demo::s_aspectRatio, 1.f);
 	}
 }
 
