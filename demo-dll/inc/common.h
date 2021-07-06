@@ -3,7 +3,7 @@
 #include <locale>
 #include <codecvt>
 
-struct Settings
+struct Config
 {
 	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	static inline std::wstring g_modelFilename = L"MetalRoughSpheres.gltf";

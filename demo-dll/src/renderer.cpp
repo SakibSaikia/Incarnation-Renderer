@@ -115,7 +115,7 @@ namespace RenderJob
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Settings::g_backBufferFormat;
+			psoDesc.RTVFormats[0] = Config::g_backBufferFormat;
 			psoDesc.SampleDesc.Count = passDesc.sampleCount;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -283,7 +283,7 @@ namespace RenderJob
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Settings::g_backBufferFormat;
+			psoDesc.RTVFormats[0] = Config::g_backBufferFormat;
 			psoDesc.SampleDesc.Count = passDesc.sampleCount;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -390,7 +390,7 @@ namespace RenderJob
 				0,
 				passDesc.colorSource->m_resource->m_d3dResource,
 				0,
-				Settings::g_backBufferFormat);
+				Config::g_backBufferFormat);
 
 			return cmdList;
 		});
@@ -505,7 +505,7 @@ namespace RenderJob
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Settings::g_backBufferFormat;
+			psoDesc.RTVFormats[0] = Config::g_backBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -668,7 +668,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
 
 	const uint32_t sampleCount = 4;
-	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Settings::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
+	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Config::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
 
 	// Base pass

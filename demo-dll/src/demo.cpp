@@ -199,20 +199,20 @@ void Demo::Tick(float deltaTime)
 {
 	// Reload scene model if required
 	if (s_scene.m_modelFilename.empty() ||
-		s_scene.m_modelFilename != Settings::g_modelFilename)
+		s_scene.m_modelFilename != Config::g_modelFilename)
 	{
 		RenderBackend12::FlushGPU();
-		s_scene.ReloadModel(Settings::g_modelFilename);
+		s_scene.ReloadModel(Config::g_modelFilename);
 		RenderBackend12::FlushGPU();
 		s_view.Reset(s_scene);
 	}
 
 	// Reload scene environment if required
 	if (s_scene.m_environmentFilename.empty() ||
-		s_scene.m_environmentFilename != Settings::g_environmentFilename)
+		s_scene.m_environmentFilename != Config::g_environmentFilename)
 	{
 		RenderBackend12::FlushGPU();
-		s_scene.ReloadEnvironment(Settings::g_environmentFilename);
+		s_scene.ReloadEnvironment(Config::g_environmentFilename);
 		RenderBackend12::FlushGPU();
 	}
 
@@ -304,7 +304,7 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
-			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), Settings::g_modelFilename) - s_modelList.begin();
+			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), Config::g_modelFilename) - s_modelList.begin();
 			std::string comboLabel = ws2s(s_modelList[curModelIndex]);
 			if (ImGui::BeginCombo("Model", comboLabel.c_str(), ImGuiComboFlags_None))
 			{
@@ -314,7 +314,7 @@ void Demo::UpdateUI(float deltaTime)
 					if (ImGui::Selectable(ws2s(s_modelList[n]).c_str(), bSelected))
 					{
 						curModelIndex = n;
-						Settings::g_modelFilename = s_modelList[n];
+						Config::g_modelFilename = s_modelList[n];
 					}
 
 					if (bSelected)
@@ -326,7 +326,7 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::EndCombo();
 			}
 
-			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), Settings::g_environmentFilename) - s_hdriList.begin();
+			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), Config::g_environmentFilename) - s_hdriList.begin();
 			comboLabel = ws2s(s_hdriList[curHdriIndex]);
 			if (ImGui::BeginCombo("Environment", comboLabel.c_str(), ImGuiComboFlags_None))
 			{
@@ -336,7 +336,7 @@ void Demo::UpdateUI(float deltaTime)
 					if (ImGui::Selectable(ws2s(s_hdriList[n]).c_str(), bSelected))
 					{
 						curHdriIndex = n;
-						Settings::g_environmentFilename = s_hdriList[n];
+						Config::g_environmentFilename = s_hdriList[n];
 					}
 
 					if (bSelected)

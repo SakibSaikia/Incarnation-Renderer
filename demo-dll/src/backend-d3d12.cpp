@@ -1488,7 +1488,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	AssertIfFailed(swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
 
 	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	rtvDesc.Format = Settings::g_backBufferFormat;
+	rtvDesc.Format = Config::g_backBufferFormat;
 	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 
 	// Back buffers
