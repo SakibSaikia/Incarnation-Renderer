@@ -204,7 +204,7 @@ void Demo::Tick(float deltaTime)
 		RenderBackend12::FlushGPU();
 		s_scene.ReloadModel(Config::g_modelFilename);
 		RenderBackend12::FlushGPU();
-		s_view.Reset(s_scene);
+		s_view.Reset(&s_scene);
 	}
 
 	// Reload scene environment if required
@@ -357,13 +357,16 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Camera"))
 		{
-			// FOV
 			static float fovDeg = DirectX::XMConvertToDegrees(Config::g_fov);
 			ImGui::SliderFloat("FOV", &fovDeg, 0.0f, 140.0f);
 			Config::g_fov = DirectX::XMConvertToRadians(fovDeg);
 
-			// Exposure
 			ImGui::SliderFloat("Exposure", &Config::g_exposure, 1.0f, 32.0f);
+
+			if (ImGui::Button("Reset"))
+			{
+				s_view.Reset();
+			}
 		}
 	}
 	ImGui::End();
@@ -851,13 +854,13 @@ void FView::Tick(const float deltaTime, const FController* controller)
 	}
 }
 
-void FView::Reset(const FScene& scene)
+void FView::Reset(const FScene* scene)
 {
-	if (scene.m_cameras.size() > 0)
+	if (scene && scene->m_cameras.size() > 0)
 	{
 		// Use provided camera
-		m_viewTransform = scene.m_cameras[0].m_viewTransform;
-		m_projectionTransform = scene.m_cameras[0].m_projectionTransform;
+		m_viewTransform = scene->m_cameras[0].m_viewTransform;
+		m_projectionTransform = scene->m_cameras[0].m_projectionTransform;
 
 		m_position = m_viewTransform.Translation();
 		m_right = m_viewTransform.Right();

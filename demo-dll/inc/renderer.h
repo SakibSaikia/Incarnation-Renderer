@@ -98,7 +98,7 @@ private:
 struct FView
 {
 	void Tick(const float deltaTime, const FController* controller);
-	void Reset(const FScene& scene);
+	void Reset(const FScene* scene = nullptr);
 
 	Vector3 m_position;
 	Vector3 m_right;
