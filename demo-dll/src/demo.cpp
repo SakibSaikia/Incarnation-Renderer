@@ -686,28 +686,46 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 
 	// Generate mips
 	DirectX::ScratchImage mipchain = {};
-	AssertIfFailed(DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain));
+	if (SUCCEEDED((DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain))))
+	{
+		// Block compression
+		DirectX::ScratchImage compressedScratch;
+		AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
-	// Block compression
-	DirectX::ScratchImage compressedScratch;
-	AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+		std::wstring name{ image.uri.begin(), image.uri.end() };
+		FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
+		uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
+			&uploader,
+			name,
+			compressedFormat,
+			srcImage.width,
+			srcImage.height,
+			compressedScratch.GetImages(),
+			compressedScratch.GetImageCount());
 
-	std::wstring name{ image.uri.begin(), image.uri.end() };
-	FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
-	uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
-		&uploader,
-		name,
-		compressedFormat,
-		srcImage.width,
-		srcImage.height,
-		compressedScratch.GetImages(),
-		compressedScratch.GetImageCount());
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+		return bindlessIndex;
+	}
+	else
+	{
+		std::wstring name{ image.uri.begin(), image.uri.end() };
+		FResourceUploadContext uploader{ srcImage.slicePitch };
+		uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
+			&uploader,
+			name,
+			compressedFormat,
+			srcImage.width,
+			srcImage.height,
+			&srcImage,
+			1);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-	uploader.SubmitUploads(cmdList);
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-	return bindlessIndex;
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+		return bindlessIndex;
+	}
 }
 
 int FScene::LoadSampler(const tinygltf::Sampler& sampler)
