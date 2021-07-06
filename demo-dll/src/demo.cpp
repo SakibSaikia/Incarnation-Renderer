@@ -357,11 +357,13 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Camera"))
 		{
+			ImGui::SliderFloat("Speed", &Config::g_cameraSpeed, 1.0f, 20.0f);
+
 			static float fovDeg = DirectX::XMConvertToDegrees(Config::g_fov);
 			ImGui::SliderFloat("FOV", &fovDeg, 0.0f, 140.0f);
 			Config::g_fov = DirectX::XMConvertToRadians(fovDeg);
 
-			ImGui::SliderFloat("Exposure", &Config::g_exposure, 1.0f, 32.0f);
+			ImGui::SliderFloat("Exposure", &Config::g_exposure, 1.0f, 20.0f);
 
 			if (ImGui::Button("Reset"))
 			{
@@ -794,30 +796,29 @@ void FScene::Clear()
 
 void FView::Tick(const float deltaTime, const FController* controller)
 {
-	constexpr float speed = 5.f;
 	bool updateView = false;
 
 	// Walk
 	if (controller->MoveForward())
 	{
-		m_position += speed * deltaTime * m_look;
+		m_position += Config::g_cameraSpeed * deltaTime * m_look;
 		updateView = true;
 	}
 	else if (controller->MoveBack())
 	{
-		m_position -= speed * deltaTime * m_look;
+		m_position -= Config::g_cameraSpeed * deltaTime * m_look;
 		updateView = true;
 	}
 
 	// Strafe
 	if (controller->StrafeLeft())
 	{
-		m_position -= speed * deltaTime * m_right;
+		m_position -= Config::g_cameraSpeed * deltaTime * m_right;
 		updateView = true;
 	}
 	else if (controller->StrafeRight())
 	{
-		m_position += speed * deltaTime * m_right;
+		m_position += Config::g_cameraSpeed * deltaTime * m_right;
 		updateView = true;
 	}
 

@@ -10,6 +10,7 @@ struct Config
 	static inline std::wstring g_environmentFilename = L"lilienstein_2k.hdr";
 	static inline float g_fov = 0.25f * DirectX::XM_PI;
 	static inline float g_exposure = 13.f;
+	static inline float g_cameraSpeed = 5.f;
 };
 
 inline void AssertIfFailed(HRESULT hr)
