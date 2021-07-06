@@ -1,10 +1,13 @@
 #pragma once
 #include <filesystem>
+#include <locale>
+#include <codecvt>
 
 struct Settings
 {
 	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	static inline std::string g_sceneFilename = "MetalRoughSpheres.gltf";
+	static inline std::wstring g_modelFilename = L"MetalRoughSpheres.gltf";
+	static inline std::wstring g_environmentFilename = L"lilienstein_2k.hdr";
 };
 
 inline void AssertIfFailed(HRESULT hr)
@@ -62,4 +65,22 @@ inline std::string GetFilepathA(const std::string& filename)
 
 	DebugAssert(false, "File not found");
 	return {};
+}
+
+// https://stackoverflow.com/questions/4804298/how-to-convert-wstring-into-string
+inline std::wstring s2ws(const std::string& str)
+{
+	using convert_typeX = std::codecvt_utf8<wchar_t>;
+	std::wstring_convert<convert_typeX, wchar_t> converterX;
+
+	return converterX.from_bytes(str);
+}
+
+// https://stackoverflow.com/questions/4804298/how-to-convert-wstring-into-string
+inline std::string ws2s(const std::wstring& wstr)
+{
+	using convert_typeX = std::codecvt_utf8<wchar_t>;
+	std::wstring_convert<convert_typeX, wchar_t> converterX;
+
+	return converterX.to_bytes(wstr);
 }

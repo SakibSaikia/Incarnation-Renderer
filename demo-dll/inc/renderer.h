@@ -49,14 +49,16 @@ struct FLightProbe
 
 struct FScene
 {
-	void Reload(const std::string& filename);
+	void ReloadModel(const std::wstring& gltfFilename);
+	void ReloadEnvironment(const std::wstring& hdriFilename);
 	void LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
 
-	// Scene file
-	std::string m_sceneFilename = {};
+	// Scene files
+	std::wstring m_modelFilename = {};
+	std::wstring m_environmentFilename = {};
 
 	// Scene entity lists
 	std::vector<FRenderMesh> m_meshGeo;

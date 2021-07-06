@@ -137,8 +137,8 @@ namespace Demo
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 
-	std::vector<std::string> s_modelList;
-	std::vector<std::string> s_hdriList;
+	std::vector<std::wstring> s_modelList;
+	std::vector<std::wstring> s_hdriList;
 
 	const FScene* GetScene()
 	{
@@ -179,7 +179,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	{
 		if (entry.is_regular_file() && entry.path().extension().string() == ".gltf")
 		{
-			s_modelList.push_back(entry.path().filename().string());
+			s_modelList.push_back(entry.path().filename().wstring());
 		}
 	}
 
@@ -188,7 +188,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	{
 		if (entry.is_regular_file() && entry.path().extension().string() == ".hdr")
 		{
-			s_hdriList.push_back(entry.path().filename().string());
+			s_hdriList.push_back(entry.path().filename().wstring());
 		}
 	}
 
@@ -197,14 +197,23 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 
 void Demo::Tick(float deltaTime)
 {
-	// Reload scene file if required
-	if (s_scene.m_sceneFilename.empty() ||
-		s_scene.m_sceneFilename != Settings::g_sceneFilename)
+	// Reload scene model if required
+	if (s_scene.m_modelFilename.empty() ||
+		s_scene.m_modelFilename != Settings::g_modelFilename)
 	{
 		RenderBackend12::FlushGPU();
-		s_scene.Reload(Settings::g_sceneFilename);
+		s_scene.ReloadModel(Settings::g_modelFilename);
 		RenderBackend12::FlushGPU();
 		s_view.Reset(s_scene);
+	}
+
+	// Reload scene environment if required
+	if (s_scene.m_environmentFilename.empty() ||
+		s_scene.m_environmentFilename != Settings::g_environmentFilename)
+	{
+		RenderBackend12::FlushGPU();
+		s_scene.ReloadEnvironment(Settings::g_environmentFilename);
+		RenderBackend12::FlushGPU();
 	}
 
 	// Tick components
@@ -295,17 +304,17 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
-			static int curModelIndex = 0;
-			const char* comboLabel = s_modelList[curModelIndex].c_str();
-			if (ImGui::BeginCombo("Model", comboLabel, ImGuiComboFlags_None))
+			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), Settings::g_modelFilename) - s_modelList.begin();
+			std::string comboLabel = ws2s(s_modelList[curModelIndex]);
+			if (ImGui::BeginCombo("Model", comboLabel.c_str(), ImGuiComboFlags_None))
 			{
 				for (int n = 0; n < s_modelList.size(); n++)
 				{
 					const bool bSelected = (curModelIndex == n);
-					if (ImGui::Selectable(s_modelList[n].c_str(), bSelected))
+					if (ImGui::Selectable(ws2s(s_modelList[n]).c_str(), bSelected))
 					{
 						curModelIndex = n;
-						Settings::g_sceneFilename = s_modelList[n];
+						Settings::g_modelFilename = s_modelList[n];
 					}
 
 					if (bSelected)
@@ -317,16 +326,17 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::EndCombo();
 			}
 
-			static int curHdriIndex = 0;
-			comboLabel = s_hdriList[curHdriIndex].c_str();
-			if (ImGui::BeginCombo("Background", comboLabel, ImGuiComboFlags_None))
+			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), Settings::g_environmentFilename) - s_hdriList.begin();
+			comboLabel = ws2s(s_hdriList[curHdriIndex]);
+			if (ImGui::BeginCombo("Environment", comboLabel.c_str(), ImGuiComboFlags_None))
 			{
 				for (int n = 0; n < s_hdriList.size(); n++)
 				{
 					const bool bSelected = (curHdriIndex == n);
-					if (ImGui::Selectable(s_hdriList[n].c_str(), bSelected))
+					if (ImGui::Selectable(ws2s(s_hdriList[n]).c_str(), bSelected))
 					{
 						curHdriIndex = n;
+						Settings::g_environmentFilename = s_hdriList[n];
 					}
 
 					if (bSelected)
@@ -349,14 +359,14 @@ void Demo::UpdateUI(float deltaTime)
 //														Scene
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
-void FScene::Reload(const std::string& filename)
+void FScene::ReloadModel(const std::wstring& filename)
 {
 	tinygltf::TinyGLTF loader;
 	std::string errors, warnings;
 
 	// Load GLTF
 	tinygltf::Model model;
-	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, GetFilepathA(filename));
+	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, GetFilepathA(ws2s(filename)));
 
 	if (!warnings.empty())
 	{
@@ -369,7 +379,7 @@ void FScene::Reload(const std::string& filename)
 	}
 
 	DebugAssert(ok, "Failed to parse glTF");
-	m_sceneFilename = filename;
+	m_modelFilename = filename;
 
 	// Clear previous scene
 	Clear();
@@ -460,8 +470,12 @@ void FScene::Reload(const std::string& filename)
 	delete[] m_scratchPositionBuffer;
 	delete[] m_scratchNormalBuffer;
 	delete[] m_scratchUvBuffer;
+}
 
-	m_globalLightProbe = Demo::s_textureCache.CacheHDRI(L"lilienstein_2k.hdr");
+void FScene::ReloadEnvironment(const std::wstring& filename)
+{
+	m_globalLightProbe = Demo::s_textureCache.CacheHDRI(filename);
+	m_environmentFilename = filename;
 }
 
 void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
