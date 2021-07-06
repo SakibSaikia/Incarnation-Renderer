@@ -34,6 +34,7 @@ struct ViewCbLayout
 	float4x4 viewTransform;
 	float4x4 projectionTransform;
 	float3 eyePos;
+	float exposure;
 };
 
 struct MeshCbLayout
@@ -176,8 +177,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	}
 
 	// Exposure correction. Computes the exposure normalization from the camera's EV100
-	int ev100 = 13;
-	float e = exposure(ev100);
+	float e = exposure(g_viewConstants.exposure);
 	luminance *= e;
 
 	// Tonemapping

@@ -302,8 +302,11 @@ void Demo::UpdateUI(float deltaTime)
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::Spacing();
 
+		// -----------------------------------------------------------------------------------------------------------------------------------------
+
 		if (ImGui::CollapsingHeader("Scene"))
 		{
+			// Model
 			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), Config::g_modelFilename) - s_modelList.begin();
 			std::string comboLabel = ws2s(s_modelList[curModelIndex]);
 			if (ImGui::BeginCombo("Model", comboLabel.c_str(), ImGuiComboFlags_None))
@@ -326,6 +329,7 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::EndCombo();
 			}
 
+			// Background Environment
 			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), Config::g_environmentFilename) - s_hdriList.begin();
 			comboLabel = ws2s(s_hdriList[curHdriIndex]);
 			if (ImGui::BeginCombo("Environment", comboLabel.c_str(), ImGuiComboFlags_None))
@@ -349,11 +353,17 @@ void Demo::UpdateUI(float deltaTime)
 			}
 		}
 
+		// --------------------------------------------------------------------------------------------------------------------------------------------
+
 		if (ImGui::CollapsingHeader("Camera"))
 		{
+			// FOV
 			static float fovDeg = DirectX::XMConvertToDegrees(Config::g_fov);
 			ImGui::SliderFloat("FOV", &fovDeg, 0.0f, 140.0f);
 			Config::g_fov = DirectX::XMConvertToRadians(fovDeg);
+
+			// Exposure
+			ImGui::SliderFloat("Exposure", &Config::g_exposure, 1.0f, 32.0f);
 		}
 	}
 	ImGui::End();

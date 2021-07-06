@@ -85,6 +85,7 @@ namespace RenderJob
 				Matrix viewTransform;
 				Matrix projectionTransform;
 				Vector3 eyePos;
+				float exposure;
 			};
 
 			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
@@ -97,6 +98,7 @@ namespace RenderJob
 					cbDest->viewTransform = view->m_viewTransform;
 					cbDest->projectionTransform = view->m_projectionTransform;
 					cbDest->eyePos = view->m_position;
+					cbDest->exposure = Config::g_exposure;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -355,6 +357,7 @@ namespace RenderJob
 			{
 				Matrix invParallaxViewProjMatrix;
 				int envmapTextureIndex;
+				float exposure;
 			};
 
 			Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
@@ -363,6 +366,7 @@ namespace RenderJob
 			CbLayout constants{};
 			constants.envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 			constants.invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
+			constants.exposure = Config::g_exposure;
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(CbLayout) / 4, &constants, 0);
 
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
