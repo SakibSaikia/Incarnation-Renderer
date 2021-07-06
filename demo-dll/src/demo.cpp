@@ -370,6 +370,25 @@ void Demo::UpdateUI(float deltaTime)
 				s_view.Reset();
 			}
 		}
+
+		// --------------------------------------------------------------------------------------------------------------------------------------------
+
+		if (ImGui::CollapsingHeader("Debug"))
+		{
+			if (ImGui::TreeNode("View Modes"))
+			{
+				ImGui::Checkbox("Lighting Only", &Config::g_lightingOnlyView);
+				ImGui::TreePop();
+			}
+
+			if (ImGui::TreeNode("Light Components"))
+			{
+				ImGui::Checkbox("Direct Lighting", &Config::g_enableDirectLighting);
+				ImGui::Checkbox("Diffuse IBL", &Config::g_enableDiffuseIBL);
+				ImGui::Checkbox("Specular IBL", &Config::g_enableSpecularIBL);
+				ImGui::TreePop();
+			}
+		}
 	}
 	ImGui::End();
 
@@ -1169,8 +1188,8 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			{
 				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
 				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, shTexureUav0->m_uavIndices[0]),
-				metadata.width,
-				metadata.height,
+				(uint32_t)metadata.width,
+				(uint32_t)metadata.height,
 				srcMipIndex
 			};
 

@@ -126,8 +126,14 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
+				std::wstringstream s;
+				s << L"LIGHTING_ONLY=" << (Config::g_lightingOnlyView ? L"1" : L"0") <<
+					L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0") <<
+					L" DIFFUSE_IBL=" << (Config::g_enableDiffuseIBL ? L"1" : L"0") <<
+					L" SPECULAR_IBL=" << (Config::g_enableSpecularIBL ? L"1" : L"0");
+
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" }, L"vs_6_6");
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", L"" }, L"ps_6_6");
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() }, L"ps_6_6");
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

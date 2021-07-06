@@ -123,6 +123,10 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
 	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
 
+#if LIGHTING_ONLY
+	baseColor = 0.5.xxx;
+#endif
+
 	// Remapping
 	float3 F0 = metallic * baseColor + (1.f - metallic) * 0.04;
 	float3 albedo = (1.f - metallic) * baseColor;
@@ -142,9 +146,14 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	// Apply direct lighting
 	const float lightIntensity = 100000.f;
 	float illuminance = lightIntensity * NoL;
-	float3 luminance = (Fr + Fd)* illuminance;
+	float3 luminance = 0.f;
+	
+#if DIRECT_LIGHTING
+	luminance += (Fr + Fd)* illuminance;
+#endif
 
 	// Diffuse IBL
+#ifdef DIFFUSE_IBL
 	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
 	{
 		SH9Color shRadiance;
@@ -159,8 +168,10 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 shDiffuse = Fd * ShIrradiance(N, shRadiance);
 		luminance += shDiffuse;
 	}
+#endif
 
 	// Specular IBL
+#if SPECULAR_IBL
 	if (g_frameConstants.sceneLightProbe.envmapTextureIndex != -1 &&
 		g_frameConstants.envBrdfTextureIndex != -1)
 	{
@@ -175,6 +186,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
 		luminance += prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
 	}
+#endif
 
 	// Exposure correction. Computes the exposure normalization from the camera's EV100
 	float e = exposure(g_viewConstants.exposure);

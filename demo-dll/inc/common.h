@@ -11,6 +11,10 @@ struct Config
 	static inline float g_fov = 0.25f * DirectX::XM_PI;
 	static inline float g_exposure = 13.f;
 	static inline float g_cameraSpeed = 5.f;
+	static inline bool g_lightingOnlyView = false;
+	static inline bool g_enableDirectLighting = true;
+	static inline bool g_enableDiffuseIBL = true;
+	static inline bool g_enableSpecularIBL = true;
 };
 
 inline void AssertIfFailed(HRESULT hr)
