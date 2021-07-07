@@ -539,7 +539,7 @@ void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix&
 	{
 		Matrix translation = !node.translation.empty() ? Matrix::CreateTranslation(Vector3{ (float*)node.translation.data() }) : Matrix::Identity;
 		Matrix rotation = !node.rotation.empty() ? Matrix::CreateFromQuaternion(Quaternion{ (float*)node.rotation.data() }) : Matrix::Identity;
-		Matrix scale = !node.scale.empty() ? Matrix::CreateScale(Vector3{ (float*)node.scale.data() }) : Matrix::Identity;
+		Matrix scale = !node.scale.empty() ? Matrix::CreateScale(node.scale[0], node.scale[1], node.scale[2]) : Matrix::Identity;
 
 		nodeTransform = scale * rotation * translation;
 	}
