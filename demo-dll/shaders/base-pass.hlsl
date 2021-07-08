@@ -52,12 +52,17 @@ struct MaterialCbLayout
 	float metallicFactor;
 	float3 baseColorFactor;
 	float roughnessFactor;
+	float occlusionStrength;
+	int emissiveTextureIndex;
 	int baseColorTextureIndex;
 	int metallicRoughnessTextureIndex;
 	int normalTextureIndex;
+	int aoTextureIndex;
+	int emissiveSamplerIndex;
 	int baseColorSamplerIndex;
 	int metallicRoughnessSamplerIndex;
 	int normalSamplerIndex;
+	int aoSamplerIndex;
 };
 
 SamplerState g_anisoSampler : register(s0);
@@ -118,8 +123,11 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float NoH = saturate(dot(N, H));
 	float LoH = saturate(dot(L, H));
 
+	float3 emissive = g_materialConstants.emissiveTextureIndex != -1 ? g_materialConstants.emissiveFactor * g_bindless2DTextures[g_materialConstants.emissiveTextureIndex].Sample(g_anisoSampler, input.uv).rgb : g_materialConstants.emissiveFactor;
 	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ? g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_anisoSampler, input.uv).rgb : g_materialConstants.baseColorFactor;
 	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_anisoSampler, input.uv).bg : 1.f.xx;
+	float3 ao = g_materialConstants.aoTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_anisoSampler, input.uv).rgb : 1.f.xxx;
+	float aoStrength = g_materialConstants.occlusionStrength;
 	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
 	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
 
@@ -166,7 +174,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		}
 
 		float3 shDiffuse = Fd * ShIrradiance(N, shRadiance);
-		luminance += shDiffuse;
+		luminance += lerp(shDiffuse, ao * shDiffuse, aoStrength);
 	}
 #endif
 
@@ -184,7 +192,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 R = reflect(-V, N);
 		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
 		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
-		luminance += prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
+		float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
+		luminance += lerp(specularIBL, ao * specularIBL, aoStrength);
 	}
 #endif
 
@@ -193,7 +202,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	luminance *= e;
 
 	// Tonemapping
-	float3 ldrColor = Reinhard(luminance);
+	float3 ldrColor = Reinhard(luminance) + emissive;
 
 	return float4(ldrColor, 1.f);
 }

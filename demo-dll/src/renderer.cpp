@@ -225,12 +225,17 @@ namespace RenderJob
 					float metallicFactor;
 					Vector3 baseColorFactor;
 					float roughnessFactor;
+					float aoStrength;
+					int emissiveTextureIndex;
 					int baseColorTextureIndex;
 					int metallicRoughnessTextureIndex;
 					int normalTextureIndex;
+					int aoTextureIndex;
+					int emissiveSamplerIndex;
 					int baseColorSamplerIndex;
 					int metallicRoughnessSamplerIndex;
 					int normalSamplerIndex;
+					int aoSamplerIndex;
 				};
 
 				std::unique_ptr<FTransientBuffer> materialCb = RenderBackend12::CreateTransientBuffer(
@@ -244,12 +249,17 @@ namespace RenderJob
 						cbDest->metallicFactor = mesh.m_metallicFactor;
 						cbDest->baseColorFactor = mesh.m_baseColorFactor;
 						cbDest->roughnessFactor = mesh.m_roughnessFactor;
+						cbDest->aoStrength = mesh.m_aoStrength;
+						cbDest->emissiveTextureIndex = mesh.m_emissiveTextureIndex;
 						cbDest->baseColorTextureIndex = mesh.m_baseColorTextureIndex;
 						cbDest->metallicRoughnessTextureIndex = mesh.m_metallicRoughnessTextureIndex;
 						cbDest->normalTextureIndex = mesh.m_normalTextureIndex;
+						cbDest->aoTextureIndex = mesh.m_aoTextureIndex;
+						cbDest->emissiveSamplerIndex = mesh.m_emissiveSamplerIndex;
 						cbDest->baseColorSamplerIndex = mesh.m_baseColorSamplerIndex;
 						cbDest->metallicRoughnessSamplerIndex = mesh.m_metallicRoughnessSamplerIndex;
 						cbDest->normalSamplerIndex = mesh.m_normalSamplerIndex;
+						cbDest->aoSamplerIndex = mesh.m_aoSamplerIndex;
 					});
 
 				d3dCmdList->SetGraphicsRootConstantBufferView(1, materialCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

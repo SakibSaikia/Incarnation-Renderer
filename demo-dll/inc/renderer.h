@@ -26,12 +26,19 @@ struct FRenderMesh
 	Vector3 m_baseColorFactor;
 	float m_metallicFactor;
 	float m_roughnessFactor;
+	float m_aoStrength;
+
+	int m_emissiveTextureIndex;
 	int m_baseColorTextureIndex;
 	int m_metallicRoughnessTextureIndex;
 	int m_normalTextureIndex;
+	int m_aoTextureIndex;
+
+	int m_emissiveSamplerIndex;
 	int m_baseColorSamplerIndex;
 	int m_metallicRoughnessSamplerIndex;
 	int m_normalSamplerIndex;
+	int m_aoSamplerIndex;
 };
 
 struct FCamera
