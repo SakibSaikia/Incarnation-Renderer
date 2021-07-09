@@ -25,6 +25,7 @@ using namespace RenderBackend12;
 constexpr uint32_t k_backBufferCount = 2;
 constexpr size_t k_rtvHeapSize = 32;
 constexpr size_t k_dsvHeapSize = 8;
+constexpr size_t k_samplerHeapSize = 16;
 constexpr size_t k_sharedResourceMemory = 64 * 1024 * 1024;
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -135,6 +136,15 @@ namespace
 		D3D12_UNORDERED_ACCESS_VIEW_DESC desc = {};
 		desc.Format = format;
 		desc.ViewDimension = viewDimension;
+		return desc;
+	}
+
+	D3D12_SAMPLER_DESC GetNullSamplerDesc()
+	{
+		D3D12_SAMPLER_DESC desc = {};
+		desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+		desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		return desc;
 	}
 
@@ -1275,6 +1285,7 @@ namespace RenderBackend12
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
+	concurrency::concurrent_queue<uint32_t> s_samplerIndexPool;
 }
 
 namespace 
@@ -1464,6 +1475,29 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		}
 	}
 
+	// Sampler heap
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC samplerHeapDesc = {};
+		samplerHeapDesc.NumDescriptors = k_samplerHeapSize;
+		samplerHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
+		samplerHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		AssertIfFailed(
+			s_d3dDevice->CreateDescriptorHeap(
+				&samplerHeapDesc,
+				IID_PPV_ARGS(s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER].put()))
+		);
+		s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER]->SetName(L"sampler_heap");
+
+		// Cache available indices
+		D3D12_SAMPLER_DESC nullDesc = GetNullSamplerDesc();
+		for (int i = 0; i < k_samplerHeapSize; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE sampler = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, i);
+			GetDevice()->CreateSampler(&nullDesc, sampler);
+			s_samplerIndexPool.push(i);
+		}
+	}
+
 	// Swap chain
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
 	swapChainDesc.Width = resX;
@@ -1569,6 +1603,7 @@ void RenderBackend12::Teardown()
 	s_computePSOPool.clear();
 	s_rtvIndexPool.clear();
 	s_dsvIndexPool.clear();
+	s_samplerIndexPool.clear();
 
 	s_frameFence.get()->Release();
 
@@ -1814,6 +1849,11 @@ void RenderBackend12::PresentDisplay()
 D3DDescriptorHeap_t* RenderBackend12::GetBindlessShaderResourceHeap()
 {
 	return GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+}
+
+D3DDescriptorHeap_t* RenderBackend12::GetBindlessSamplerHeap()
+{
+	return GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex)
@@ -2398,6 +2438,27 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	uav->m_srvIndex = srvIndex;
 
 	return std::move(uav);
+}
+
+uint32_t RenderBackend12::CreateBindlessSampler(
+	const D3D12_FILTER filter,
+	const D3D12_TEXTURE_ADDRESS_MODE addressU,
+	const D3D12_TEXTURE_ADDRESS_MODE addressV,
+	const D3D12_TEXTURE_ADDRESS_MODE addressW)
+{
+	uint32_t samplerIndex;
+	bool ok = s_samplerIndexPool.try_pop(samplerIndex);
+	DebugAssert(ok, "Ran out of Sampler descriptors");
+	D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, samplerIndex);
+
+	D3D12_SAMPLER_DESC desc = {};
+	desc.Filter = filter;
+	desc.AddressU = addressU;
+	desc.AddressV = addressV;
+	desc.AddressW = addressW;
+	GetDevice()->CreateSampler(&desc, descriptor);
+
+	return samplerIndex;
 }
 
 void RenderBackend12::BeginCapture()

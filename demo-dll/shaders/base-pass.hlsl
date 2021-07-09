@@ -2,15 +2,15 @@
 #include "spherical-harmonics.hlsli"
 
 #define rootsig \
-    "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
-    "StaticSampler(s1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
     "RootConstants(b0, num32BitConstants=20, visibility = SHADER_VISIBILITY_VERTEX)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_PIXEL"), \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
     "CBV(b3, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
     "DescriptorTable(SRV(t1, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_VERTEX), " \
-    "DescriptorTable(SRV(t2, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL) "
+    "DescriptorTable(SRV(t2, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
+	"DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16), visibility = SHADER_VISIBILITY_PIXEL), " \
+	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
 
 struct LightProbeData
 {
@@ -65,8 +65,8 @@ struct MaterialCbLayout
 	int aoSamplerIndex;
 };
 
-SamplerState g_anisoSampler : register(s0);
-SamplerState g_trilinearSampler : register(s1);
+SamplerState g_bindlessSamplers[] : register(s0, space0);
+SamplerState g_trilinearSampler : register(s1, space1);
 ConstantBuffer<MeshCbLayout> g_meshConstants : register(b0);
 ConstantBuffer<MaterialCbLayout> g_materialConstants : register(b1);
 ConstantBuffer<ViewCbLayout> g_viewConstants : register(b2);
@@ -123,10 +123,22 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float NoH = saturate(dot(N, H));
 	float LoH = saturate(dot(L, H));
 
-	float3 emissive = g_materialConstants.emissiveTextureIndex != -1 ? g_materialConstants.emissiveFactor * g_bindless2DTextures[g_materialConstants.emissiveTextureIndex].Sample(g_anisoSampler, input.uv).rgb : g_materialConstants.emissiveFactor;
-	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ? g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_anisoSampler, input.uv).rgb : g_materialConstants.baseColorFactor;
-	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_anisoSampler, input.uv).bg : 1.f.xx;
-	float3 ao = g_materialConstants.aoTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_anisoSampler, input.uv).rgb : 1.f.xxx;
+	float3 emissive = g_materialConstants.emissiveTextureIndex != -1 ? 
+		g_materialConstants.emissiveFactor * g_bindless2DTextures[g_materialConstants.emissiveTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.emissiveSamplerIndex], input.uv).rgb :
+		g_materialConstants.emissiveFactor;
+
+	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ? 
+		g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.baseColorSamplerIndex], input.uv).rgb :
+		g_materialConstants.baseColorFactor;
+
+	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ? 
+		g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.metallicRoughnessSamplerIndex], input.uv).bg :
+		1.f.xx;
+
+	float3 ao = g_materialConstants.aoTextureIndex != -1 ? 
+		g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.aoSamplerIndex], input.uv).rgb :
+		1.f.xxx;
+
 	float aoStrength = g_materialConstants.occlusionStrength;
 	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
 	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;

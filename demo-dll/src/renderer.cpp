@@ -103,11 +103,16 @@ namespace RenderJob
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+			D3DDescriptorHeap_t* descriptorHeaps[] = 
+			{ 
+				RenderBackend12::GetBindlessShaderResourceHeap(), 
+				RenderBackend12::GetBindlessSamplerHeap() 
+			};
+			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
 			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
 			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(7, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 0));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};

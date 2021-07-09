@@ -88,7 +88,6 @@ struct FScene
 
 private:
 	int LoadTexture(const tinygltf::Image& image, const bool srgb);
-	int LoadSampler(const tinygltf::Sampler& sampler);
 
 private:
 	uint8_t* m_scratchIndexBuffer;

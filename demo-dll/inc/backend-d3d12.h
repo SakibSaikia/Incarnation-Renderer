@@ -225,6 +225,7 @@ namespace RenderBackend12
 
 	// Descriptor Management
 	D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();
+	D3DDescriptorHeap_t* GetBindlessSamplerHeap();
 	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
 	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
 	uint32_t GetDescriptorTableOffset(BindlessDescriptorType descriptorType, uint32_t descriptorIndex);
@@ -290,6 +291,12 @@ namespace RenderBackend12
 		const std::wstring& name,
 		const size_t size,
 		const bool bCreateSRV = true);
+
+	uint32_t CreateBindlessSampler(
+		const D3D12_FILTER filter,
+		const D3D12_TEXTURE_ADDRESS_MODE addressU,
+		const D3D12_TEXTURE_ADDRESS_MODE addressV, 
+		const D3D12_TEXTURE_ADDRESS_MODE addressW);
 
 	// Programmatic Captures
 	void BeginCapture();

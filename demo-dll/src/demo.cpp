@@ -9,6 +9,7 @@
 #include <sstream>
 #include <tiny_gltf.h>
 #include <concurrent_unordered_map.h>
+#include <spookyhash_api.h>
 
 namespace
 {
@@ -43,6 +44,37 @@ struct FTextureCache
 	void Clear();
 
 	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessShaderResource>> m_cachedTextures;
+};
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Sampler Cache
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
+template<>
+struct std::hash<tinygltf::Sampler>
+{
+	std::size_t operator()(const tinygltf::Sampler& key) const
+	{
+		uint64_t seed1{}, seed2{};
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, &key.minFilter, sizeof(key.minFilter));
+		spookyhash_update(&context, &key.magFilter, sizeof(key.magFilter));
+		spookyhash_update(&context, &key.wrapS, sizeof(key.wrapS));
+		spookyhash_update(&context, &key.wrapT, sizeof(key.wrapT));
+		spookyhash_update(&context, &key.wrapR, sizeof(key.wrapR));
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+struct FSamplerCache
+{
+	uint32_t CacheSampler(const tinygltf::Sampler& s);
+	void Clear();
+
+	concurrency::concurrent_unordered_map<tinygltf::Sampler, uint32_t> m_cachedSamplers;
 };
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -134,6 +166,7 @@ namespace Demo
 	FView s_view;
 	FController s_controller;
 	FTextureCache s_textureCache;
+	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 
@@ -252,6 +285,7 @@ void Demo::Teardown(HWND& windowHandle)
 
 	s_scene.Clear();
 	s_textureCache.Clear();
+	s_samplerCache.Clear();
 
 	if (windowHandle)
 	{
@@ -681,11 +715,11 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		newMesh.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], false) : -1;
 		newMesh.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], false) : -1;
 		newMesh.m_aoTextureIndex = material.occlusionTexture.index != -1 ? LoadTexture(model.images[model.textures[material.occlusionTexture.index].source], false) : -1;
-		newMesh.m_emissiveSamplerIndex = material.emissiveTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.emissiveTexture.index].sampler]) : -1;
-		newMesh.m_baseColorSamplerIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].sampler]) : -1;
-		newMesh.m_metallicRoughnessSamplerIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].sampler]) : -1;
-		newMesh.m_normalSamplerIndex = material.normalTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.normalTexture.index].sampler]) : -1;
-		newMesh.m_aoSamplerIndex = material.occlusionTexture.index != -1 ? LoadSampler(model.samplers[model.textures[material.occlusionTexture.index].sampler]) : -1;
+		newMesh.m_emissiveSamplerIndex = material.emissiveTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.emissiveTexture.index].sampler]) : -1;
+		newMesh.m_baseColorSamplerIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].sampler]) : -1;
+		newMesh.m_metallicRoughnessSamplerIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].sampler]) : -1;
+		newMesh.m_normalSamplerIndex = material.normalTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.normalTexture.index].sampler]) : -1;
+		newMesh.m_aoSamplerIndex = material.occlusionTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.occlusionTexture.index].sampler]) : -1;
 		m_meshGeo.push_back(newMesh);
 		m_meshTransforms.push_back(parentTransform);
 
@@ -772,11 +806,6 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 		return bindlessIndex;
 	}
-}
-
-int FScene::LoadSampler(const tinygltf::Sampler& sampler)
-{
-	return -1;
 }
 
 void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Matrix& transform)
@@ -1347,6 +1376,60 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 void FTextureCache::Clear()
 {
 	m_cachedTextures.clear();
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Sampler Cache
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+
+uint32_t FSamplerCache::CacheSampler(const tinygltf::Sampler& s)
+{
+	auto search = m_cachedSamplers.find(s);
+	if (search != m_cachedSamplers.cend())
+	{
+		return search->second;
+	}
+	else
+	{
+		auto AddressModeConversion = [](int wrapMode) -> D3D12_TEXTURE_ADDRESS_MODE
+		{
+			switch (wrapMode)
+			{
+			case TINYGLTF_TEXTURE_WRAP_REPEAT: return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+			case TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE: return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+			case TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT: return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+			default: return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+			}
+		};
+
+		// Just go off min filter to reduce number of combinations
+		auto FilterModeConversion = [](int filterMode)
+		{
+			switch (filterMode)
+			{
+			case TINYGLTF_TEXTURE_FILTER_NEAREST: return D3D12_FILTER_MIN_MAG_MIP_POINT;
+			case TINYGLTF_TEXTURE_FILTER_LINEAR: return D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+			case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST: return D3D12_FILTER_MIN_MAG_MIP_POINT;
+			case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST: return D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+			case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR: return D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+			case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR: return D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+			default: return D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+			}
+		};
+
+		const D3D12_FILTER filter = FilterModeConversion(s.minFilter);
+		const D3D12_TEXTURE_ADDRESS_MODE addressU = AddressModeConversion(s.wrapS);
+		const D3D12_TEXTURE_ADDRESS_MODE addressV = AddressModeConversion(s.wrapT);
+		const D3D12_TEXTURE_ADDRESS_MODE addressW = AddressModeConversion(s.wrapR);
+
+		m_cachedSamplers[s] = RenderBackend12::CreateBindlessSampler(filter, addressU, addressV, addressW);
+		return m_cachedSamplers[s];
+	}
+}
+
+void FSamplerCache::Clear()
+{
+	m_cachedSamplers.clear();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
