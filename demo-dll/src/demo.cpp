@@ -434,14 +434,65 @@ void Demo::UpdateUI(float deltaTime)
 //														Scene
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
+bool LoadImageCallback(
+	tinygltf::Image* image,
+	const int image_idx,
+	std::string* err,
+	std::string* warn,
+	int req_width,
+	int req_height,
+	const unsigned char* bytes,
+	int size,
+	void* user_data)
+{
+	const char* pathStr = (const char*)user_data;
+	std::filesystem::path dirPath{ pathStr };
+	std::filesystem::path srcFilename{ image->uri };
+	std::filesystem::path destFilename = dirPath / srcFilename.stem();
+	destFilename += std::filesystem::path{ ".dds" };
+
+	if (std::filesystem::exists(destFilename))
+	{
+		// Skip image data initialization. We will load compressed file from the cache instead
+		image->image.clear();
+		image->uri = destFilename.string();
+		return true;
+	}
+	else
+	{
+		// Initialize image data using built-in loader
+		return tinygltf::LoadImageData(image, image_idx, err, warn, req_width, req_height, bytes, size, user_data);
+	}
+}
+
+std::string GetCachePath(const std::string filename, const std::string dirName)
+{
+	std::filesystem::path filepath { filename };
+	std::filesystem::path dir{ dirName };
+	std::filesystem::path dirPath = filepath.parent_path() / dir;
+
+	if (!std::filesystem::exists(dirPath))
+	{
+		bool ok = std::filesystem::create_directory(dirPath);
+		DebugAssert(ok, "Failed to create cache dir");
+	}
+
+	return dirPath.string();
+}
+
 void FScene::ReloadModel(const std::wstring& filename)
 {
+	std::string modelFilepath = GetFilepathA(ws2s(filename));
+
 	tinygltf::TinyGLTF loader;
+	m_textureCachePath = GetCachePath(modelFilepath, ".texture-cache");
+	const char* path = m_textureCachePath.c_str();
+	loader.SetImageLoader(&LoadImageCallback, (void*)path);
 	std::string errors, warnings;
 
 	// Load GLTF
 	tinygltf::Model model;
-	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, GetFilepathA(ws2s(filename)));
+	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, modelFilepath);
 
 	if (!warnings.empty())
 	{
@@ -736,52 +787,28 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 {
 	DebugAssert(!image.uri.empty(), "Embedded image data is not yet supported.");
 
-	DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN;
-	DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN;
-	if (image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4)
+	if (image.image.empty())
 	{
-		srcFormat = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
-		compressedFormat = srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
-	}
+		// Compressed image was found in texture cache
+		const std::wstring cachedFilepath = s2ws(image.uri);
+		DebugAssert(std::filesystem::exists(cachedFilepath), "File not found in texture cache");
 
-	// Source image
-	size_t bpp = (image.bits * image.component) / 8;
-	DirectX::Image srcImage = {};
-	srcImage.width = image.width;
-	srcImage.height = image.height;
-	srcImage.format = srcFormat;
-	srcImage.rowPitch = bpp * image.width;
-	srcImage.slicePitch = srcImage.rowPitch * image.height;
-	srcImage.pixels = (uint8_t*)image.image.data();
+		// Load from cache
+		DirectX::TexMetadata metadata;
+		DirectX::ScratchImage scratch;
+		AssertIfFailed(DirectX::LoadFromDDSFile(cachedFilepath.c_str(), DirectX::DDS_FLAGS_NONE, &metadata, scratch));
 
-	// Calculate mips upto 4x4 for block compression
-	int numMips = 0;
-	size_t width = image.width, height = image.height; 
-	while (width >= 4 && height >= 4)
-	{
-		numMips++;
-		width = width >> 1;
-		height = height >> 1;
-	}
-
-	// Generate mips
-	DirectX::ScratchImage mipchain = {};
-	if (SUCCEEDED((DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain))))
-	{
-		// Block compression
-		DirectX::ScratchImage compressedScratch;
-		AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
-
-		std::wstring name{ image.uri.begin(), image.uri.end() };
-		FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
+		// Upload
+		std::wstring name = std::filesystem::path{ cachedFilepath }.filename().wstring();
+		FResourceUploadContext uploader{ scratch.GetPixelsSize() };
 		uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
 			&uploader,
 			name,
-			compressedFormat,
-			srcImage.width,
-			srcImage.height,
-			compressedScratch.GetImages(),
-			compressedScratch.GetImageCount());
+			metadata.format,
+			metadata.width,
+			metadata.height,
+			scratch.GetImages(),
+			scratch.GetImageCount());
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
@@ -790,21 +817,85 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 	}
 	else
 	{
-		std::wstring name{ image.uri.begin(), image.uri.end() };
-		FResourceUploadContext uploader{ srcImage.slicePitch };
-		uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
-			&uploader,
-			name,
-			compressedFormat,
-			srcImage.width,
-			srcImage.height,
-			&srcImage,
-			1);
+		DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN;
+		DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN;
+		if (image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4)
+		{
+			srcFormat = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+			compressedFormat = srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
+		}
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-		uploader.SubmitUploads(cmdList);
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-		return bindlessIndex;
+		// Source image
+		size_t bpp = (image.bits * image.component) / 8;
+		DirectX::Image srcImage = {};
+		srcImage.width = image.width;
+		srcImage.height = image.height;
+		srcImage.format = srcFormat;
+		srcImage.rowPitch = bpp * image.width;
+		srcImage.slicePitch = srcImage.rowPitch * image.height;
+		srcImage.pixels = (uint8_t*)image.image.data();
+
+		// Calculate mips upto 4x4 for block compression
+		int numMips = 0;
+		size_t width = image.width, height = image.height;
+		while (width >= 4 && height >= 4)
+		{
+			numMips++;
+			width = width >> 1;
+			height = height >> 1;
+		}
+
+		// Generate mips
+		DirectX::ScratchImage mipchain = {};
+		if (SUCCEEDED((DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain))))
+		{
+			// Block compression
+			DirectX::ScratchImage compressedScratch;
+			AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+
+			// Save to disk
+			std::filesystem::path dirPath{ m_textureCachePath };
+			std::filesystem::path srcFilename{ image.uri };
+			std::filesystem::path destFilename = dirPath / srcFilename.stem();
+			destFilename += std::filesystem::path{ ".dds" };
+			DirectX::TexMetadata compressedMetadata = compressedScratch.GetMetadata();
+			AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
+
+			std::wstring name{ image.uri.begin(), image.uri.end() };
+			FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
+			uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
+				&uploader,
+				name,
+				compressedFormat,
+				srcImage.width,
+				srcImage.height,
+				compressedScratch.GetImages(),
+				compressedScratch.GetImageCount());
+
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			uploader.SubmitUploads(cmdList);
+			RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+			return bindlessIndex;
+		}
+		else
+		{
+			// No mips and no compression. Don't save to cache and load directly
+			std::wstring name{ image.uri.begin(), image.uri.end() };
+			FResourceUploadContext uploader{ srcImage.slicePitch };
+			uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
+				&uploader,
+				name,
+				compressedFormat,
+				srcImage.width,
+				srcImage.height,
+				&srcImage,
+				1);
+
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			uploader.SubmitUploads(cmdList);
+			RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+			return bindlessIndex;
+		}
 	}
 }
 

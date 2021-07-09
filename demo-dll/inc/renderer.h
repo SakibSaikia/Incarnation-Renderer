@@ -66,6 +66,7 @@ struct FScene
 	// Scene files
 	std::wstring m_modelFilename = {};
 	std::wstring m_environmentFilename = {};
+	std::string m_textureCachePath = {};
 
 	// Scene entity lists
 	std::vector<FRenderMesh> m_meshGeo;
