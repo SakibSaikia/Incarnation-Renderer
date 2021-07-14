@@ -2,7 +2,7 @@
 #include "spherical-harmonics.hlsli"
 
 #define rootsig \
-    "RootConstants(b0, num32BitConstants=20, visibility = SHADER_VISIBILITY_VERTEX)," \
+    "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_VERTEX)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_PIXEL"), \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
     "CBV(b3, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
@@ -21,12 +21,15 @@ struct LightProbeData
 struct FrameCbLayout
 {
 	float4x4 sceneRotation;
-	uint sceneIndexBufferBindlessIndex;
-	uint scenePositionBufferBindlessIndex;
-	uint sceneNormalBufferBindlessIndex;
-	uint sceneUvBufferBindlessIndex;
+	int sceneIndexBufferBindlessIndex;
+	int scenePositionBufferBindlessIndex;
+	int sceneUvBufferBindlessIndex;
+	int sceneNormalBufferBindlessIndex;
+	int sceneTangentBufferBindlessIndex;
+	int sceneBitangentBufferBindlessIndex;
+	int envBrdfTextureIndex;
+	int _pad0;
 	LightProbeData sceneLightProbe;
-	uint envBrdfTextureIndex;
 };
 
 struct ViewCbLayout
@@ -42,8 +45,10 @@ struct MeshCbLayout
 	float4x4 localToWorld;
 	uint indexOffset;
 	uint positionOffset;
-	uint normalOffset;
 	uint uvOffset;
+	uint normalOffset;
+	uint tangentOffset;
+	uint bitangentOffset;
 };
 
 struct MaterialCbLayout
@@ -78,42 +83,91 @@ TextureCube g_bindlessCubeTextures[] : register(t2, space1);
 struct vs_to_ps
 {
 	float4 pos : SV_POSITION;
-	float4 normal : INTERPOLATED_WORLD_NORMAL;
-	float4 worldPos : INTERPOLATED_WORLD_POS;
 	float2 uv : INTERPOLATED_UV_0;
+	float4 normal : INTERPOLATED_WORLD_NORMAL;
+	float4 tangent : INTERPOLATED_WORLD_TANGENT;
+	float4 bitangent : INTERPOLATED_WORLD_BITANGENT;
+	float4 worldPos : INTERPOLATED_WORLD_POS;
 };
 
 vs_to_ps vs_main(uint vertexId : SV_VertexID)
 {
 	vs_to_ps o;
 
+	float4x4 localToWorld = mul(g_meshConstants.localToWorld, g_frameConstants.sceneRotation);
+	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
+
 	// size of 4 for 32 bit indices
 	uint index = g_bindlessBuffers[g_frameConstants.sceneIndexBufferBindlessIndex].Load(4*(vertexId + g_meshConstants.indexOffset));
 
 	// size of 12 for float3 positions
-	float3 position = g_bindlessBuffers[g_frameConstants.scenePositionBufferBindlessIndex].Load<float3>(12 * (index + g_meshConstants.positionOffset));
-
-	// size of 12 for float3 normals
-	float3 normal = g_bindlessBuffers[g_frameConstants.sceneNormalBufferBindlessIndex].Load<float3>(12 * (index + g_meshConstants.normalOffset));
+	const int bindlessIndexBuffer = g_frameConstants.scenePositionBufferBindlessIndex;
+	float3 position = g_bindlessBuffers[bindlessIndexBuffer].Load<float3>(12 * (index + g_meshConstants.positionOffset));
+	float4 worldPos = mul(float4(position, 1.f), localToWorld);
+	o.worldPos = worldPos;
+	o.pos = mul(worldPos, viewProjTransform);
 
 	// size of 8 for float2 uv's
-	float2 uv = g_bindlessBuffers[g_frameConstants.sceneUvBufferBindlessIndex].Load<float2>(8 * (index + g_meshConstants.uvOffset));
+	const int bindlessUvBuffer = g_frameConstants.sceneUvBufferBindlessIndex;
+	o.uv = g_bindlessBuffers[bindlessUvBuffer].Load<float2>(8 * (index + g_meshConstants.uvOffset));
 
-	float4x4 localToWorld = mul(g_meshConstants.localToWorld, g_frameConstants.sceneRotation);
-	float4 worldPos = mul(float4(position, 1.f), localToWorld);
-	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
-
-	o.pos = mul(worldPos, viewProjTransform);
+	// size of 12 for float3 normals
+	const int bindlessNormalBuffer = g_frameConstants.sceneNormalBufferBindlessIndex;
+	float3 normal = g_bindlessBuffers[bindlessNormalBuffer].Load<float3>(12 * (index + g_meshConstants.normalOffset));
 	o.normal = mul(float4(normal, 0.f), localToWorld);
-	o.worldPos = worldPos;
-	o.uv = uv;
+
+	// size of 12 for float3 tangents
+	const int bindlessTangentBuffer = g_frameConstants.sceneTangentBufferBindlessIndex;
+	float3 tangent = g_bindlessBuffers[bindlessTangentBuffer].Load<float3>(12 * (index + g_meshConstants.tangentOffset));
+	o.tangent = mul(float4(tangent, 0.f), localToWorld);
+
+	// size of 12 for float3 bitangents
+	const int bindlessBitangentBuffer = g_frameConstants.sceneBitangentBufferBindlessIndex;
+	float3 bitangent = g_bindlessBuffers[bindlessBitangentBuffer].Load<float3>(12 * (index + g_meshConstants.bitangentOffset));
+	o.bitangent = mul(float4(bitangent, 0.f), localToWorld);
 
 	return o;
 }
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
+	// Tangent space transform
+	float3 T = normalize(input.tangent.xyz);
+	float3 B = normalize(input.bitangent.xyz);
 	float3 N = normalize(input.normal.xyz);
+	float3x3 TBN = float3x3(T, B, N);
+
+	float3 emissive = g_materialConstants.emissiveTextureIndex != -1 ?
+		g_materialConstants.emissiveFactor * g_bindless2DTextures[g_materialConstants.emissiveTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.emissiveSamplerIndex], input.uv).rgb :
+		g_materialConstants.emissiveFactor;
+
+#if LIGHTING_ONLY
+	float3 baseColor = 0.5.xxx;
+#else
+	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ?
+		g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.baseColorSamplerIndex], input.uv).rgb :
+		g_materialConstants.baseColorFactor;
+#endif
+
+	if (g_materialConstants.normalTextureIndex != -1)
+	{
+		float3 normalMap = g_bindless2DTextures[g_materialConstants.normalTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.normalSamplerIndex], input.uv).rgb;
+		normalMap = 2.f * normalMap - 1.f;
+		N = normalize(mul(normalMap, TBN));
+	}
+
+	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ?
+		g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.metallicRoughnessSamplerIndex], input.uv).bg :
+		1.f.xx;
+
+	float3 ao = g_materialConstants.aoTextureIndex != -1 ?
+		g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.aoSamplerIndex], input.uv).rgb :
+		1.f.xxx;
+
+	float aoStrength = g_materialConstants.occlusionStrength;
+	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
+	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
+
 	float3 L = normalize(float3(1, 1, -1));
 	float3 H = normalize(N + L);
 	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
@@ -122,30 +176,6 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float NoL = saturate(dot(N, L));
 	float NoH = saturate(dot(N, H));
 	float LoH = saturate(dot(L, H));
-
-	float3 emissive = g_materialConstants.emissiveTextureIndex != -1 ? 
-		g_materialConstants.emissiveFactor * g_bindless2DTextures[g_materialConstants.emissiveTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.emissiveSamplerIndex], input.uv).rgb :
-		g_materialConstants.emissiveFactor;
-
-	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ? 
-		g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.baseColorSamplerIndex], input.uv).rgb :
-		g_materialConstants.baseColorFactor;
-
-	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ? 
-		g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.metallicRoughnessSamplerIndex], input.uv).bg :
-		1.f.xx;
-
-	float3 ao = g_materialConstants.aoTextureIndex != -1 ? 
-		g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.aoSamplerIndex], input.uv).rgb :
-		1.f.xxx;
-
-	float aoStrength = g_materialConstants.occlusionStrength;
-	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
-	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
-
-#if LIGHTING_ONLY
-	baseColor = 0.5.xxx;
-#endif
 
 	// Remapping
 	float3 F0 = metallic * baseColor + (1.f - metallic) * 0.04;

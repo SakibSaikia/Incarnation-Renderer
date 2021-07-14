@@ -53,12 +53,15 @@ namespace RenderJob
 			struct FrameCbLayout
 			{
 				Matrix sceneRotation;
-				uint32_t sceneIndexBufferBindlessIndex;
-				uint32_t scenePositionBufferBindlessIndex;
-				uint32_t sceneNormalBufferBindlessIndex;
-				uint32_t sceneUvBufferBindlessIndex;
+				int sceneIndexBufferBindlessIndex;
+				int scenePositionBufferBindlessIndex;
+				int sceneUvBufferBindlessIndex;
+				int sceneNormalBufferBindlessIndex;
+				int sceneTangentBufferBindlessIndex;
+				int sceneBitangentBufferBindlessIndex;
+				int envBrdfTextureIndex;
+				int _pad0;
 				FLightProbe sceneProbeData;
-				uint32_t envBrdfTextureIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -71,8 +74,10 @@ namespace RenderJob
 					cbDest->sceneRotation = scene->m_rootTransform;
 					cbDest->sceneIndexBufferBindlessIndex = scene->m_meshIndexBuffer->m_srvIndex;
 					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
-					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
 					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
+					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
+					cbDest->sceneTangentBufferBindlessIndex = scene->m_meshTangentBuffer ? scene->m_meshTangentBuffer->m_srvIndex : -1;
+					cbDest->sceneBitangentBufferBindlessIndex = scene->m_meshBitangentBuffer ? scene->m_meshBitangentBuffer->m_srvIndex : -1;
 					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
 					cbDest->sceneProbeData = scene->m_globalLightProbe;
 				});
@@ -210,15 +215,19 @@ namespace RenderJob
 					Matrix localToWorldTransform;
 					uint32_t indexOffset;
 					uint32_t positionOffset;
-					uint32_t normalOffset;
 					uint32_t uvOffset;
+					uint32_t normalOffset;
+					uint32_t tangentOffset;
+					uint32_t bitangentOffset;
 				} meshCb =
 				{
 					passDesc.scene->m_meshTransforms[meshIndex],
 					passDesc.scene->m_meshGeo[meshIndex].m_indexOffset,
 					passDesc.scene->m_meshGeo[meshIndex].m_positionOffset,
+					passDesc.scene->m_meshGeo[meshIndex].m_uvOffset,
 					passDesc.scene->m_meshGeo[meshIndex].m_normalOffset,
-					passDesc.scene->m_meshGeo[meshIndex].m_uvOffset
+					passDesc.scene->m_meshGeo[meshIndex].m_tangentOffset,
+					passDesc.scene->m_meshGeo[meshIndex].m_bitangentOffset
 				};	
 
 				d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(MeshCbLayout)/4, &meshCb, 0);

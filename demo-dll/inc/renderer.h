@@ -18,8 +18,10 @@ struct FRenderMesh
 	size_t m_indexCount;
 	uint32_t m_indexOffset;
 	uint32_t m_positionOffset;
-	uint32_t m_normalOffset;
 	uint32_t m_uvOffset;
+	uint32_t m_normalOffset;
+	uint32_t m_tangentOffset;
+	uint32_t m_bitangentOffset;
 
 	std::string m_materialName;
 	Vector3 m_emissiveFactor;
@@ -77,8 +79,10 @@ struct FScene
 	// Scene geo
 	std::unique_ptr<FBindlessShaderResource> m_meshIndexBuffer;
 	std::unique_ptr<FBindlessShaderResource> m_meshPositionBuffer;
-	std::unique_ptr<FBindlessShaderResource> m_meshNormalBuffer;
 	std::unique_ptr<FBindlessShaderResource> m_meshUvBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshNormalBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshTangentBuffer;
+	std::unique_ptr<FBindlessShaderResource> m_meshBitangentBuffer;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Image based lighting
@@ -93,13 +97,17 @@ private:
 private:
 	uint8_t* m_scratchIndexBuffer;
 	uint8_t* m_scratchPositionBuffer;
-	uint8_t* m_scratchNormalBuffer;
 	uint8_t* m_scratchUvBuffer;
+	uint8_t* m_scratchNormalBuffer;
+	uint8_t* m_scratchTangentBuffer;
+	uint8_t* m_scratchBitangentBuffer;
 
 	size_t m_scratchIndexBufferOffset;
 	size_t m_scratchPositionBufferOffset;
-	size_t m_scratchNormalBufferOffset;
 	size_t m_scratchUvBufferOffset;
+	size_t m_scratchNormalBufferOffset;
+	size_t m_scratchTangentBufferOffset;
+	size_t m_scratchBitangentBufferOffset;
 };
 
 struct FView

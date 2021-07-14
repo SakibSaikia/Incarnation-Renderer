@@ -519,13 +519,17 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	m_scratchIndexBuffer = new uint8_t[maxSize];
 	m_scratchPositionBuffer = new uint8_t[maxSize];
-	m_scratchNormalBuffer = new uint8_t[maxSize];
 	m_scratchUvBuffer = new uint8_t[maxSize];
+	m_scratchNormalBuffer = new uint8_t[maxSize];
+	m_scratchTangentBuffer = new uint8_t[maxSize];
+	m_scratchBitangentBuffer = new uint8_t[maxSize];
 
 	m_scratchIndexBufferOffset = 0;
 	m_scratchPositionBufferOffset = 0;
-	m_scratchNormalBufferOffset = 0;
 	m_scratchUvBufferOffset = 0;
+	m_scratchNormalBufferOffset = 0;
+	m_scratchTangentBufferOffset = 0;
+	m_scratchBitangentBufferOffset = 0;
 
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
 	Matrix RH2LH = Matrix
@@ -574,13 +578,6 @@ void FScene::ReloadModel(const std::wstring& filename)
 		m_scratchPositionBuffer,
 		&uploader);
 
-	m_meshNormalBuffer = RenderBackend12::CreateBindlessBuffer(
-		L"scene_normal_buffer",
-		m_scratchNormalBufferOffset,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-		m_scratchNormalBuffer,
-		&uploader);
-
 	m_meshUvBuffer = RenderBackend12::CreateBindlessBuffer(
 		L"scene_uv_buffer",
 		m_scratchUvBufferOffset,
@@ -588,14 +585,43 @@ void FScene::ReloadModel(const std::wstring& filename)
 		m_scratchUvBuffer,
 		&uploader);
 
+	m_meshNormalBuffer = RenderBackend12::CreateBindlessBuffer(
+		L"scene_normal_buffer",
+		m_scratchNormalBufferOffset,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		m_scratchNormalBuffer,
+		&uploader);
+
+	if (m_scratchTangentBufferOffset != 0)
+	{
+		m_meshTangentBuffer = RenderBackend12::CreateBindlessBuffer(
+			L"scene_tangent_buffer",
+			m_scratchTangentBufferOffset,
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			m_scratchTangentBuffer,
+			&uploader);
+	}
+
+	if (m_scratchBitangentBufferOffset != 0)
+	{
+		m_meshBitangentBuffer = RenderBackend12::CreateBindlessBuffer(
+			L"scene_bitangent_buffer",
+			m_scratchBitangentBufferOffset,
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			m_scratchBitangentBuffer,
+			&uploader);
+	}
+
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	delete[] m_scratchIndexBuffer;
 	delete[] m_scratchPositionBuffer;
-	delete[] m_scratchNormalBuffer;
 	delete[] m_scratchUvBuffer;
+	delete[] m_scratchNormalBuffer;
+	delete[] m_scratchTangentBuffer;
+	delete[] m_scratchBitangentBuffer;
 }
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
@@ -701,6 +727,33 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		return bytesCopied;
 	};
 
+	auto GenerateAndCopyBinormalData = [&model](const tinygltf::Accessor& normalAccessor, const tinygltf::Accessor& tangentAccessor, const uint32_t dataSize, uint8_t* copyDest) -> size_t
+	{
+		size_t bytesCopied = 0;
+		const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
+		const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
+
+		DebugAssert(normalAccessor.ByteStride(normalBufferView) == sizeof(Vector3));
+		DebugAssert(tangentAccessor.ByteStride(tangentBufferView) == sizeof(Vector4));
+		const Vector3* pNormal = (Vector3*)&model.buffers[normalBufferView.buffer].data[normalBufferView.byteOffset + normalAccessor.byteOffset];
+		const Vector4* pTangent = (Vector4*)&model.buffers[tangentBufferView.buffer].data[tangentBufferView.byteOffset + tangentAccessor.byteOffset];
+
+		DebugAssert(normalAccessor.count == tangentAccessor.count);
+		size_t numVectors = normalAccessor.count;
+
+		Vector3* pBitangent = (Vector3*)copyDest;
+		for (int i = 0; i < normalAccessor.count; ++i)
+		{
+			*pBitangent = pNormal->Cross(Vector3(pTangent->x, pTangent->y, pTangent->z)) * pTangent->w;
+
+			pNormal++;
+			pTangent++;
+			pBitangent++;
+		}
+
+		return numVectors * sizeof(Vector3);
+	};
+
 	auto CalcBounds = [&model](int positionAccessorIndex) -> DirectX::BoundingBox
 	{
 		const tinygltf::Accessor& accessor = model.accessors[positionAccessorIndex];
@@ -724,6 +777,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	{
 		// Index data (converted to uint32_t)
 		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+		const size_t indexBytesCopied = CopyIndexData(indexAccessor, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
 
 		// FLOAT3 position data
 		auto posIt = primitive.attributes.find("POSITION");
@@ -731,13 +785,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		const tinygltf::Accessor& positionAccessor = model.accessors[posIt->second];
 		const size_t positionSize = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
 		DebugAssert(positionSize == 3 * sizeof(float));
-
-		// FLOAT3 normal data
-		auto normalIt = primitive.attributes.find("NORMAL");
-		DebugAssert(normalIt != primitive.attributes.cend());
-		const tinygltf::Accessor& normalAccessor = model.accessors[normalIt->second];
-		const size_t normalSize = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
-		DebugAssert(normalSize == 3 * sizeof(float));
+		const size_t positionBytesCopied = CopyBufferData(positionAccessor, positionSize, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
 
 		// FLOAT2 UV data
 		auto uvIt = primitive.attributes.find("TEXCOORD_0");
@@ -745,6 +793,28 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		const tinygltf::Accessor& uvAccessor = model.accessors[uvIt->second];
 		const size_t uvSize = tinygltf::GetComponentSizeInBytes(uvAccessor.componentType) * tinygltf::GetNumComponentsInType(uvAccessor.type);
 		DebugAssert(uvSize == 2 * sizeof(float));
+		const size_t uvBytesCopied = CopyBufferData(uvAccessor, uvSize, m_scratchUvBuffer + m_scratchUvBufferOffset);
+
+		// FLOAT3 normal data
+		auto normalIt = primitive.attributes.find("NORMAL");
+		DebugAssert(normalIt != primitive.attributes.cend());
+		const tinygltf::Accessor& normalAccessor = model.accessors[normalIt->second];
+		const size_t normalSize = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
+		DebugAssert(normalSize == 3 * sizeof(float));
+		const size_t normalBytesCopied = CopyBufferData(normalAccessor, normalSize, m_scratchNormalBuffer + m_scratchNormalBufferOffset);
+
+		// FLOAT3 tangent data
+		auto tangentIt = primitive.attributes.find("TANGENT");
+		size_t tangentBytesCopied = 0;
+		size_t bitangentBytesCopied = 0;
+		if (tangentIt != primitive.attributes.cend())
+		{
+			const tinygltf::Accessor& tangentAccessor = model.accessors[tangentIt->second];
+			const size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
+			DebugAssert(tangentSize == 4 * sizeof(float));
+			tangentBytesCopied = CopyBufferData(tangentAccessor, 3 * sizeof(float), m_scratchTangentBuffer + m_scratchTangentBufferOffset);
+			bitangentBytesCopied = GenerateAndCopyBinormalData(normalAccessor, tangentAccessor, 3 * sizeof(float), m_scratchBitangentBuffer + m_scratchBitangentBufferOffset);
+		}
 
 		tinygltf::Material material = model.materials[primitive.material];
 
@@ -752,8 +822,10 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		newMesh.m_name = mesh.name;
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
-		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
 		newMesh.m_uvOffset = m_scratchUvBufferOffset / uvSize;
+		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
+		newMesh.m_tangentOffset = m_scratchTangentBufferOffset / normalSize;
+		newMesh.m_bitangentOffset = m_scratchBitangentBufferOffset / normalSize;
 		newMesh.m_indexCount = indexAccessor.count;
 		newMesh.m_materialName = material.name;
 		newMesh.m_emissiveFactor = Vector3{ (float)material.emissiveFactor[0], (float)material.emissiveFactor[1], (float)material.emissiveFactor[2] };
@@ -774,10 +846,12 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		m_meshGeo.push_back(newMesh);
 		m_meshTransforms.push_back(parentTransform);
 
-		m_scratchIndexBufferOffset += CopyIndexData(indexAccessor, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
-		m_scratchPositionBufferOffset += CopyBufferData(positionAccessor, positionSize, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
-		m_scratchNormalBufferOffset += CopyBufferData(normalAccessor, normalSize, m_scratchNormalBuffer + m_scratchNormalBufferOffset);
-		m_scratchUvBufferOffset += CopyBufferData(uvAccessor, uvSize, m_scratchUvBuffer + m_scratchUvBufferOffset);
+		m_scratchIndexBufferOffset += indexBytesCopied;
+		m_scratchPositionBufferOffset += positionBytesCopied;
+		m_scratchUvBufferOffset += uvBytesCopied;
+		m_scratchNormalBufferOffset += normalBytesCopied;
+		m_scratchTangentBufferOffset += tangentBytesCopied;
+		m_scratchBitangentBufferOffset += bitangentBytesCopied;
 
 		m_meshBounds.push_back(CalcBounds(posIt->second));
 	}
