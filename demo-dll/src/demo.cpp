@@ -7,7 +7,7 @@
 #include <imgui_impl_win32.h>
 #include <common.h>
 #include <sstream>
-#include <tiny_gltf.h>
+#include <mesh-utils.h>
 #include <concurrent_unordered_map.h>
 #include <spookyhash_api.h>
 
@@ -541,7 +541,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// Parse GLTF and initialize scene
 	// See https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_003_MinimalGltfFile.md
-	for (const tinygltf::Scene& scene : model.scenes)
+	for (tinygltf::Scene& scene : model.scenes)
 	{
 		for (const int nodeIndex : scene.nodes)
 		{
@@ -563,7 +563,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	}
 
 	// Create and upload scene buffers
-	FResourceUploadContext uploader{ maxSize };
+	FResourceUploadContext uploader{ 2 * maxSize };
 	m_meshIndexBuffer = RenderBackend12::CreateBindlessBuffer(
 		L"scene_index_buffer",
 		m_scratchIndexBufferOffset,
@@ -630,7 +630,7 @@ void FScene::ReloadEnvironment(const std::wstring& filename)
 	m_environmentFilename = filename;
 }
 
-void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix& parentTransform)
+void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
 {
 	const tinygltf::Node& node = model.nodes[nodeIndex];
 	
@@ -662,6 +662,7 @@ void FScene::LoadNode(int nodeIndex, const tinygltf::Model& model, const Matrix&
 
 	if (node.mesh != -1)
 	{
+		MeshUtils::CleanupMesh(node.mesh, model);
 		LoadMesh(node.mesh, model, nodeTransform * parentTransform);
 	}
 
@@ -683,7 +684,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		const uint8_t* pSrc = &model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
 		uint32_t* indexDest = (uint32_t*)copyDest;
 
-		if (dataSize == 2)
+		if (dataSize == sizeof(uint16_t))
 		{
 			// 16-bit indices
 			auto pSrc = (const uint16_t*)&model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
@@ -698,6 +699,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		else
 		{
 			// 32-bit indices
+			DebugAssert(dataSize == sizeof(uint32_t));
 			auto pSrc = (const uint32_t*)&model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
 			uint32_t* pDest = (uint32_t*)copyDest;
 
@@ -805,16 +807,14 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 		// FLOAT3 tangent data
 		auto tangentIt = primitive.attributes.find("TANGENT");
+		DebugAssert(tangentIt != primitive.attributes.cend());
 		size_t tangentBytesCopied = 0;
 		size_t bitangentBytesCopied = 0;
-		if (tangentIt != primitive.attributes.cend())
-		{
-			const tinygltf::Accessor& tangentAccessor = model.accessors[tangentIt->second];
-			const size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
-			DebugAssert(tangentSize == 4 * sizeof(float));
-			tangentBytesCopied = CopyBufferData(tangentAccessor, 3 * sizeof(float), m_scratchTangentBuffer + m_scratchTangentBufferOffset);
-			bitangentBytesCopied = GenerateAndCopyBinormalData(normalAccessor, tangentAccessor, 3 * sizeof(float), m_scratchBitangentBuffer + m_scratchBitangentBufferOffset);
-		}
+		const tinygltf::Accessor& tangentAccessor = model.accessors[tangentIt->second];
+		const size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
+		DebugAssert(tangentSize == 4 * sizeof(float));
+		tangentBytesCopied = CopyBufferData(tangentAccessor, 3 * sizeof(float), m_scratchTangentBuffer + m_scratchTangentBufferOffset);
+		bitangentBytesCopied = GenerateAndCopyBinormalData(normalAccessor, tangentAccessor, 3 * sizeof(float), m_scratchBitangentBuffer + m_scratchBitangentBufferOffset);
 
 		tinygltf::Material material = model.materials[primitive.material];
 

@@ -15,11 +15,13 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_impl_win32.cpp"
     "${CMAKE_SOURCE_DIR}/ext/microprofile/microprofile.cpp"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/src/SimpleMath.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/mikktspace/mikktspace.c"
     "src/demo.cpp"
     "src/backend-d3d12.cpp" 
     "src/shadercompiler.cpp"
     "src/renderer.cpp" 
-    "src/profiling.cpp")
+    "src/profiling.cpp" 
+    "src/mesh-utils.cpp")
 
 target_compile_options(
     ${module_name} PUBLIC
@@ -48,9 +50,6 @@ add_compile_definitions(
     UNICODE
     _UNICODE
     MICROPROFILE_GPU_TIMERS_D3D12
-    TINYGLTF_IMPLEMENTATION
-    STB_IMAGE_IMPLEMENTATION
-    STB_IMAGE_WRITE_IMPLEMENTATION
     SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders"
     CONTENT_DIR="${CMAKE_SOURCE_DIR}/content")
 
