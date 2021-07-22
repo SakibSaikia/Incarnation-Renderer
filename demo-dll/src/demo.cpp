@@ -729,7 +729,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		return bytesCopied;
 	};
 
-	auto GenerateAndCopyBinormalData = [&model](const tinygltf::Accessor& normalAccessor, const tinygltf::Accessor& tangentAccessor, const uint32_t dataSize, uint8_t* copyDest) -> size_t
+	auto GenerateAndCopyBitangentData = [&model](const tinygltf::Accessor& normalAccessor, const tinygltf::Accessor& tangentAccessor, const uint32_t dataSize, uint8_t* copyDest) -> size_t
 	{
 		size_t bytesCopied = 0;
 		const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
@@ -805,16 +805,18 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		DebugAssert(normalSize == 3 * sizeof(float));
 		const size_t normalBytesCopied = CopyBufferData(normalAccessor, normalSize, m_scratchNormalBuffer + m_scratchNormalBufferOffset);
 
-		// FLOAT3 tangent data
-		auto tangentIt = primitive.attributes.find("TANGENT");
-		DebugAssert(tangentIt != primitive.attributes.cend());
+		// FLOAT3 tangent & bitangent data (OPTIONAL)
 		size_t tangentBytesCopied = 0;
 		size_t bitangentBytesCopied = 0;
-		const tinygltf::Accessor& tangentAccessor = model.accessors[tangentIt->second];
-		const size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
-		DebugAssert(tangentSize == 4 * sizeof(float));
-		tangentBytesCopied = CopyBufferData(tangentAccessor, 3 * sizeof(float), m_scratchTangentBuffer + m_scratchTangentBufferOffset);
-		bitangentBytesCopied = GenerateAndCopyBinormalData(normalAccessor, tangentAccessor, 3 * sizeof(float), m_scratchBitangentBuffer + m_scratchBitangentBufferOffset);
+		auto tangentIt = primitive.attributes.find("TANGENT");
+		if (tangentIt != primitive.attributes.cend())
+		{
+			const tinygltf::Accessor& tangentAccessor = model.accessors[tangentIt->second];
+			const size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
+			DebugAssert(tangentSize == 4 * sizeof(float));
+			tangentBytesCopied = CopyBufferData(tangentAccessor, 3 * sizeof(float), m_scratchTangentBuffer + m_scratchTangentBufferOffset);
+			bitangentBytesCopied = GenerateAndCopyBitangentData(normalAccessor, tangentAccessor, 3 * sizeof(float), m_scratchBitangentBuffer + m_scratchBitangentBufferOffset);
+		}
 
 		tinygltf::Material material = model.materials[primitive.material];
 

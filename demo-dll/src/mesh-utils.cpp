@@ -123,9 +123,10 @@ void MeshUtils::CleanupMesh(int meshIndex, tinygltf::Model& model)
 
 	for (int i = 0; i < mesh.primitives.size(); i++)
 	{
-		// Generate tangents if not specified
+		// Generate tangents if the material requires a normal map and the mesh doesn't include tangents
 		tinygltf::Primitive& primitive = mesh.primitives[i];
-		if (primitive.attributes.find("TANGENT") == primitive.attributes.cend())
+		tinygltf::Material material = model.materials[primitive.material];
+		if (material.normalTexture.index != -1 && primitive.attributes.find("TANGENT") == primitive.attributes.cend())
 		{
 			// Get vert count based on the POSITION accessor
 			auto posIt = primitive.attributes.find("POSITION");
