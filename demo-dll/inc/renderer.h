@@ -60,7 +60,7 @@ struct FScene
 {
 	void ReloadModel(const std::wstring& gltfFilename);
 	void ReloadEnvironment(const std::wstring& hdriFilename);
-	void LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform);
+	bool LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform);
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
@@ -69,6 +69,7 @@ struct FScene
 	std::wstring m_modelFilename = {};
 	std::wstring m_environmentFilename = {};
 	std::string m_textureCachePath = {};
+	std::string m_modelCachePath = {};
 
 	// Scene entity lists
 	std::vector<FRenderMesh> m_meshGeo;

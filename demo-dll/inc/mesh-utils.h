@@ -3,5 +3,5 @@
 
 namespace MeshUtils
 {
-	void CleanupMesh(int meshIndex, tinygltf::Model& model);
+	bool CleanupMesh(int meshIndex, tinygltf::Model& model);
 }

@@ -46,13 +46,26 @@ inline void DebugAssert(bool success, const char* msg = nullptr)
 #endif
 }
 
-inline std::wstring GetFilepathW(const std::wstring& filename)
+inline std::wstring GetFilepathW(const std::wstring& filename, bool includeCache = false)
 {
 	for (auto& entry : std::filesystem::recursive_directory_iterator(CONTENT_DIR))
 	{
 		if (entry.is_regular_file() && entry.path().filename().wstring() == filename)
 		{
-			return entry.path().wstring();
+			if (includeCache)
+			{
+				return entry.path().wstring();
+			}
+			else
+			{
+				// If cache directories are to be excluded in the search, look for the '.' in 
+				// the path which is the prefix for all cache directories
+				std::string parentPath = entry.path().parent_path().string();
+				if (parentPath.rfind('.') == std::string::npos)
+				{
+					return entry.path().wstring();
+				}
+			}
 		}
 	}
 
@@ -60,13 +73,26 @@ inline std::wstring GetFilepathW(const std::wstring& filename)
 	return {};
 }
 
-inline std::string GetFilepathA(const std::string& filename)
+inline std::string GetFilepathA(const std::string& filename, bool includeCache = false)
 {
 	for (auto& entry : std::filesystem::recursive_directory_iterator(CONTENT_DIR))
 	{
 		if (entry.is_regular_file() && entry.path().filename().string() == filename)
 		{
-			return entry.path().string();
+			if (includeCache)
+			{
+				return entry.path().string();
+			}
+			else
+			{
+				// If cache directories are to be excluded in the search, look for the '.' in 
+				// the path which is the prefix for all cache directories
+				std::string parentPath = entry.path().parent_path().string();
+				if (parentPath.rfind('.') == std::string::npos)
+				{
+					return entry.path().string();
+				}
+			}
 		}
 	}
 

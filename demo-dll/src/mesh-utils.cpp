@@ -117,8 +117,9 @@ namespace
 	}
 }
 
-void MeshUtils::CleanupMesh(int meshIndex, tinygltf::Model& model)
+bool MeshUtils::CleanupMesh(int meshIndex, tinygltf::Model& model)
 {
+	bool requiresResave = false;
 	tinygltf::Mesh& mesh = model.meshes[meshIndex];
 
 	for (int i = 0; i < mesh.primitives.size(); i++)
@@ -176,6 +177,9 @@ void MeshUtils::CleanupMesh(int meshIndex, tinygltf::Model& model)
 
 			// Generate TSpace
 			genTangSpaceDefault(&tspaceContext);
+			requiresResave |= true;
 		}
 	}
+
+	return requiresResave;
 }
