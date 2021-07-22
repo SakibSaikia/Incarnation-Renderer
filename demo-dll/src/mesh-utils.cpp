@@ -25,7 +25,7 @@ namespace
 
 	struct PrimitiveIdentifier
 	{
-		tinygltf::Model m_model;
+		tinygltf::Model* m_model;
 		int m_meshIndex;
 		int m_primitiveIndex;
 	};
@@ -35,18 +35,18 @@ namespace
 		const size_t indexBufferIdx = face * 3 + vert;
 
 		PrimitiveIdentifier* primId = (PrimitiveIdentifier*)context->m_pUserData;
-		const tinygltf::Model& model = primId->m_model;
-		const tinygltf::Mesh& mesh = model.meshes[primId->m_meshIndex];
-		const tinygltf::Primitive& primitive = mesh.primitives[primId->m_primitiveIndex];
+		tinygltf::Model* model = primId->m_model;
+		tinygltf::Mesh& mesh = model->meshes[primId->m_meshIndex];
+		tinygltf::Primitive& primitive = mesh.primitives[primId->m_primitiveIndex];
 
-		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-		const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-		const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+		tinygltf::Accessor& indexAccessor = model->accessors[primitive.indices];
+		tinygltf::BufferView& indexBufferView = model->bufferViews[indexAccessor.bufferView];
+		tinygltf::Buffer& indexBuffer = model->buffers[indexBufferView.buffer];
 
 		auto vertexIt = primitive.attributes.find(attributeName);
-		const tinygltf::Accessor& vertexAccessor = model.accessors[vertexIt->second];
-		const tinygltf::BufferView& vertexBufferView = model.bufferViews[vertexAccessor.bufferView];
-		const tinygltf::Buffer& vertexBuffer = model.buffers[vertexBufferView.buffer];
+		tinygltf::Accessor& vertexAccessor = model->accessors[vertexIt->second];
+		tinygltf::BufferView& vertexBufferView = model->bufferViews[vertexAccessor.bufferView];
+		tinygltf::Buffer& vertexBuffer = model->buffers[vertexBufferView.buffer];
 
 		size_t indexSize = tinygltf::GetComponentSizeInBytes(indexAccessor.componentType) * tinygltf::GetNumComponentsInType(indexAccessor.type);
 		uint32_t index;
@@ -63,18 +63,18 @@ namespace
 		}
 
 		float* verts = (float*)(vertexBuffer.data.data() + vertexBufferView.byteOffset + vertexAccessor.byteOffset);
-		return &verts[index];
+		return &verts[index * tinygltf::GetNumComponentsInType(vertexAccessor.type)];
 	}
 
 	int GetNumFaces(const SMikkTSpaceContext* context)
 	{
 		PrimitiveIdentifier* primId = (PrimitiveIdentifier*)context->m_pUserData;
 
-		const tinygltf::Model& model = primId->m_model;
-		const tinygltf::Mesh& mesh = model.meshes[primId->m_meshIndex];
+		const tinygltf::Model* model = primId->m_model;
+		const tinygltf::Mesh& mesh = model->meshes[primId->m_meshIndex];
 		const tinygltf::Primitive& primitive = mesh.primitives[primId->m_primitiveIndex];
 
-		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+		const tinygltf::Accessor& indexAccessor = model->accessors[primitive.indices];
 		DebugAssert(indexAccessor.count % 3 == 0);
 		return indexAccessor.count / 3;
 	}
@@ -157,7 +157,7 @@ void MeshUtils::CleanupMesh(int meshIndex, tinygltf::Model& model)
 
 			// Initialize MikkTSpace
 			PrimitiveIdentifier primId = {};
-			primId.m_model = model;
+			primId.m_model = &model;
 			primId.m_meshIndex = meshIndex;
 			primId.m_primitiveIndex = i;
 
