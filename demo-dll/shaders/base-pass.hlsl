@@ -131,6 +131,10 @@ vs_to_ps vs_main(uint vertexId : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
+	// Alpha clip
+	float alpha = g_materialConstants.baseColorTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.baseColorSamplerIndex], input.uv).a : 1.f;
+	clip(alpha - 0.5);
+
 	// Tangent space transform
 	float3 T = normalize(input.tangent.xyz);
 	float3 B = normalize(input.bitangent.xyz);
