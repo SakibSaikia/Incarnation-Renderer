@@ -93,7 +93,7 @@ struct FScene
 	Matrix m_rootTransform;
 
 private:
-	int LoadTexture(const tinygltf::Image& image, const bool srgb);
+	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat, const DXGI_FORMAT compressedFormat);
 
 private:
 	uint8_t* m_scratchIndexBuffer;

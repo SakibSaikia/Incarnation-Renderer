@@ -451,7 +451,7 @@ bool LoadImageCallback(
 	std::filesystem::path destFilename = dirPath / srcFilename.stem();
 	destFilename += std::filesystem::path{ ".dds" };
 
-	if (std::filesystem::exists(destFilename))
+	if (Config::g_useContentCache && std::filesystem::exists(destFilename))
 	{
 		// Skip image data initialization. We will load compressed file from the cache instead
 		image->image.clear();
@@ -492,7 +492,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	// Load from model cache if a cached version exists
 	m_modelCachePath = GetCachePath(modelFilepath, ".model-cache");
 	std::filesystem::path cachedFilepath = std::filesystem::path{ m_modelCachePath } / std::filesystem::path{ ws2s(filename) };
-	if (std::filesystem::exists(cachedFilepath))
+	if (Config::g_useContentCache && std::filesystem::exists(cachedFilepath))
 	{
 		modelFilepath = cachedFilepath.string();
 	}
@@ -855,11 +855,11 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		newMesh.m_metallicFactor = (float)material.pbrMetallicRoughness.metallicFactor;
 		newMesh.m_roughnessFactor = (float)material.pbrMetallicRoughness.roughnessFactor;
 		newMesh.m_aoStrength = (float)material.occlusionTexture.strength;
-		newMesh.m_emissiveTextureIndex = material.emissiveTexture.index != -1 ? LoadTexture(model.images[model.textures[material.emissiveTexture.index].source], true) : -1;
-		newMesh.m_baseColorTextureIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source], true) : -1;
-		newMesh.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], false) : -1;
-		newMesh.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], false) : -1;
-		newMesh.m_aoTextureIndex = material.occlusionTexture.index != -1 ? LoadTexture(model.images[model.textures[material.occlusionTexture.index].source], true) : -1;
+		newMesh.m_emissiveTextureIndex = material.emissiveTexture.index != -1 ? LoadTexture(model.images[model.textures[material.emissiveTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_BC3_UNORM_SRGB) : -1;
+		newMesh.m_baseColorTextureIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_BC3_UNORM_SRGB) : -1;
+		newMesh.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_BC5_UNORM) : -1; // Note that this uses a swizzled format to extract the G and B channels for metal/roughness
+		newMesh.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC1_UNORM) : -1;
+		newMesh.m_aoTextureIndex = material.occlusionTexture.index != -1 ? LoadTexture(model.images[model.textures[material.occlusionTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC4_UNORM) : -1;
 		newMesh.m_emissiveSamplerIndex = material.emissiveTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.emissiveTexture.index].sampler]) : -1;
 		newMesh.m_baseColorSamplerIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].sampler]) : -1;
 		newMesh.m_metallicRoughnessSamplerIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].sampler]) : -1;
@@ -879,7 +879,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	}
 }
 
-int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
+int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat, const DXGI_FORMAT compressedFormat)
 {
 	DebugAssert(!image.uri.empty(), "Embedded image data is not yet supported.");
 
@@ -913,13 +913,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const bool srgb)
 	}
 	else
 	{
-		DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN;
-		DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN;
-		if (image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4)
-		{
-			srcFormat = srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
-			compressedFormat = srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
-		}
+		DebugAssert(image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4, "Source Images are always 4 channel 8bpp");
 
 		// Source image
 		size_t bpp = (image.bits * image.component) / 8;

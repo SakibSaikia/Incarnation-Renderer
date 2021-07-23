@@ -156,13 +156,15 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		N = normalize(mul(normalMap, TBN));
 	}
 
+	// Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
+	// use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
 	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ?
-		g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.metallicRoughnessSamplerIndex], input.uv).bg :
+		g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.metallicRoughnessSamplerIndex], input.uv).rg :
 		1.f.xx;
 
-	float3 ao = g_materialConstants.aoTextureIndex != -1 ?
-		g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.aoSamplerIndex], input.uv).rgb :
-		1.f.xxx;
+	float ao = g_materialConstants.aoTextureIndex != -1 ?
+		g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.aoSamplerIndex], input.uv).r :
+		1.f;
 
 	float aoStrength = g_materialConstants.occlusionStrength;
 	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
