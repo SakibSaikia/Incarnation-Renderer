@@ -151,9 +151,9 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 	if (g_materialConstants.normalTextureIndex != -1)
 	{
-		float3 normalMap = g_bindless2DTextures[g_materialConstants.normalTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.normalSamplerIndex], input.uv).rgb;
-		normalMap = 2.f * normalMap - 1.f;
-		N = normalize(mul(normalMap, TBN));
+		float2 normalXY = g_bindless2DTextures[g_materialConstants.normalTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.normalSamplerIndex], input.uv).rg;
+		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
+		N = normalize(mul(float3(normalXY, normalZ), TBN));
 	}
 
 	// Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
