@@ -401,7 +401,7 @@ void Demo::UpdateUI(float deltaTime)
 
 			if (ImGui::Button("Reset"))
 			{
-				s_view.Reset();
+				s_view.Reset(&Demo::s_scene);
 			}
 		}
 
