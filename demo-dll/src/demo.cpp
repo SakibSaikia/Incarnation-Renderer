@@ -1094,13 +1094,13 @@ void FView::Reset(const FScene* scene)
 	if (scene && scene->m_cameras.size() > 0)
 	{
 		// Use provided camera
-		m_viewTransform = scene->m_cameras[0].m_viewTransform;
-		m_projectionTransform = scene->m_cameras[0].m_projectionTransform;
+		m_position = scene->m_cameras[0].m_viewTransform.Translation();
+		m_right = scene->m_cameras[0].m_viewTransform.Right();
+		m_up = scene->m_cameras[0].m_viewTransform.Up();
+		m_look = scene->m_cameras[0].m_viewTransform.Forward();
+		UpdateViewTransform();
 
-		m_position = m_viewTransform.Translation();
-		m_right = m_viewTransform.Right();
-		m_up = m_viewTransform.Up();
-		m_look = m_viewTransform.Backward();
+		m_projectionTransform = scene->m_cameras[0].m_projectionTransform;
 	}
 	else
 	{
