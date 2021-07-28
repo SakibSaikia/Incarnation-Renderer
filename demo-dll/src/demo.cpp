@@ -489,14 +489,6 @@ void FScene::ReloadModel(const std::wstring& filename)
 	const char* path = m_textureCachePath.c_str();
 	loader.SetImageLoader(&LoadImageCallback, (void*)path);
 
-	// Load from model cache if a cached version exists
-	m_modelCachePath = GetCachePath(modelFilepath, ".model-cache");
-	std::filesystem::path cachedFilepath = std::filesystem::path{ m_modelCachePath } / std::filesystem::path{ ws2s(filename) };
-	if (Config::g_useContentCache && std::filesystem::exists(cachedFilepath))
-	{
-		modelFilepath = cachedFilepath.string();
-	}
-
 	// Load GLTF
 	std::string errors, warnings;
 	tinygltf::Model model;
@@ -549,21 +541,12 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// Parse GLTF and initialize scene
 	// See https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_003_MinimalGltfFile.md
-	bool requiresResave = false;
 	for (tinygltf::Scene& scene : model.scenes)
 	{
 		for (const int nodeIndex : scene.nodes)
 		{
-			requiresResave |= LoadNode(nodeIndex, model, RH2LH);
+			LoadNode(nodeIndex, model, RH2LH);
 		}
-	}
-
-	// If the model required fixup during load, resave a cached copy so that 
-	// subsequent loads are faster.
-	if (requiresResave)
-	{
-		ok = loader.WriteGltfSceneToFile(&model, cachedFilepath.string(), false, false, true, false);
-		DebugAssert(ok, "Failed to save cached glTF model");
 	}
 
 	// Scene bounds
@@ -647,9 +630,8 @@ void FScene::ReloadEnvironment(const std::wstring& filename)
 	m_environmentFilename = filename;
 }
 
-bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
+void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
 {
-	bool requiresResave = false;
 	const tinygltf::Node& node = model.nodes[nodeIndex];
 	
 	// Transform (GLTF uses column-major storage)
@@ -680,16 +662,14 @@ bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 
 	if (node.mesh != -1)
 	{
-		requiresResave |= MeshUtils::CleanupMesh(node.mesh, model);
+		MeshUtils::CleanupMesh(node.mesh, model);
 		LoadMesh(node.mesh, model, nodeTransform * parentTransform);
 	}
 
 	for (const int childIndex : node.children)
 	{
-		requiresResave |= LoadNode(childIndex, model, nodeTransform * parentTransform);
+		LoadNode(childIndex, model, nodeTransform * parentTransform);
 	}
-
-	return requiresResave;
 }
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
