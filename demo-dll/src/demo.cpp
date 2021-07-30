@@ -563,7 +563,8 @@ void FScene::ReloadModel(const std::wstring& filename)
 	}
 
 	// Create and upload scene buffers
-	FResourceUploadContext uploader{ 2 * maxSize };
+	// @TODO - Fix arbitrary multiplier
+	FResourceUploadContext uploader{ 3 * maxSize }; 
 	m_meshIndexBuffer = RenderBackend12::CreateBindlessBuffer(
 		L"scene_index_buffer",
 		m_scratchIndexBufferOffset,
@@ -791,11 +792,15 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 		// FLOAT2 UV data
 		auto uvIt = primitive.attributes.find("TEXCOORD_0");
-		DebugAssert(uvIt != primitive.attributes.cend());
-		const tinygltf::Accessor& uvAccessor = model.accessors[uvIt->second];
-		const size_t uvSize = tinygltf::GetComponentSizeInBytes(uvAccessor.componentType) * tinygltf::GetNumComponentsInType(uvAccessor.type);
-		DebugAssert(uvSize == 2 * sizeof(float));
-		const size_t uvBytesCopied = CopyBufferData(uvAccessor, uvSize, m_scratchUvBuffer + m_scratchUvBufferOffset);
+		size_t uvSize = 0;
+		size_t uvBytesCopied = 0;
+		if (uvIt != primitive.attributes.cend())
+		{
+			const tinygltf::Accessor& uvAccessor = model.accessors[uvIt->second];
+			uvSize = tinygltf::GetComponentSizeInBytes(uvAccessor.componentType) * tinygltf::GetNumComponentsInType(uvAccessor.type);
+			DebugAssert(uvSize == 2 * sizeof(float));
+			uvBytesCopied = CopyBufferData(uvAccessor, uvSize, m_scratchUvBuffer + m_scratchUvBufferOffset);
+		}
 
 		// FLOAT3 normal data
 		auto normalIt = primitive.attributes.find("NORMAL");
@@ -824,10 +829,10 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		newMesh.m_name = mesh.name;
 		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
 		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
-		newMesh.m_uvOffset = m_scratchUvBufferOffset / uvSize;
+		newMesh.m_uvOffset = uvBytesCopied > 0 ? m_scratchUvBufferOffset / uvSize : 0;
 		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
-		newMesh.m_tangentOffset = m_scratchTangentBufferOffset / normalSize;
-		newMesh.m_bitangentOffset = m_scratchBitangentBufferOffset / normalSize;
+		newMesh.m_tangentOffset = tangentBytesCopied > 0 ? m_scratchTangentBufferOffset / normalSize : 0;
+		newMesh.m_bitangentOffset = bitangentBytesCopied > 0 ? m_scratchBitangentBufferOffset / normalSize : 0;
 		newMesh.m_indexCount = indexAccessor.count;
 		newMesh.m_materialName = material.name;
 		newMesh.m_emissiveFactor = Vector3{ (float)material.emissiveFactor[0], (float)material.emissiveFactor[1], (float)material.emissiveFactor[2] };
