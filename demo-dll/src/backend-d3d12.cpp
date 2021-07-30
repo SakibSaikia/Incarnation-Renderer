@@ -551,6 +551,7 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 	unsigned long n;
 	_BitScanReverse64(&n, uploadBufferSizeInBytes);
 	m_sizeInBytes = (1 << (n + 1));
+	m_sizeInBytes = std::max<size_t>(m_sizeInBytes, 256);
 
 	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
 
@@ -2459,6 +2460,23 @@ uint32_t RenderBackend12::CreateBindlessSampler(
 	GetDevice()->CreateSampler(&desc, descriptor);
 
 	return samplerIndex;
+}
+
+size_t RenderBackend12::GetResourceSize(const DirectX::ScratchImage& image)
+{
+	size_t totalBytes;
+
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Width = image.GetMetadata().width;
+	desc.Height = image.GetMetadata().height;
+	desc.DepthOrArraySize = 1;
+	desc.MipLevels = image.GetImageCount();
+	desc.Format = image.GetMetadata().format;
+	desc.SampleDesc.Count = 1;
+	GetDevice()->GetCopyableFootprints(&desc, 0, image.GetImageCount(), 0, nullptr, nullptr, nullptr, &totalBytes);
+
+	return totalBytes;
 }
 
 void RenderBackend12::BeginCapture()

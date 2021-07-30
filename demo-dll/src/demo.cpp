@@ -881,7 +881,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 
 		// Upload
 		std::wstring name = std::filesystem::path{ cachedFilepath }.filename().wstring();
-		FResourceUploadContext uploader{ scratch.GetPixelsSize() };
+		FResourceUploadContext uploader{ RenderBackend12::GetResourceSize(scratch) };
 		uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
 			&uploader,
 			name,
@@ -937,7 +937,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 			AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
 
 			std::wstring name{ image.uri.begin(), image.uri.end() };
-			FResourceUploadContext uploader{ compressedScratch.GetPixelsSize() };
+			FResourceUploadContext uploader{ RenderBackend12::GetResourceSize(compressedScratch) };
 			uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
 				&uploader,
 				name,
@@ -955,8 +955,10 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 		else
 		{
 			// No mips and no compression. Don't save to cache and load directly
+			DirectX::ScratchImage scratch;
+			scratch.InitializeFromImage(srcImage);
 			std::wstring name{ image.uri.begin(), image.uri.end() };
-			FResourceUploadContext uploader{ srcImage.slicePitch };
+			FResourceUploadContext uploader{ RenderBackend12::GetResourceSize(scratch) };
 			uint32_t bindlessIndex = Demo::s_textureCache.CacheTexture2D(
 				&uploader,
 				name,

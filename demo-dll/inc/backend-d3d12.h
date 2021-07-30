@@ -298,6 +298,8 @@ namespace RenderBackend12
 		const D3D12_TEXTURE_ADDRESS_MODE addressV, 
 		const D3D12_TEXTURE_ADDRESS_MODE addressW);
 
+	size_t GetResourceSize(const DirectX::ScratchImage& image);
+
 	// Programmatic Captures
 	void BeginCapture();
 	void EndCapture();
