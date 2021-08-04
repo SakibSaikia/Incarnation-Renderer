@@ -12,17 +12,8 @@ namespace tinygltf
 
 class FController;
 
-struct FRenderMesh
+struct FMaterial
 {
-	std::string m_name;
-	size_t m_indexCount;
-	uint32_t m_indexOffset;
-	uint32_t m_positionOffset;
-	uint32_t m_uvOffset;
-	uint32_t m_normalOffset;
-	uint32_t m_tangentOffset;
-	uint32_t m_bitangentOffset;
-
 	std::string m_materialName;
 	Vector3 m_emissiveFactor;
 	Vector3 m_baseColorFactor;
@@ -41,6 +32,19 @@ struct FRenderMesh
 	int m_metallicRoughnessSamplerIndex;
 	int m_normalSamplerIndex;
 	int m_aoSamplerIndex;
+};
+
+struct FRenderMesh
+{
+	std::string m_name;
+	size_t m_indexCount;
+	uint32_t m_indexOffset;
+	uint32_t m_positionOffset;
+	uint32_t m_uvOffset;
+	uint32_t m_normalOffset;
+	uint32_t m_tangentOffset;
+	uint32_t m_bitangentOffset;
+	FMaterial m_material;
 };
 
 struct FCamera
@@ -93,6 +97,7 @@ struct FScene
 	Matrix m_rootTransform;
 
 private:
+	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat, const DXGI_FORMAT compressedFormat);
 
 private:

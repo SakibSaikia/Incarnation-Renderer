@@ -256,24 +256,24 @@ namespace RenderJob
 					L"material_cb",
 					sizeof(MaterialCbLayout),
 					cmdList,
-					[&mesh](uint8_t* pDest)
+					[mat = &mesh.m_material](uint8_t* pDest)
 					{
 						auto cbDest = reinterpret_cast<MaterialCbLayout*>(pDest);
-						cbDest->emissiveFactor = mesh.m_emissiveFactor;
-						cbDest->metallicFactor = mesh.m_metallicFactor;
-						cbDest->baseColorFactor = mesh.m_baseColorFactor;
-						cbDest->roughnessFactor = mesh.m_roughnessFactor;
-						cbDest->aoStrength = mesh.m_aoStrength;
-						cbDest->emissiveTextureIndex = mesh.m_emissiveTextureIndex;
-						cbDest->baseColorTextureIndex = mesh.m_baseColorTextureIndex;
-						cbDest->metallicRoughnessTextureIndex = mesh.m_metallicRoughnessTextureIndex;
-						cbDest->normalTextureIndex = mesh.m_normalTextureIndex;
-						cbDest->aoTextureIndex = mesh.m_aoTextureIndex;
-						cbDest->emissiveSamplerIndex = mesh.m_emissiveSamplerIndex;
-						cbDest->baseColorSamplerIndex = mesh.m_baseColorSamplerIndex;
-						cbDest->metallicRoughnessSamplerIndex = mesh.m_metallicRoughnessSamplerIndex;
-						cbDest->normalSamplerIndex = mesh.m_normalSamplerIndex;
-						cbDest->aoSamplerIndex = mesh.m_aoSamplerIndex;
+						cbDest->emissiveFactor = mat->m_emissiveFactor;
+						cbDest->metallicFactor = mat->m_metallicFactor;
+						cbDest->baseColorFactor = mat->m_baseColorFactor;
+						cbDest->roughnessFactor = mat->m_roughnessFactor;
+						cbDest->aoStrength = mat->m_aoStrength;
+						cbDest->emissiveTextureIndex = mat->m_emissiveTextureIndex;
+						cbDest->baseColorTextureIndex = mat->m_baseColorTextureIndex;
+						cbDest->metallicRoughnessTextureIndex = mat->m_metallicRoughnessTextureIndex;
+						cbDest->normalTextureIndex = mat->m_normalTextureIndex;
+						cbDest->aoTextureIndex = mat->m_aoTextureIndex;
+						cbDest->emissiveSamplerIndex = mat->m_emissiveSamplerIndex;
+						cbDest->baseColorSamplerIndex = mat->m_baseColorSamplerIndex;
+						cbDest->metallicRoughnessSamplerIndex = mat->m_metallicRoughnessSamplerIndex;
+						cbDest->normalSamplerIndex = mat->m_normalSamplerIndex;
+						cbDest->aoSamplerIndex = mat->m_aoSamplerIndex;
 					});
 
 				d3dCmdList->SetGraphicsRootConstantBufferView(1, materialCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
