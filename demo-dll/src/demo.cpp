@@ -10,6 +10,7 @@
 #include <mesh-utils.h>
 #include <concurrent_unordered_map.h>
 #include <spookyhash_api.h>
+#include <ppltasks.h>
 
 namespace
 {
@@ -38,6 +39,13 @@ struct FTextureCache
 		const int height,
 		const DirectX::Image* images,
 		const size_t imageCount);
+
+	uint32_t CacheEmptyTexture2D(
+		const std::wstring& name,
+		const DXGI_FORMAT format,
+		const int width,
+		const int height,
+		const size_t mipCount);
 
 	FLightProbe CacheHDRI(const std::wstring& name);
 
@@ -210,7 +218,9 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	// List of models
 	for (auto& entry : std::filesystem::recursive_directory_iterator(CONTENT_DIR))
 	{
-		if (entry.is_regular_file() && entry.path().extension().string() == ".gltf")
+		if (entry.is_regular_file() && 
+			entry.path().extension().string() == ".gltf" &&
+			!entry.path().parent_path().string().ends_with(".model-cache"))
 		{
 			s_modelList.push_back(entry.path().filename().wstring());
 		}
@@ -695,6 +705,8 @@ bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
 {
+	SCOPED_CPU_EVENT(L"load_mesh", MP_AQUAMARINE);
+
 	auto CopyIndexData = [&model](const tinygltf::Accessor& accessor, uint8_t* copyDest) -> size_t
 	{
 		size_t bytesCopied = 0;
@@ -869,7 +881,12 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialIndex)
 {
+	SCOPED_CPU_EVENT(L"load_material", MP_AQUAMARINE);
+
 	tinygltf::Material material = model.materials[materialIndex];
+
+	// The occlusion texture is sometimes packed with the metal/roughness texture. This is currently not supported since the filtered normal roughness texture point to the same location as the cached AO texture
+	DebugAssert(material.occlusionTexture.index == -1 || (material.occlusionTexture.index != material.pbrMetallicRoughness.metallicRoughnessTexture.index), "Not supported");
 
 	FMaterial mat = {};
 	mat.m_materialName = material.name;
@@ -880,14 +897,35 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 	mat.m_aoStrength = (float)material.occlusionTexture.strength;
 	mat.m_emissiveTextureIndex = material.emissiveTexture.index != -1 ? LoadTexture(model.images[model.textures[material.emissiveTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_BC3_UNORM_SRGB) : -1;
 	mat.m_baseColorTextureIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_FORMAT_BC3_UNORM_SRGB) : -1;
-	mat.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_BC5_UNORM) : -1; // Note that this uses a swizzled format to extract the G and B channels for metal/roughness
-	mat.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC5_SNORM) : -1;
 	mat.m_aoTextureIndex = material.occlusionTexture.index != -1 ? LoadTexture(model.images[model.textures[material.occlusionTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC4_UNORM) : -1;
 	mat.m_emissiveSamplerIndex = material.emissiveTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.emissiveTexture.index].sampler]) : -1;
 	mat.m_baseColorSamplerIndex = material.pbrMetallicRoughness.baseColorTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.baseColorTexture.index].sampler]) : -1;
 	mat.m_metallicRoughnessSamplerIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].sampler]) : -1;
 	mat.m_normalSamplerIndex = material.normalTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.normalTexture.index].sampler]) : -1;
 	mat.m_aoSamplerIndex = material.occlusionTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.occlusionTexture.index].sampler]) : -1;
+
+	// If a normalmap and roughness map are specified, prefilter to reduce specular aliasing
+	if (material.normalTexture.index != -1 && material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
+	{
+		const tinygltf::Image& normalmapImage = model.images[model.textures[material.normalTexture.index].source];
+		const tinygltf::Image& metallicRoughnessImage = model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source];
+
+		// Skip pre-filtering if a cached version is available, which means that they are already pre-filtered
+		if (normalmapImage.image.empty() && metallicRoughnessImage.image.empty())
+		{
+			mat.m_metallicRoughnessTextureIndex = LoadTexture(metallicRoughnessImage);
+			mat.m_normalTextureIndex = LoadTexture(normalmapImage);
+		}
+		else
+		{
+			std::tie(mat.m_normalTextureIndex, mat.m_metallicRoughnessTextureIndex) = PrefilterNormalRoughnessTextures(model.images[model.textures[material.normalTexture.index].source], model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source]);
+		}
+	}
+	else
+	{
+		mat.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_BC5_UNORM) : -1; // Note that this uses a swizzled format to extract the G and B channels for metal/roughness
+		mat.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC5_SNORM) : -1;
+	}
 
 	return mat;
 }
@@ -1002,6 +1040,245 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 			return bindlessIndex;
 		}
 	}
+}
+
+std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Image& normalmap, const tinygltf::Image& metallicRoughnessmap)
+{
+	// Output compression format to use
+	const DXGI_FORMAT normalmapCompressionFormat = DXGI_FORMAT_BC5_SNORM;
+	const DXGI_FORMAT metalRoughnessCompressionFormat = DXGI_FORMAT_BC5_UNORM;
+
+	// Source normal image data
+	DebugAssert(normalmap.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && normalmap.component == 4, "Source Images are always 4 channel 8bpp");
+	size_t bpp = (normalmap.bits * normalmap.component) / 8;
+	DirectX::Image normalmapImage = {};
+	normalmapImage.width = normalmap.width;
+	normalmapImage.height = normalmap.height;
+	normalmapImage.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	normalmapImage.rowPitch = bpp * normalmap.width;
+	normalmapImage.slicePitch = normalmapImage.rowPitch * normalmap.height;
+	normalmapImage.pixels = (uint8_t*)normalmap.image.data();
+
+	DirectX::ScratchImage normalScratch;
+	normalScratch.InitializeFromImage(normalmapImage);
+
+	// Source metallic roughness image data
+	DebugAssert(metallicRoughnessmap.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && metallicRoughnessmap.component == 4, "Source Images are always 4 channel 8bpp");
+	bpp = (metallicRoughnessmap.bits * metallicRoughnessmap.component) / 8;
+	DirectX::Image metallicRoughnessImage = {};
+	metallicRoughnessImage.width = metallicRoughnessmap.width;
+	metallicRoughnessImage.height = metallicRoughnessmap.height;
+	metallicRoughnessImage.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	metallicRoughnessImage.rowPitch = bpp * metallicRoughnessmap.width;
+	metallicRoughnessImage.slicePitch = metallicRoughnessImage.rowPitch * metallicRoughnessmap.height;
+	metallicRoughnessImage.pixels = (uint8_t*)metallicRoughnessmap.image.data();
+
+	DirectX::ScratchImage metallicRoughnessScratch;
+	metallicRoughnessScratch.InitializeFromImage(metallicRoughnessImage);
+
+	// Create source textures
+	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
+	FResourceUploadContext uploader{ uploadSize };
+	auto srcNormalmap = RenderBackend12::CreateBindlessTexture(L"src_normalmap", BindlessResourceType::Texture2D, normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader);
+	auto srcMetallicRoughnessmap = RenderBackend12::CreateBindlessTexture(L"src_metallic_roughness", BindlessResourceType::Texture2D, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader);
+
+	// Create UAVs for prefiltering
+	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);
+	size_t metallicRoughnessMipCount = RenderUtils12::CalcMipCount(metallicRoughnessImage.width, metallicRoughnessImage.height, true);
+	auto normalmapFilterUav = RenderBackend12::CreateBindlessUavTexture(L"dest_normalmap", normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount, 1);
+	auto metallicRoughnessFilterUav = RenderBackend12::CreateBindlessUavTexture(L"dest_metallicRoughnessmap", metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount, 1);
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	cmdList->SetName(L"prefilter_normal_roughness");
+
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, L"prefilter_normal_roughness", 0);
+	uploader.SubmitUploads(cmdList);
+
+	{
+		SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_normal_roughness", 0);
+
+		// Root Signature
+		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter-normal-roughness.hlsl", L"rootsig" });
+		d3dCmdList->SetComputeRootSignature(rootsig.get());
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter-normal-roughness.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig.get();
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		// Shader resources
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		DebugAssert(normalmapImage.width == metallicRoughnessImage.width && normalmapImage.height == metallicRoughnessImage.height, "Assuming texture dimensions are same for now");
+
+		// Prefilter
+		size_t numMips = std::min<size_t>(normalmapMipCount, metallicRoughnessMipCount);
+		size_t mipWidth = std::min<size_t>(normalmapImage.width, metallicRoughnessImage.width);
+		size_t mipHeight = std::min<size_t>(normalmapImage.height, metallicRoughnessImage.height);
+		for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
+		{
+			struct CbLayout
+			{
+				uint32_t mipIndex;
+				uint32_t textureWidth;
+				uint32_t textureHeight;
+				uint32_t normalMapTextureIndex;
+				uint32_t metallicRoughnessTextureIndex;
+				uint32_t normalmapUavIndex;
+				uint32_t metallicRoughnessUavIndex;
+			};
+
+			CbLayout computeCb =
+			{
+				.mipIndex = mipIndex,
+				.textureWidth = (uint32_t)normalmapImage.width,
+				.textureHeight = (uint32_t)normalmapImage.height,
+				.normalMapTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcNormalmap->m_srvIndex),
+				.metallicRoughnessTextureIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcMetallicRoughnessmap->m_srvIndex),
+				.normalmapUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2D, normalmapFilterUav->m_uavIndices[mipIndex]),
+				.metallicRoughnessUavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2D, metallicRoughnessFilterUav->m_uavIndices[mipIndex]),
+			};
+
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
+			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DBegin));
+
+			// Dispatch
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(mipWidth / 16), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(mipHeight / 16), 1);
+			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+
+			mipWidth = mipWidth >> 1;
+			mipHeight = mipHeight >> 1;
+		}
+	}
+
+	// Transition to COMMON because we will be doing a GPU readback after filtering is done on the GPU
+	normalmapFilterUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
+	metallicRoughnessFilterUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
+
+	// Execute CL
+	RenderBackend12::BeginCapture();
+	FFenceMarker fenceMarker = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	RenderBackend12::EndCapture();
+
+	// Initialize destination textures where the filtered results will be copied
+	int normalmapSrvIndex = (int) Demo::s_textureCache.CacheEmptyTexture2D(s2ws(normalmap.uri), normalmapCompressionFormat, normalmap.width, normalmap.height, normalmapMipCount);
+	int metalRoughnessSrvIndex = (int) Demo::s_textureCache.CacheEmptyTexture2D(s2ws(metallicRoughnessmap.uri), metalRoughnessCompressionFormat, metallicRoughnessmap.width, metallicRoughnessmap.height, metallicRoughnessMipCount);
+
+	// Copy back normal texture and compress
+	auto normalmapReadbackContext = std::make_shared<FResourceReadbackContext>(normalmapFilterUav->m_resource);
+	FFenceMarker normalmapStageCompleteMarker = normalmapReadbackContext->StageSubresources(normalmapFilterUav->m_resource, fenceMarker);
+	concurrency::create_task([normalmapStageCompleteMarker, this]()
+	{
+		normalmapStageCompleteMarker.BlockingWait();
+	}).then([
+		normalmapReadbackContext, 
+		width = normalmap.width, 
+		height = normalmap.height,
+		filename = normalmap.uri, 
+		mipCount = normalmapMipCount, 
+		compressionFmt = normalmapCompressionFormat, 
+		bpp = (normalmap.bits * normalmap.component) / 8,
+		this]
+		()
+		{
+			ProcessReadbackTexture(normalmapReadbackContext.get(), filename, width, height, mipCount, compressionFmt, bpp);
+		});
+
+	// Copy back metallic-roughness texture and compress
+	auto metallicRoughnessReadbackContext = std::make_shared<FResourceReadbackContext>(metallicRoughnessFilterUav->m_resource);
+	FFenceMarker metallicRoughnessStageCompleteMarker = metallicRoughnessReadbackContext->StageSubresources(metallicRoughnessFilterUav->m_resource, fenceMarker);
+	concurrency::create_task([metallicRoughnessStageCompleteMarker, this]()
+	{
+		metallicRoughnessStageCompleteMarker.BlockingWait();
+	}).then([
+		metallicRoughnessReadbackContext,
+		width = metallicRoughnessmap.width,
+		height = metallicRoughnessmap.height,
+		filename = metallicRoughnessmap.uri,
+		mipCount = metallicRoughnessMipCount,
+		compressionFmt = metalRoughnessCompressionFormat,
+		bpp = (metallicRoughnessmap.bits * metallicRoughnessmap.component) / 8,
+		this]
+		()
+		{
+			ProcessReadbackTexture(metallicRoughnessReadbackContext.get(), filename, width, height, mipCount, compressionFmt, bpp);
+		});
+
+	return std::make_pair(normalmapSrvIndex, metalRoughnessSrvIndex);
+}
+
+void FScene::ProcessReadbackTexture(FResourceReadbackContext* context, const std::string& filename, const int width, const int height, const size_t mipCount, const DXGI_FORMAT fmt, const int bpp)
+{
+	std::vector<DirectX::Image> mipchain(mipCount);
+
+	for (int i = 0; i < mipchain.size(); ++i)
+	{
+		D3D12_SUBRESOURCE_DATA data = context->GetData(i);
+		DirectX::Image& mip = mipchain[i];
+		mip.width = width >> i;
+		mip.height = height >> i;
+		mip.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		mip.rowPitch = data.RowPitch;
+		mip.slicePitch = data.SlicePitch;
+		mip.pixels = (uint8_t*)data.pData;
+	}
+
+	// Block compression
+	DirectX::ScratchImage compressedScratch;
+	DirectX::TexMetadata metadata = {
+		.width = (size_t)width,
+		.height = (size_t)height,
+		.depth = 1,
+		.arraySize = 1,
+		.mipLevels = mipchain.size(),
+		.format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.dimension = DirectX::TEX_DIMENSION_TEXTURE2D };
+	AssertIfFailed(DirectX::Compress(mipchain.data(), mipchain.size(), metadata, fmt, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+
+	// Save to disk
+	std::filesystem::path dirPath{ m_textureCachePath };
+	std::filesystem::path srcFilename{ filename };
+	std::filesystem::path destFilename = dirPath / srcFilename.stem();
+	destFilename += std::filesystem::path{ ".dds" };
+	DirectX::TexMetadata compressedMetadata = compressedScratch.GetMetadata();
+	AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
+
+	// Upload texture data
+	FResourceUploadContext uploader{ RenderBackend12::GetResourceSize(compressedScratch) };
+	const DirectX::Image* images = compressedScratch.GetImages();
+
+	std::vector<D3D12_SUBRESOURCE_DATA> srcData(compressedScratch.GetImageCount());
+	for (int mipIndex = 0; mipIndex < srcData.size(); ++mipIndex)
+	{
+		srcData[mipIndex].pData = images[mipIndex].pixels;
+		srcData[mipIndex].RowPitch = images[mipIndex].rowPitch;
+		srcData[mipIndex].SlicePitch = images[mipIndex].slicePitch;
+	}
+
+	FResource* texResource = Demo::s_textureCache.m_cachedTextures[s2ws(filename)]->m_resource;
+
+	uploader.UpdateSubresources(
+		texResource,
+		srcData,
+		[texResource](FCommandList* cmdList)
+		{
+			texResource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		});
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
 void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Matrix& transform)
@@ -1188,6 +1465,17 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 }
 
+uint32_t FTextureCache::CacheEmptyTexture2D(
+	const std::wstring& name,
+	const DXGI_FORMAT format,
+	const int width,
+	const int height,
+	const size_t mipCount)
+{
+	m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, BindlessResourceType::Texture2D, format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	return RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, m_cachedTextures[name]->m_srvIndex);
+}
+
 FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 {
 	const std::wstring envmapTextureName = name + L".envmap";
@@ -1210,14 +1498,8 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		AssertIfFailed(DirectX::LoadFromHDRFile(GetFilepathW(name).c_str(), &metadata, scratch));
 
 		// Calculate mips upto 4x4 for block compression
-		int numMips = 0;
 		size_t width = metadata.width, height = metadata.height;
-		while (width >= 4 && height >= 4)
-		{
-			numMips++;
-			width = width >> 1;
-			height = height >> 1;
-		}
+		size_t numMips = RenderUtils12::CalcMipCount(metadata.width, metadata.height, true);
 
 		// Generate mips
 		DirectX::ScratchImage mipchain = {};

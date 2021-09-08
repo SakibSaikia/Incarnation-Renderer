@@ -77,6 +77,26 @@ enum class BindlessDescriptorRange : uint32_t
 	TotalCount
 };
 
+struct FFenceMarker
+{
+	D3DFence_t* m_fence;
+	size_t m_value;
+
+	FFenceMarker() = default;
+	FFenceMarker(D3DFence_t* fence, const size_t value) :
+		m_fence{ fence }, m_value{ value }{}
+
+	void BlockingWait() const
+	{
+		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+		if (event)
+		{
+			m_fence->SetEventOnCompletion(m_value, event);
+			WaitForSingleObject(event, INFINITE);
+		}
+	}
+};
+
 struct FCommandList
 {
 	D3D12_COMMAND_LIST_TYPE m_type;
@@ -91,6 +111,7 @@ struct FCommandList
 	FCommandList() = default;
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
 	void SetName(const std::wstring& name);
+	FFenceMarker GetFence() const;
 };
 
 struct FShaderDesc
@@ -117,6 +138,7 @@ struct FResource
 	HRESULT InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue = nullptr);
 	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
 	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	size_t GetSizeBytes() const;
 };
 
 struct FBindlessShaderResource
@@ -142,7 +164,7 @@ struct FBindlessUav
 struct FTransientBuffer
 {
 	FResource* m_resource;
-	const FCommandList* m_dependentCmdlist;
+	FFenceMarker m_fenceMarker;
 
 	~FTransientBuffer();
 };
@@ -164,13 +186,14 @@ class FResourceUploadContext
 public:
 	FResourceUploadContext() = delete;
 	explicit FResourceUploadContext(const size_t uploadBufferSizeInBytes);
+	~FResourceUploadContext();
 
 	void UpdateSubresources(
-		D3DResource_t* destinationResource,
+		FResource* destinationResource,
 		const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 		std::function<void(FCommandList*)> transition);
 
-	D3DFence_t* SubmitUploads(FCommandList* owningCL);
+	FFenceMarker SubmitUploads(FCommandList* owningCL);
 
 private:
 	FResource* m_uploadBuffer;
@@ -179,6 +202,24 @@ private:
 	size_t m_sizeInBytes;
 	size_t m_currentOffset;
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
+};
+
+class FResourceReadbackContext
+{
+public:
+	FResourceReadbackContext() = delete;
+	explicit FResourceReadbackContext(const FResource* resource);
+	~FResourceReadbackContext();
+
+	FFenceMarker StageSubresources(FResource* sourceResource, const FFenceMarker sourceReadyMarker);
+	D3D12_SUBRESOURCE_DATA GetData(int subresourceIndex = 0);
+
+private:
+	FResource* m_readbackBuffer;
+	FCommandList* m_copyCommandlist;
+	uint8_t* m_mappedPtr;
+	size_t m_sizeInBytes;
+	std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> m_layouts;
 };
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -190,6 +231,23 @@ namespace RenderUtils12
 	inline constexpr uint32_t CalcSubresource(uint32_t MipSlice, uint32_t ArraySlice, uint32_t PlaneSlice, uint32_t MipLevels, uint32_t ArraySize) noexcept
 	{
 		return MipSlice + ArraySlice * MipLevels + PlaneSlice * MipLevels * ArraySize;
+	}
+
+	inline constexpr size_t CalcMipCount(size_t texWidth, size_t texHeight, bool bCompressed)
+	{
+		//  Min size is 4x4 for block compression
+		size_t minSize = bCompressed ? 4 : 1;
+
+		size_t numMips = 0;
+		size_t width = texWidth, height = texHeight;
+		while (width >= minSize && height >= minSize)
+		{
+			numMips++;
+			width = width >> 1;
+			height = height >> 1;
+		}
+
+		return numMips;
 	}
 }
 
@@ -205,7 +263,7 @@ namespace RenderBackend12
 
 	// Command Lists
 	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
-	D3DFence_t* ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
+	FFenceMarker ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures

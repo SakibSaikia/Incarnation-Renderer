@@ -79,7 +79,7 @@
                 "index" : 1
             },
             "occlusionTexture" : {
-                "index" : 2
+                "index" : 4
             },
             "pbrMetallicRoughness" : {
                 "baseColorTexture" : {
@@ -124,6 +124,10 @@
         {
             "sampler" : 0,
             "source" : 3
+        },
+        {
+            "sampler" : 0,
+            "source" : 4
         }
     ],
     "images" : [
@@ -138,14 +142,19 @@
             "uri" : "Default_normal.jpg"
         },
         {
-            "mimeType" : "image/png",
-            "name" : "Default_AO-Default_metalRoughness",
-            "uri" : "Default_AO-Default_metalRoughness.png"
+            "mimeType" : "image/jpeg",
+            "name" : "Default_metalRoughness",
+            "uri" : "Default_metalRoughness.jpg"
         },
         {
             "mimeType" : "image/jpeg",
             "name" : "Default_albedo",
             "uri" : "Default_albedo.jpg"
+        },
+        {
+            "mimeType" : "image/jpeg",
+            "name" : "Default_AO",
+            "uri" : "Default_AO.jpg"
         }
     ],
     "accessors" : [

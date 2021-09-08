@@ -38,11 +38,13 @@ Profiling::ScopedCpuEvent::ScopedCpuEvent(const wchar_t* groupName, const wchar_
 
 	m_uprofToken = MicroProfileGetToken(group, name, color, MicroProfileTokenTypeCpu);
 	m_uprofTick = MicroProfileEnterInternal(m_uprofToken);
+	PIXBeginEvent(color, eventName);
 }
 
 Profiling::ScopedCpuEvent::~ScopedCpuEvent()
 {
 	MicroProfileLeaveInternal(m_uprofToken, m_uprofTick);
+	PIXEndEvent();
 }
 
 Profiling::ScopedCommandListEvent::ScopedCommandListEvent(FCommandList* cmdList, const wchar_t* eventName, uint64_t color) :

@@ -15,6 +15,7 @@
 build
 ./bin
 .vs
+gpu-captures
 
 
 #Files
