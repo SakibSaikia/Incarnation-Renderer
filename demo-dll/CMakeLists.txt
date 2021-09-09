@@ -7,12 +7,12 @@ set(module_name "libdemo")
 # Target
 add_library(
     ${module_name} MODULE 
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_demo.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_draw.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_tables.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_widgets.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_impl_win32.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_demo.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_draw.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_tables.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
+    "${CMAKE_SOURCE_DIR}/ext/imgui/backends/imgui_impl_win32.cpp"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/src/SimpleMath.cpp"
     "${CMAKE_SOURCE_DIR}/ext/mikktspace/mikktspace.c"
     "src/demo.cpp"
@@ -34,7 +34,7 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext"
     "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
     "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
-    "${CMAKE_SOURCE_DIR}/ext/imgui.1.82"
+    "${CMAKE_SOURCE_DIR}/ext/imgui"
     "${CMAKE_SOURCE_DIR}/ext/stb"
     "${CMAKE_SOURCE_DIR}/ext/tinygltf"
     "${CMAKE_SOURCE_DIR}/ext/json"
