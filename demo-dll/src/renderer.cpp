@@ -7,7 +7,6 @@
 #include <sstream>
 #include <imgui.h>
 #include <dxcapi.h>
-#include <microprofile.h>
 
 namespace RenderJob
 {
@@ -699,7 +698,7 @@ namespace RenderJob
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	SCOPED_CPU_EVENT(L"Render", MP_YELLOW);
+	SCOPED_CPU_EVENT(L"Render", PIX_COLOR_INDEX(0));
 
 	const uint32_t sampleCount = 4;
 	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Config::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
@@ -750,7 +749,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { presentCmdList });
 
 	RenderBackend12::PresentDisplay();
-	Profiling::Flip();
 }
 
 std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)

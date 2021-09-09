@@ -13,7 +13,6 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_tables.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_widgets.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui.1.82/imgui_impl_win32.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/microprofile/microprofile.cpp"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/src/SimpleMath.cpp"
     "${CMAKE_SOURCE_DIR}/ext/mikktspace/mikktspace.c"
     "src/demo.cpp"
@@ -36,7 +35,6 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
     "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
     "${CMAKE_SOURCE_DIR}/ext/imgui.1.82"
-    "${CMAKE_SOURCE_DIR}/ext/microprofile"
     "${CMAKE_SOURCE_DIR}/ext/stb"
     "${CMAKE_SOURCE_DIR}/ext/tinygltf"
     "${CMAKE_SOURCE_DIR}/ext/json"
@@ -49,7 +47,6 @@ include_directories(
 add_compile_definitions(
     UNICODE
     _UNICODE
-    MICROPROFILE_GPU_TIMERS_D3D12
     SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders"
     CONTENT_DIR="${CMAKE_SOURCE_DIR}/content")
 

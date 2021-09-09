@@ -6,7 +6,6 @@
 #include <concurrent_queue.h>
 #include <common.h>
 #include <spookyhash_api.h>
-#include <microprofile.h>
 #include <imgui.h>
 #include <dxgidebug.h>
 #include <string>
@@ -1682,10 +1681,6 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		val = 0;
 	}
 
-	void* cmdQueues[] = { s_graphicsQueue.get() };
-	MicroProfileGpuInitD3D12(GetDevice(), 1, cmdQueues);
-	MicroProfileSetCurrentNodeD3D12(0);
-
 	return true;
 }
 void RenderBackend12::FlushGPU()
@@ -1710,8 +1705,6 @@ void RenderBackend12::FlushGPU()
 
 void RenderBackend12::Teardown()
 {
-	MicroProfileGpuShutdown();
-
 	s_commandListPool.Clear();
 	s_uploadBufferPool.Clear();
 	s_sharedResourcePool.Clear();

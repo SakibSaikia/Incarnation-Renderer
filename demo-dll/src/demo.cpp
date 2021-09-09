@@ -203,8 +203,6 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 {
 	s_aspectRatio = resX / (float)resY;
 
-	Profiling::Initialize();
-
 	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);
 	ok = ok && ShaderCompiler::Initialize();
 
@@ -303,7 +301,6 @@ void Demo::Teardown(HWND& windowHandle)
 		ShaderCompiler::Teardown();
 		ImGui_ImplWin32_Shutdown();
 		ImGui::DestroyContext();
-		Profiling::Teardown();
 	}
 }
 
@@ -705,7 +702,7 @@ bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
 {
-	SCOPED_CPU_EVENT(L"load_mesh", MP_AQUAMARINE);
+	SCOPED_CPU_EVENT(L"load_mesh", PIX_COLOR_INDEX(1));
 
 	auto CopyIndexData = [&model](const tinygltf::Accessor& accessor, uint8_t* copyDest) -> size_t
 	{
@@ -881,7 +878,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialIndex)
 {
-	SCOPED_CPU_EVENT(L"load_material", MP_AQUAMARINE);
+	SCOPED_CPU_EVENT(L"load_material", PIX_COLOR_INDEX(1));
 
 	tinygltf::Material material = model.materials[materialIndex];
 
