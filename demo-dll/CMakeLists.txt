@@ -14,7 +14,7 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
     "${CMAKE_SOURCE_DIR}/ext/imgui/backends/imgui_impl_win32.cpp"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/src/SimpleMath.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/mikktspace/mikktspace.c"
+    "${CMAKE_SOURCE_DIR}/ext/MikkTSpace/mikktspace.c"
     "src/demo.cpp"
     "src/backend-d3d12.cpp" 
     "src/shadercompiler.cpp"

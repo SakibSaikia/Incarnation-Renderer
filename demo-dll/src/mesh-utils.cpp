@@ -2,7 +2,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <mesh-utils.h>
-#include <mikktspace/mikktspace.h>
+#include <MikkTSpace/mikktspace.h>
 
 namespace
 {

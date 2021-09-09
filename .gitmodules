@@ -10,3 +10,6 @@
 [submodule "ext/json"]
 	path = ext/json
 	url = https://github.com/nlohmann/json.git
+[submodule "ext/MikkTSpace"]
+	path = ext/MikkTSpace
+	url = https://github.com/mmikk/MikkTSpace.git
