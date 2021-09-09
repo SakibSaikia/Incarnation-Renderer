@@ -4,8 +4,8 @@
 [submodule "ext/imgui"]
 	path = ext/imgui
 	url = https://github.com/ocornut/imgui.git
-[submodule "ext/tiny-gltf"]
-	path = ext/tiny-gltf
+[submodule "ext/tinygltf"]
+	path = ext/tinygltf
 	url = https://github.com/syoyo/tinygltf.git
 [submodule "ext/json"]
 	path = ext/json

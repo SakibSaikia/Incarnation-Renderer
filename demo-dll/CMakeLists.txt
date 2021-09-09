@@ -35,7 +35,7 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
     "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
     "${CMAKE_SOURCE_DIR}/ext/imgui"
-    "${CMAKE_SOURCE_DIR}/ext/tiny-gltf"
+    "${CMAKE_SOURCE_DIR}/ext/tinygltf"
     "${CMAKE_SOURCE_DIR}/ext/json"
     "${CMAKE_SOURCE_DIR}/ext/directXTK/inc"
     "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/Include/WinPixEventRuntime"
