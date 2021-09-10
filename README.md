@@ -14,10 +14,10 @@ Experimetal rendering engine for loading and displaying Gltf models as shown bel
 * [DirectX12 Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/)
 * [DirectXShaderCompiler](https://github.com/ehsannas/DirectXShaderCompiler)
 * [DirectXTex](https://github.com/Microsoft/DirectXTex)
+* [DirectXTK](https://github.com/Microsoft/DirectXTK) for SimpleMath
 * [WinPixEventRuntime](https://devblogs.microsoft.com/pix/download/)
 * [TinyGltf](https://github.com/syoyo/tinygltf) 
 * [ImGui](https://github.com/ocornut/imgui)
-* [stb](https://github.com/nothings/stb)
 * [MikkTSpace](https://github.com/mmikk/MikkTSpace)
 * [SpookyHash](https://github.com/k0dai/spookyhash)
 * [JSON for Modern C++](https://github.com/nlohmann/json)
