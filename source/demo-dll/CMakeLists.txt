@@ -108,3 +108,6 @@ target_link_libraries(
     PRIVATE WinPixEventRuntime.lib
     PRIVATE DirectXTex.lib
     PRIVATE tracy.lib)
+
+# Ensure that tracy.lib is built before trying to link the dll
+add_dependencies(libdemo tracy)
