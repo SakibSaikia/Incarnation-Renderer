@@ -1,11 +1,12 @@
 #pragma once
 
 #include <backend-d3d12.h>
+#include <Tracy.hpp>
 
 #define DO_TOKEN_PASTE(a, b) a ## b
 #define TOKEN_PASTE(a, b)  DO_TOKEN_PASTE(a,b)
 
-#define SCOPED_CPU_EVENT(name, color) Profiling::ScopedCpuEvent TOKEN_PASTE(event_, __LINE__)(L"CPU", name, color)
+#define SCOPED_CPU_EVENT(name, color) Profiling::ScopedCpuEvent TOKEN_PASTE(event_, __LINE__)(L"CPU", name, color); ZoneScoped;
 #define SCOPED_COMMAND_LIST_EVENT(cmdList, name, color) Profiling::ScopedCommandListEvent TOKEN_PASTE(event_, __LINE__)(cmdList, name, color)
 #define SCOPED_COMMAND_QUEUE_EVENT(cmdQueueType, name, color) Profiling::ScopedCommandQueueEvent TOKEN_PASTE(event_, __LINE__)(cmdQueueType, name, color)
 

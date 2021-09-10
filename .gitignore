@@ -13,7 +13,7 @@
 
 #Directories
 build
-./bin
+bin
 .vs
 gpu-captures
 

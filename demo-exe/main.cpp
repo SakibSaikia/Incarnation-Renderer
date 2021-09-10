@@ -4,6 +4,7 @@
 #include <sstream>
 #include <filesystem>
 #include <cassert>
+#include <Tracy.hpp>
 
 // D3D12 Agility SDK hooks
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 4; }
@@ -264,6 +265,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 			s_demoProcs.render(windowWidth, windowHeight);
 			QueryPerformanceCounter(&endTime);
 			elapsedSeconds = (endTime.QuadPart - startTime.QuadPart) / (float) counterFrequency.QuadPart;
+			FrameMark;
 		}
 	}
 
