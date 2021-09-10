@@ -174,6 +174,7 @@ HRESULT ShaderCompiler::CompileShader(
 	else
 	{
 		OutputDebugStringA("Shader compilation failed");
+		return E_FAIL;
 	}
 }
 
