@@ -23,9 +23,11 @@ add_library(
     "src/profiling.cpp" 
     "src/mesh-utils.cpp")
 
-target_compile_options(
-    ${module_name} PUBLIC
-    /await)
+if(MSVC)
+  target_compile_options(${module_name} PUBLIC /await)
+else()
+  target_compile_options(${module_name} PUBLIC -fcoroutines-ts)
+endif()
 
 set_property(TARGET ${module_name} PROPERTY CXX_STANDARD 20)
 

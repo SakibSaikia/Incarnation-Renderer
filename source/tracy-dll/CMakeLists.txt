@@ -10,8 +10,7 @@ add_library(
     "${CMAKE_SOURCE_DIR}/ext/tracy/TracyClient.cpp")
 
 target_compile_options(
-    ${module_name} PUBLIC
-    /await)
+    ${module_name} PUBLIC)
 
 set_property(TARGET ${module_name} PROPERTY CXX_STANDARD 20)
 
