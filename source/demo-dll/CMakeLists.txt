@@ -51,7 +51,7 @@ add_compile_definitions(
     TRACY_ENABLE
     TRACY_IMPORTS
     NOMINMAX                                                                                # Disable Windows.h from defining max() min() macros which collide with other code include the standard library
-    SHADER_DIR=L"${CMAKE_SOURCE_DIR}/demo-dll/shaders"
+    SHADER_DIR=L"${CMAKE_SOURCE_DIR}/source/demo-dll/shaders"
     CONTENT_DIR="${CMAKE_SOURCE_DIR}/content")
 
 # Generate a unique name
