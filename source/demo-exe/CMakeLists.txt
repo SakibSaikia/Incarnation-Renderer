@@ -29,3 +29,6 @@ target_link_directories(
 target_link_libraries(
     demo 
     PUBLIC tracy.lib)
+
+# Ensure that tracy.lib is built before trying to build the exe
+add_dependencies(demo tracy)
