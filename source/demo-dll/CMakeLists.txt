@@ -3,19 +3,18 @@
 project(libdemo VERSION 0.0)
 
 set(module_name "libdemo")
-set(target_dir ${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE})
 
 # Target
 add_library(
     ${module_name} MODULE 
-    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_demo.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_draw.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_tables.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui/imgui_widgets.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/imgui/backends/imgui_impl_win32.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/directXTK/src/SimpleMath.cpp"
-    "${CMAKE_SOURCE_DIR}/ext/MikkTSpace/mikktspace.c"
+    "${project_ext_dir}/imgui/imgui.cpp"
+    "${project_ext_dir}/imgui/imgui_demo.cpp"
+    "${project_ext_dir}/imgui/imgui_draw.cpp"
+    "${project_ext_dir}/imgui/imgui_tables.cpp"
+    "${project_ext_dir}/imgui/imgui_widgets.cpp"
+    "${project_ext_dir}/imgui/backends/imgui_impl_win32.cpp"
+    "${project_ext_dir}/directXTK/src/SimpleMath.cpp"
+    "${project_ext_dir}/MikkTSpace/mikktspace.c"
     "src/demo.cpp"
     "src/backend-d3d12.cpp" 
     "src/shadercompiler.cpp"
@@ -23,28 +22,24 @@ add_library(
     "src/profiling.cpp" 
     "src/mesh-utils.cpp")
 
-if(MSVC)
-  target_compile_options(${module_name} PUBLIC /await)
-else()
-  target_compile_options(${module_name} PUBLIC -fcoroutines-ts)
-endif()
+target_compile_options(${module_name} PUBLIC /await)
 
 set_property(TARGET ${module_name} PROPERTY CXX_STANDARD 20)
 
 # Include path
 include_directories(
     "inc"
-    "${CMAKE_SOURCE_DIR}/ext"
-    "${CMAKE_SOURCE_DIR}/ext/spookyhash/inc"
-    "${CMAKE_SOURCE_DIR}/ext/dxc/inc"
-    "${CMAKE_SOURCE_DIR}/ext/imgui"
-    "${CMAKE_SOURCE_DIR}/ext/tinygltf"
-    "${CMAKE_SOURCE_DIR}/ext/json"
-    "${CMAKE_SOURCE_DIR}/ext/directXTK/inc"
-    "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/Include/WinPixEventRuntime"
-    "${CMAKE_SOURCE_DIR}/ext/directXTex/inc"
-    "${CMAKE_SOURCE_DIR}/ext/d3d12.1.4.9/include"
-    "${CMAKE_SOURCE_DIR}/ext/tracy")
+    "${project_ext_dir}"
+    "${project_ext_dir}/spookyhash/inc"
+    "${project_ext_dir}/dxc/inc"
+    "${project_ext_dir}/imgui"
+    "${project_ext_dir}/tinygltf"
+    "${project_ext_dir}/json"
+    "${project_ext_dir}/directXTK/inc"
+    "${project_ext_dir}/winpixeventruntime.1.0.210209001/Include/WinPixEventRuntime"
+    "${project_ext_dir}/directXTex/inc"
+    "${project_ext_dir}/d3d12.1.4.9/include"
+    "${project_ext_dir}/tracy")
 
 # Macro defines
 add_compile_definitions(
@@ -53,8 +48,8 @@ add_compile_definitions(
     TRACY_ENABLE
     TRACY_IMPORTS
     NOMINMAX                                                                                # Disable Windows.h from defining max() min() macros which collide with other code include the standard library
-    SHADER_DIR=L"${CMAKE_SOURCE_DIR}/source/demo-dll/shaders"
-    CONTENT_DIR="${CMAKE_SOURCE_DIR}/content")
+    SHADER_DIR=L"${project_src_dir}/demo-dll/shaders"
+    CONTENT_DIR="${project_root_dir}/content")
 
 # Generate a unique name
 string(TIMESTAMP seed %s)
@@ -62,38 +57,38 @@ string(RANDOM LENGTH 6 RANDOM_SEED ${seed} suffix)
 string(CONCAT unique_name ${module_name} "_" ${suffix})
 
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND
-    EXISTS ${target_dir}/${module_name}.pdb)
+    EXISTS ${project_bin_dir}/${module_name}.pdb)
     # Move PDB file to new location so that we can rebuild while file is locked. VS allows that for locked files.
     add_custom_command(
             TARGET libdemo PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E rename
-                    ${target_dir}/${module_name}.pdb
-                    ${target_dir}/${unique_name}.pdb)
+                    ${project_bin_dir}/${module_name}.pdb
+                    ${project_bin_dir}/${unique_name}.pdb)
 
     # Copy contents to old location so that a rebuild isn't forced due to a missing pdb
     add_custom_command(
             TARGET libdemo PRE_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
-                    ${target_dir}/${unique_name}.pdb
-                    ${target_dir}/${module_name}.pdb)
+                    ${project_bin_dir}/${unique_name}.pdb
+                    ${project_bin_dir}/${module_name}.pdb)
 endif()
 
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
     target_link_directories(
         libdemo 
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/bin/x64"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/directXTex/lib/x64/debug"
-        PRIVATE "${CMAKE_BINARY_DIR}/tracy-dll")
+        PRIVATE "${project_bin_dir}"
+        PRIVATE "${project_ext_dir}/spookyhash/lib"
+        PRIVATE "${project_ext_dir}/dxc/lib/x64"
+        PRIVATE "${project_ext_dir}/winpixeventruntime.1.0.210209001/bin/x64"
+        PRIVATE "${project_ext_dir}/directXTex/lib/x64/debug")
 else()
     target_link_directories(
         libdemo 
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/spookyhash/lib"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/dxc/lib/x64"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/winpixeventruntime.1.0.210209001/bin/x64"
-        PRIVATE "${CMAKE_SOURCE_DIR}/ext/directXTex/lib/x64/release"
-        PRIVATE "${CMAKE_BINARY_DIR}/tracy-dll")
+        PRIVATE "${project_bin_dir}"
+        PRIVATE "${project_ext_dir}/spookyhash/lib"
+        PRIVATE "${project_ext_dir}/dxc/lib/x64"
+        PRIVATE "${project_ext_dir}/winpixeventruntime.1.0.210209001/bin/x64"
+        PRIVATE "${project_ext_dir}/directXTex/lib/x64/release")
 
 endif()
 

@@ -205,7 +205,6 @@ bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nShowCmd)
 {
-	AddDllDirectory(LIB_DEMO_DIR);
 	AddDllDirectory(SPOOKYHASH_BIN_DIR);
 	AddDllDirectory(DXC_BIN_DIR);
 	AddDllDirectory(PIX_BIN_DIR);
@@ -223,12 +222,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	QueryPerformanceFrequency(&counterFrequency);
 
 	InitializeWindow(hInstance, windowHandle, windowWidth, windowHeight);
-	CleanTempFiles(LIB_DEMO_DIR, LIB_DEMO_NAME L"_");
+	CleanTempFiles(PROJECT_BIN_DIR, LIB_DEMO_NAME L"_");
 
 	while (msg.wParam != VK_ESCAPE)
 	{
 		FILETIME currentWriteTimestamp{};
-		if (GetFileLastWriteTime(LIB_DEMO_DIR L"\\" LIB_DEMO_NAME L".dll", currentWriteTimestamp))
+		if (GetFileLastWriteTime(PROJECT_BIN_DIR L"\\" LIB_DEMO_NAME L".dll", currentWriteTimestamp))
 		{
 			if (currentWriteTimestamp.dwLowDateTime != lastWriteTimestamp.dwLowDateTime ||
 				currentWriteTimestamp.dwHighDateTime != lastWriteTimestamp.dwHighDateTime)
@@ -238,7 +237,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 					s_demoProcs.teardown(windowHandle);
 				}
 
-				if (!LoadModule(LIB_DEMO_DIR, LIB_DEMO_NAME, demoDll, s_demoProcs))
+				if (!LoadModule(PROJECT_BIN_DIR, LIB_DEMO_NAME, demoDll, s_demoProcs))
 				{
 					ErrorExit((LPTSTR)TEXT("LoadModule"));
 				}

@@ -7,7 +7,7 @@ set(module_name "tracy")
 # Target
 add_library(
     ${module_name} MODULE 
-    "${CMAKE_SOURCE_DIR}/ext/tracy/TracyClient.cpp")
+    "${project_ext_dir}/tracy/TracyClient.cpp")
 
 target_compile_options(
     ${module_name} PUBLIC)
@@ -15,7 +15,7 @@ target_compile_options(
 set_property(TARGET ${module_name} PROPERTY CXX_STANDARD 20)
 
 # Include path
-include_directories("${CMAKE_SOURCE_DIR}/ext/tracy")
+include_directories("${project_ext_dir}/tracy")
 
 # Macro defines
 add_compile_definitions(
