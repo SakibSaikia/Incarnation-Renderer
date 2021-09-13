@@ -5,6 +5,7 @@
 #include <concurrent_unordered_map.h>
 #include <concurrent_queue.h>
 #include <common.h>
+#include <profiling.h>
 #include <spookyhash_api.h>
 #include <imgui.h>
 #include <dxgidebug.h>
@@ -1936,6 +1937,8 @@ D3DCommandQueue_t* RenderBackend12::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type
 
 void RenderBackend12::PresentDisplay()
 {
+	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
+
 	s_swapChain->Present(1, 0);
 
 	// Signal current frame is done
@@ -1948,11 +1951,10 @@ void RenderBackend12::PresentDisplay()
 	// If the buffer that was swapped in hasn't finished rendering on the GPU (from a previous submit), then wait!
 	if (s_frameFence->GetCompletedValue() < s_frameFenceValues[s_currentBufferIndex])
 	{
-		PIXBeginEvent(0, L"wait_on_previous_frame");
+		SCOPED_CPU_EVENT("wait_on_previous_frame", PIX_COLOR_DEFAULT);
 		HANDLE frameWaitEvent = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 		s_frameFence->SetEventOnCompletion(s_frameFenceValues[s_currentBufferIndex], frameWaitEvent);
 		WaitForSingleObjectEx(frameWaitEvent, INFINITE, FALSE);
-		PIXEndEvent();
 	}
 
 	// Update fence value for the next frame

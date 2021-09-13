@@ -702,7 +702,7 @@ bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
 {
-	SCOPED_CPU_EVENT(L"load_mesh", PIX_COLOR_INDEX(1));
+	SCOPED_CPU_EVENT("load_mesh", PIX_COLOR_DEFAULT);
 
 	auto CopyIndexData = [&model](const tinygltf::Accessor& accessor, uint8_t* copyDest) -> size_t
 	{
@@ -878,7 +878,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialIndex)
 {
-	SCOPED_CPU_EVENT(L"load_material", PIX_COLOR_INDEX(1));
+	SCOPED_CPU_EVENT("load_material", PIX_COLOR_DEFAULT);
 
 	tinygltf::Material material = model.materials[materialIndex];
 
@@ -1089,11 +1089,11 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	cmdList->SetName(L"prefilter_normal_roughness");
 
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, L"prefilter_normal_roughness", 0);
+	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "prefilter_normal_roughness", 0);
 	uploader.SubmitUploads(cmdList);
 
 	{
-		SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_normal_roughness", 0);
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_normal_roughness", 0);
 
 		// Root Signature
 		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter-normal-roughness.hlsl", L"rootsig" });
@@ -1513,7 +1513,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		cmdList->SetName(L"hdr_preprocess");
 
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, L"hdr_preprocess", 0);
+		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "hdr_preprocess", 0);
 		uploadContext.SubmitUploads(cmdList);
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -1523,7 +1523,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"src_cubemap", metadata.format, cubemapSize, cubemapSize, numMips, 6);
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, L"cubemap_gen", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "cubemap_gen", 0);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig" });
@@ -1587,7 +1587,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		texCubeUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, L"prefilter_envmap", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter.hlsl", L"rootsig" });
@@ -1664,7 +1664,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		auto shTexureUav0 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_0", metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, numCoefficients);
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_projection", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-projection.hlsl", L"rootsig" });
@@ -1719,7 +1719,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		int src = 0, dest = 1;
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_integration", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_integration", 0);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-integration.hlsl", L"rootsig" });
@@ -1788,7 +1788,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		auto shTexureUavAccum = RenderBackend12::CreateBindlessUavTexture(L"ShAccum", metadata.format, numCoefficients, 1, 1, 1);
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, L"SH_accum", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-accumulation.hlsl", L"rootsig" });
