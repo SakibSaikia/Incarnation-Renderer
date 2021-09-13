@@ -238,6 +238,8 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 
 void Demo::Tick(float deltaTime)
 {
+	SCOPED_CPU_EVENT("tick_demo", PIX_COLOR_INDEX(1));
+
 	// Reload scene model if required
 	if (s_scene.m_modelFilename.empty() ||
 		s_scene.m_modelFilename != Config::g_modelFilename)
@@ -315,6 +317,8 @@ void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 
 void Demo::UpdateUI(float deltaTime)
 {
+	SCOPED_CPU_EVENT("ui_update", PIX_COLOR_DEFAULT);
+
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	FResourceUploadContext uploader{ 32 * 1024 * 1024 };
 
@@ -489,6 +493,8 @@ std::string GetCachePath(const std::string filename, const std::string dirName)
 
 void FScene::ReloadModel(const std::wstring& filename)
 {
+	SCOPED_CPU_EVENT("reload_model", PIX_COLOR_DEFAULT);
+
 	std::string modelFilepath = GetFilepathA(ws2s(filename));
 
 	tinygltf::TinyGLTF loader;
@@ -1319,6 +1325,8 @@ void FScene::Clear()
 
 void FView::Tick(const float deltaTime, const FController* controller)
 {
+	SCOPED_CPU_EVENT("tick_view", PIX_COLOR_DEFAULT);
+
 	bool updateView = false;
 
 	// Walk
@@ -1475,6 +1483,8 @@ uint32_t FTextureCache::CacheEmptyTexture2D(
 
 FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 {
+	SCOPED_CPU_EVENT("cache_hdri", PIX_COLOR_DEFAULT);
+
 	const std::wstring envmapTextureName = name + L".envmap";
 	const std::wstring shTextureName = name + L".shtex";
 

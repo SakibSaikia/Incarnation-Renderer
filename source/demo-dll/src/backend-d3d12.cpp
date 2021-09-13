@@ -1686,6 +1686,8 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 }
 void RenderBackend12::FlushGPU()
 {
+	SCOPED_CPU_EVENT("flush_gpu", PIX_COLOR_DEFAULT);
+
 	winrt::com_ptr<D3DFence_t> flushFence;
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(flushFence.put())));
 
