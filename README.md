@@ -10,6 +10,13 @@ Experimetal rendering engine for loading and displaying Gltf models as shown bel
 * Normalmap and Roughness map filtering using von Mises-Fisher convolution
 * MSAA
 
+## Build
+This project uses [Cmake with Visual Studio](https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=msvc-160). 
+
+After cloning, update submodules: `git submodule update --init --recursive`
+
+Then open the project root folder in Visual Studio to build.
+
 ## Dependencies
 * [DirectX12 Agility SDK](https://devblogs.microsoft.com/directx/directx12agility/)
 * [DirectXShaderCompiler](https://github.com/ehsannas/DirectXShaderCompiler)
