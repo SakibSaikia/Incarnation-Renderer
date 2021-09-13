@@ -1939,7 +1939,7 @@ void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
 
-	s_swapChain->Present(1, 0);
+	s_swapChain->Present(0, 0);
 
 	// Signal current frame is done
 	auto currentFenceValue = s_frameFenceValues[s_currentBufferIndex];
