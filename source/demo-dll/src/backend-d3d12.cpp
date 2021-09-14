@@ -764,6 +764,15 @@ FResourceReadbackContext::~FResourceReadbackContext()
 //														Generic Resources
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 
+FResource::FResource()
+{
+	m_transitionFenceValue = 0;
+	AssertIfFailed(GetDevice()->CreateFence(
+		0,
+		D3D12_FENCE_FLAG_NONE,
+		IID_PPV_ARGS(m_transitionFence.put())));
+}
+
 FResource::~FResource()
 {
 	if (m_d3dResource)
@@ -832,20 +841,36 @@ size_t FResource::GetSizeBytes() const
 	return totalBytes;
 }
 
-// A resources cannot be transitioned simultaneously on 2 or more CL's. A CL that recorded a transition must be executed
-// before a transition for the same resource can be recorded on another CL. Transitions on the same CL are trivially ordered and are ok.
-void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+// Get a token value in order to perform a transition. Transitions are performed in order of the token 
+// value regardless of when they request is made. This is used to synchronize transitions across multiple threads.
+size_t FResource::GetTransitionToken()
 {
-	uint32_t subId = (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES ? 0 : subresourceIndex);
+	return ++m_transitionFenceValue;
+}
 
-	// Check if there are any pending transitions for this resource on the same commandlist.
-	// If yes, then update the before state immediately for the current transition call.
-	auto pendingResourceTransition = cmdList->m_pendingTransitions.find(this);
-	if (pendingResourceTransition != cmdList->m_pendingTransitions.cend())
+void FResource::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+{
+	// The expected value for a transition to process is that the completed value is 1 less than tokenValue.
+	// If the value difference is more than 1, it means that some other CL has reserved the right to transition
+	// this resource first, and we must wait!
+	const size_t completedFenceValue = m_transitionFence->GetCompletedValue();
+	const size_t wait = token > 0 ? token - 1 : 0;
+	if (completedFenceValue < wait)
 	{
-		pendingResourceTransition->second();
-		cmdList->m_pendingTransitions.erase(pendingResourceTransition);
+		SCOPED_CPU_EVENT("transition_wait", PIX_COLOR_DEFAULT);
+		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+		if (event)
+		{
+			m_transitionFence->SetEventOnCompletion(wait, event);
+			WaitForSingleObject(event, INFINITE);
+		}
 	}
+
+	// Make sure multiple threads do not access the following section at the same since the before state is shared data
+	static std::mutex transitionMutex;
+	std::lock_guard<std::mutex> scopeLock{ transitionMutex };
+
+	uint32_t subId = (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES ? 0 : subresourceIndex);
 
 	bool bAllSubresourcesHaveSameBeforeState = true;
 	if (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
@@ -866,7 +891,10 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 		// Do a single barrier call for all subresources
 		D3D12_RESOURCE_STATES beforeState = m_subresourceStates[subId];
 		if (beforeState == destState)
+		{
+			m_transitionFence->Signal(token);
 			return;
+		}
 
 		D3D12_RESOURCE_BARRIER barrierDesc = {};
 		barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -897,23 +925,19 @@ void FResource::Transition(FCommandList* cmdList, const uint32_t subresourceInde
 		}
 	}
 
-	// Update CPU side tracking of current state
-	cmdList->m_pendingTransitions.emplace(
-		this,
-		[this, subresourceIndex, destState]()
+	// Signal that this transition has been recorded successfully and update the CPU-side tracking
+	m_transitionFence->Signal(token);
+	if (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+	{
+		for (auto& state : m_subresourceStates)
 		{
-			if (subresourceIndex == D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
-			{
-				for (auto& state : m_subresourceStates)
-				{
-					state = destState;
-				}
-			}
-			else
-			{
-				m_subresourceStates[subresourceIndex] = destState;
-			}
-		});
+			state = destState;
+		}
+	}
+	else
+	{
+		m_subresourceStates[subresourceIndex] = destState;
+	}
 }
 
 FTransientBuffer::~FTransientBuffer()
@@ -1310,9 +1334,14 @@ FBindlessShaderResource::~FBindlessShaderResource()
 	waitForFenceTask.then(freeResource);
 }
 
-void FBindlessShaderResource::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+size_t FBindlessShaderResource::GetTransitionToken()
+{ 
+	return m_resource->GetTransitionToken(); 
+}
+
+void FBindlessShaderResource::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
 {
-	m_resource->Transition(cmdList, subresourceIndex, destState);
+	m_resource->Transition(cmdList, token, subresourceIndex, destState);
 }
 
 FBindlessUav::~FBindlessUav()
@@ -1320,9 +1349,14 @@ FBindlessUav::~FBindlessUav()
 	GetSharedResourcePool()->Retire(this);
 }
 
-void FBindlessUav::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+size_t FBindlessUav::GetTransitionToken()
 {
-	m_resource->Transition(cmdList, subresourceIndex, destState);
+	return m_resource->GetTransitionToken();
+}
+
+void FBindlessUav::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+{
+	m_resource->Transition(cmdList, token, subresourceIndex, destState);
 }
 
 void FBindlessUav::UavBarrier(FCommandList* cmdList)
@@ -1345,9 +1379,14 @@ FRenderTexture::~FRenderTexture()
 	}
 }
 
-void FRenderTexture::Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+size_t FRenderTexture::GetTransitionToken()
 {
-	m_resource->Transition(cmdList, subresourceIndex, destState);
+	return m_resource->GetTransitionToken();
+}
+
+void FRenderTexture::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
+{
+	m_resource->Transition(cmdList, token, subresourceIndex, destState);
 }
 
 struct FTimestampedBlob
@@ -1875,8 +1914,10 @@ FRenderTexture* RenderBackend12::GetBackBuffer()
 	return s_backBuffers[s_currentBufferIndex].get();
 }
 
-FFenceMarker RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists)
+FFenceMarker RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists)
 {
+	SCOPED_CPU_EVENT("execute_commandlists", PIX_COLOR_DEFAULT);
+
 	std::vector<ID3D12CommandList*> d3dCommandLists;
 	size_t latestFenceValue = 0;
 	D3DFence_t* latestFence = {};
@@ -1900,13 +1941,6 @@ FFenceMarker RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE 
 	activeCommandQueue->ExecuteCommandLists(d3dCommandLists.size(), d3dCommandLists.data());
 	for (FCommandList* cl : commandLists)
 	{
-		for (auto&& [resource, transitionProc] : cl->m_pendingTransitions)
-		{
-			transitionProc();
-		}
-
-		cl->m_pendingTransitions.clear();
-
 		for (auto& callbackProc : cl->m_postExecuteCallbacks)
 		{
 			callbackProc();
@@ -2308,7 +2342,7 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 			srcData,
 			[texture = newTexture.get(), resourceState](FCommandList* cmdList)
 			{
-				texture->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				texture->Transition(cmdList, texture->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
@@ -2386,7 +2420,7 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessBuffer(
 			srcData,
 			[buffer = newBuffer.get(), resourceState](FCommandList* cmdList)
 			{
-				buffer->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				buffer->Transition(cmdList, buffer->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 

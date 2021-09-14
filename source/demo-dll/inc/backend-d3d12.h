@@ -105,7 +105,6 @@ struct FCommandList
 	winrt::com_ptr<D3DCommandList_t> m_d3dCmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
 	winrt::com_ptr<D3DFence_t> m_fence;
-	std::unordered_map<FResource*, std::function<void(void)>> m_pendingTransitions;
 	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
 
 	FCommandList() = default;
@@ -132,12 +131,16 @@ struct FResource
 	D3DResource_t* m_d3dResource;
 	std::wstring m_name;
 	concurrency::concurrent_vector<D3D12_RESOURCE_STATES> m_subresourceStates;
+	winrt::com_ptr<D3DFence_t> m_transitionFence;
+	size_t m_transitionFenceValue;
 
+	FResource();
 	~FResource();
 	void SetName(const std::wstring& name);
 	HRESULT InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue = nullptr);
 	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
-	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	size_t GetTransitionToken();
+	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 	size_t GetSizeBytes() const;
 };
 
@@ -147,7 +150,8 @@ struct FBindlessShaderResource
 	uint32_t m_srvIndex = ~0u;
 
 	~FBindlessShaderResource();
-	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	size_t GetTransitionToken();
+	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 struct FBindlessUav
@@ -157,7 +161,8 @@ struct FBindlessUav
 	uint32_t m_srvIndex;
 
 	~FBindlessUav();
-	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	size_t GetTransitionToken();
+	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 	void UavBarrier(FCommandList* cmdList);
 };
 
@@ -178,7 +183,8 @@ struct FRenderTexture
 	bool m_isSwapChainBuffer;
 
 	~FRenderTexture();
-	void Transition(FCommandList* cmdList, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	size_t GetTransitionToken();
+	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 class FResourceUploadContext
@@ -263,7 +269,7 @@ namespace RenderBackend12
 
 	// Command Lists
 	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
-	FFenceMarker ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::initializer_list<FCommandList*> commandLists);
+	FFenceMarker ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures

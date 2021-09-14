@@ -1166,8 +1166,8 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	}
 
 	// Transition to COMMON because we will be doing a GPU readback after filtering is done on the GPU
-	normalmapFilterUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
-	metallicRoughnessFilterUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
+	normalmapFilterUav->Transition(cmdList, normalmapFilterUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
+	metallicRoughnessFilterUav->Transition(cmdList, metallicRoughnessFilterUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
 
 	// Execute CL
 	RenderBackend12::BeginCapture();
@@ -1276,7 +1276,7 @@ void FScene::ProcessReadbackTexture(FResourceReadbackContext* context, const std
 		srcData,
 		[texResource](FCommandList* cmdList)
 		{
-			texResource->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			texResource->Transition(cmdList, texResource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		});
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -1594,7 +1594,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		const size_t filteredEnvmapSize = cubemapSize >> 1;
 		const int filteredEnvmapMips = numMips - 1;
 		auto texFilteredEnvmapUav = RenderBackend12::CreateBindlessUavTexture(L"filtered_envmap", metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6);
-		texCubeUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->Transition(cmdList, texCubeUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
@@ -1660,10 +1660,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 
 		// Copy from UAV to destination cubemap texture
-		texFilteredEnvmapUav->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		texFilteredEnvmapUav->Transition(cmdList, texFilteredEnvmapUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		auto filteredEnvmapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, BindlessResourceType::TextureCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
-		filteredEnvmapTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		filteredEnvmapTex->Transition(cmdList, filteredEnvmapTex->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -1843,10 +1843,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		}
 
 		// Copy from UAV to destination texture
-		shTexureUavAccum->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		shTexureUavAccum->Transition(cmdList, shTexureUavAccum->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		auto shTex = RenderBackend12::CreateBindlessTexture(shTextureName, BindlessResourceType::Texture2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
-		shTex->Transition(cmdList, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		shTex->Transition(cmdList, shTex->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
