@@ -10,6 +10,51 @@
 
 namespace RenderJob
 {
+	struct Sync
+	{
+		winrt::com_ptr<D3DFence_t> m_fence;
+		std::atomic<size_t> m_fenceValue;
+		std::mutex m_mutex;
+
+		Sync() : m_fenceValue{ 0 }
+		{
+			AssertIfFailed(RenderBackend12::GetDevice()->CreateFence(
+				0,
+				D3D12_FENCE_FLAG_NONE,
+				IID_PPV_ARGS(m_fence.put())));
+		}
+
+		// Each render job gets a token for execution which determines the order in which 
+		// it will be submitted for rendering to the API
+		size_t GetToken()
+		{
+			return ++m_fenceValue;
+		}
+
+		// Executes commandlist with token-based ordering
+		void Execute(const size_t token, FCommandList* cmdList)
+		{
+			const size_t completedFenceValue = m_fence->GetCompletedValue();
+			const size_t wait = token > 0 ? token - 1 : 0;
+			if (completedFenceValue < wait)
+			{
+				SCOPED_CPU_EVENT("wait_turn", PIX_COLOR_DEFAULT);
+				HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+				if (event)
+				{
+					m_fence->SetEventOnCompletion(wait, event);
+					WaitForSingleObject(event, INFINITE);
+				}
+			}
+
+			// Aquire mutex before modifying shared state
+			std::lock_guard<std::mutex> scopeLock{ m_mutex };
+
+			RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+			m_fence->Signal(token);
+		}
+	};
+
 	struct BasePassDesc
 	{
 		FRenderTexture* colorTarget;
@@ -40,10 +85,11 @@ namespace RenderJob
 		FRenderTexture* backBuffer;
 	};
 
-	concurrency::task<FCommandList*> BasePass(const BasePassDesc& passDesc)
+	concurrency::task<void> BasePass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
 	{
-		size_t colorTargetToken = passDesc.colorTarget->GetTransitionToken();
-		size_t depthStencilToken = passDesc.depthStencilTarget->GetTransitionToken();
+		size_t renderToken = jobSync.GetToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
+		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -56,8 +102,8 @@ namespace RenderJob
 
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "base_pass", 0);
 
-			passDesc.colorTarget->Transition(cmdList, colorTargetToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-			passDesc.depthStencilTarget->Transition(cmdList, depthStencilToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.depthStencilTarget->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"base-pass.hlsl", L"rootsig" });
@@ -296,13 +342,18 @@ namespace RenderJob
 			}
 	
 			return cmdList;
+
+		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		{
+			jobSync.Execute(renderToken, recordedCl);
 		});
 	}
 
-	concurrency::task<FCommandList*> BackgroundPass(const BasePassDesc& passDesc)
+	concurrency::task<void> BackgroundPass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
 	{
-		size_t colorTargetToken = passDesc.colorTarget->GetTransitionToken();
-		size_t depthStencilToken = passDesc.depthStencilTarget->GetTransitionToken();
+		size_t renderToken = jobSync.GetToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
+		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -315,8 +366,8 @@ namespace RenderJob
 
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "background_pass", 0);
 
-			passDesc.colorTarget->Transition(cmdList, colorTargetToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-			passDesc.depthStencilTarget->Transition(cmdList, depthStencilToken, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
+			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.depthStencilTarget->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemap-bg.hlsl", L"rootsig" });
@@ -421,13 +472,18 @@ namespace RenderJob
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
 
 			return cmdList;
+
+		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		{
+			jobSync.Execute(renderToken, recordedCl);
 		});
 	}
 
-	concurrency::task<FCommandList*> Postprocess(const PostprocessPassDesc& passDesc)
+	concurrency::task<void> Postprocess(RenderJob::Sync& jobSync, const PostprocessPassDesc& passDesc)
 	{
-		size_t colorSourceToken = passDesc.colorSource->GetTransitionToken();
-		size_t colorTargetToken = passDesc.colorTarget->GetTransitionToken();
+		size_t renderToken = jobSync.GetToken();
+		size_t colorSourceTransitionToken = passDesc.colorSource->GetTransitionToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -441,8 +497,8 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "post_process", 0);
 
 			// MSAA resolve
-			passDesc.colorSource->Transition(cmdList, colorSourceToken, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-			passDesc.colorTarget->Transition(cmdList, colorTargetToken, 0, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+			passDesc.colorSource->Transition(cmdList, colorSourceTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_DEST);
 			d3dCmdList->ResolveSubresource(
 				passDesc.colorTarget->m_resource->m_d3dResource,
 				0,
@@ -451,12 +507,17 @@ namespace RenderJob
 				Config::g_backBufferFormat);
 
 			return cmdList;
+
+		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		{
+			jobSync.Execute(renderToken, recordedCl);
 		});
 	}
 
-	concurrency::task<FCommandList*> UI(const UIPassDesc& passDesc)
+	concurrency::task<void> UI(RenderJob::Sync& jobSync, const UIPassDesc& passDesc)
 	{
-		size_t colorTargetToken = passDesc.colorTarget->GetTransitionToken();
+		size_t renderToken = jobSync.GetToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -652,7 +713,7 @@ namespace RenderJob
 			const float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
 			d3dCmdList->OMSetBlendFactor(blendFactor);
 
-			passDesc.colorTarget->Transition(cmdList, colorTargetToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RenderBackend12::GetBackBuffer()->m_renderTextureIndices[0]) };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
@@ -708,12 +769,17 @@ namespace RenderJob
 			}
 
 			return cmdList;
+
+		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		{
+			jobSync.Execute(renderToken, recordedCl);
 		});
 	}
 
-	concurrency::task<FCommandList*> Present(const PresentDesc& passDesc)
+	concurrency::task<void> Present(RenderJob::Sync& jobSync, const PresentDesc& passDesc)
 	{
-		size_t backBufferToken = passDesc.backBuffer->GetTransitionToken();
+		size_t renderToken = jobSync.GetToken();
+		size_t transitionToken = passDesc.backBuffer->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -721,9 +787,13 @@ namespace RenderJob
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			cmdList->SetName(L"present_job");
 
-			passDesc.backBuffer->Transition(cmdList, backBufferToken, 0, D3D12_RESOURCE_STATE_PRESENT);
+			passDesc.backBuffer->Transition(cmdList, transitionToken, 0, D3D12_RESOURCE_STATE_PRESENT);
 
 			return cmdList;
+
+		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		{
+			jobSync.Execute(renderToken, recordedCl);
 		});
 	}
 }
@@ -736,7 +806,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Config::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
 
-	std::vector<concurrency::task<FCommandList*>> renderJobs;
+	std::vector<concurrency::task<void>> renderJobs;
+	static RenderJob::Sync jobSync;
 
 	// Base pass
 	RenderJob::BasePassDesc baseDesc
@@ -750,8 +821,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		.view = GetView()
 	};
 
-	renderJobs.push_back(RenderJob::BasePass(baseDesc));
-	renderJobs.push_back(RenderJob::BackgroundPass(baseDesc));
+	renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
+	renderJobs.push_back(RenderJob::BackgroundPass(jobSync, baseDesc));
 
 	// Post Process
 	RenderJob::PostprocessPassDesc postDesc
@@ -763,7 +834,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		.view = GetView()
 	};
 
-	renderJobs.push_back(RenderJob::Postprocess(postDesc));
+	renderJobs.push_back(RenderJob::Postprocess(jobSync, postDesc));
 
 
 	// UI
@@ -771,24 +842,16 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
-		renderJobs.push_back(RenderJob::UI(uiDesc));
+		renderJobs.push_back(RenderJob::UI(jobSync, uiDesc));
 	}
 
 	// Present
 	RenderJob::PresentDesc presentDesc = { RenderBackend12::GetBackBuffer() };
-	renderJobs.push_back(RenderJob::Present(presentDesc));
+	renderJobs.push_back(RenderJob::Present(jobSync, presentDesc));
 	
 	// Wait for all render jobs to finish
 	auto joinTask = concurrency::when_all(std::begin(renderJobs), std::end(renderJobs));
 	joinTask.wait();
-
-	std::vector<FCommandList*> recordedCommandLists;
-	for (auto& job : renderJobs)
-	{
-		recordedCommandLists.push_back(job.get());
-	}
-
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, recordedCommandLists);
 
 	RenderBackend12::PresentDisplay();
 }

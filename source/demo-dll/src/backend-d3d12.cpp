@@ -37,7 +37,6 @@ class FBindlessIndexPool;
 
 namespace
 {
-	D3DDevice_t* GetDevice();
 	D3DCommandQueue_t* GetGraphicsQueue();
 	D3DCommandQueue_t* GetComputeQueue();
 	D3DCommandQueue_t* GetCopyQueue();
@@ -1444,11 +1443,6 @@ namespace RenderBackend12
 
 namespace 
 {
-	D3DDevice_t* GetDevice()
-	{
-		return RenderBackend12::s_d3dDevice.get();
-	}
-
 	D3DCommandQueue_t* GetGraphicsQueue()
 	{
 		return RenderBackend12::s_graphicsQueue.get();
@@ -1723,6 +1717,12 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 
 	return true;
 }
+
+D3DDevice_t* RenderBackend12::GetDevice()
+{
+	return RenderBackend12::s_d3dDevice.get();
+}
+
 void RenderBackend12::FlushGPU()
 {
 	SCOPED_CPU_EVENT("flush_gpu", PIX_COLOR_DEFAULT);

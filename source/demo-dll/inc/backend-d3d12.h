@@ -132,7 +132,7 @@ struct FResource
 	std::wstring m_name;
 	concurrency::concurrent_vector<D3D12_RESOURCE_STATES> m_subresourceStates;
 	winrt::com_ptr<D3DFence_t> m_transitionFence;
-	size_t m_transitionFenceValue;
+	std::atomic<size_t> m_transitionFenceValue;
 
 	FResource();
 	~FResource();
@@ -265,6 +265,7 @@ namespace RenderBackend12
 {
 	bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY);
 	void Teardown();
+	D3DDevice_t* GetDevice();
 	void FlushGPU();
 
 	// Command Lists
