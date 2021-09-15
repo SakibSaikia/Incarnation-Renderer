@@ -13,7 +13,7 @@ namespace RenderJob
 	struct Sync
 	{
 		winrt::com_ptr<D3DFence_t> m_fence;
-		std::atomic<size_t> m_fenceValue;
+		size_t m_fenceValue;
 		std::mutex m_mutex;
 
 		Sync() : m_fenceValue{ 0 }

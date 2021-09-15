@@ -132,7 +132,7 @@ struct FResource
 	std::wstring m_name;
 	concurrency::concurrent_vector<D3D12_RESOURCE_STATES> m_subresourceStates;
 	winrt::com_ptr<D3DFence_t> m_transitionFence;
-	std::atomic<size_t> m_transitionFenceValue;
+	size_t m_transitionFenceValue;
 
 	FResource();
 	~FResource();
