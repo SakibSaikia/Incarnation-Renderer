@@ -177,9 +177,15 @@ namespace Demo
 	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
+	bool s_pauseRendering = false;
 
 	std::vector<std::wstring> s_modelList;
 	std::vector<std::wstring> s_hdriList;
+
+	bool IsRenderingPaused()
+	{
+		return s_pauseRendering;
+	}
 
 	const FScene* GetScene()
 	{
@@ -198,6 +204,24 @@ namespace Demo
 
 	void UpdateUI(float deltaTime);
 }
+
+class ScopedPauseRendering
+{
+public:
+	ScopedPauseRendering()
+	{
+		Demo::s_pauseRendering = true;
+		RenderBackend12::FlushGPU();
+	}
+
+	~ScopedPauseRendering()
+	{
+		RenderBackend12::FlushGPU();
+		Demo::s_pauseRendering = false;
+	}
+};
+
+#define SCOPED_PAUSE_RENDERING ScopedPauseRendering temp
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
 {
@@ -244,9 +268,8 @@ void Demo::Tick(float deltaTime)
 	if (s_scene.m_modelFilename.empty() ||
 		s_scene.m_modelFilename != Config::g_modelFilename)
 	{
-		RenderBackend12::FlushGPU();
+		SCOPED_PAUSE_RENDERING;
 		s_scene.ReloadModel(Config::g_modelFilename);
-		RenderBackend12::FlushGPU();
 		s_view.Reset(&s_scene);
 	}
 
@@ -254,9 +277,8 @@ void Demo::Tick(float deltaTime)
 	if (s_scene.m_environmentFilename.empty() ||
 		s_scene.m_environmentFilename != Config::g_environmentFilename)
 	{
-		RenderBackend12::FlushGPU();
+		SCOPED_PAUSE_RENDERING;
 		s_scene.ReloadEnvironment(Config::g_environmentFilename);
-		RenderBackend12::FlushGPU();
 	}
 
 	// Tick components
@@ -653,6 +675,11 @@ void FScene::ReloadModel(const std::wstring& filename)
 	delete[] m_scratchNormalBuffer;
 	delete[] m_scratchTangentBuffer;
 	delete[] m_scratchBitangentBuffer;
+
+	// Wait for all loading jobs to finish
+	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
+	joinTask.wait();
+	m_loadingJobs.clear();
 }
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
@@ -1181,7 +1208,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Copy back normal texture and compress
 	auto normalmapReadbackContext = std::make_shared<FResourceReadbackContext>(normalmapFilterUav->m_resource);
 	FFenceMarker normalmapStageCompleteMarker = normalmapReadbackContext->StageSubresources(normalmapFilterUav->m_resource, fenceMarker);
-	concurrency::create_task([normalmapStageCompleteMarker, this]()
+	auto normalmapProcessingJob = concurrency::create_task([normalmapStageCompleteMarker, this]()
 	{
 		normalmapStageCompleteMarker.BlockingWait();
 	}).then([
@@ -1201,7 +1228,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Copy back metallic-roughness texture and compress
 	auto metallicRoughnessReadbackContext = std::make_shared<FResourceReadbackContext>(metallicRoughnessFilterUav->m_resource);
 	FFenceMarker metallicRoughnessStageCompleteMarker = metallicRoughnessReadbackContext->StageSubresources(metallicRoughnessFilterUav->m_resource, fenceMarker);
-	concurrency::create_task([metallicRoughnessStageCompleteMarker, this]()
+	auto metallicRoughnessProcessingJob = concurrency::create_task([metallicRoughnessStageCompleteMarker, this]()
 	{
 		metallicRoughnessStageCompleteMarker.BlockingWait();
 	}).then([
@@ -1217,6 +1244,9 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 		{
 			ProcessReadbackTexture(metallicRoughnessReadbackContext.get(), filename, width, height, mipCount, compressionFmt, bpp);
 		});
+
+	m_loadingJobs.push_back(normalmapProcessingJob);
+	m_loadingJobs.push_back(metallicRoughnessProcessingJob);
 
 	return std::make_pair(normalmapSrvIndex, metalRoughnessSrvIndex);
 }

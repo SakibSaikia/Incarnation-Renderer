@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SimpleMath.h>
+#include <ppltasks.h>
 using namespace DirectX::SimpleMath;
 
 namespace tinygltf
@@ -116,6 +117,8 @@ private:
 	size_t m_scratchNormalBufferOffset;
 	size_t m_scratchTangentBufferOffset;
 	size_t m_scratchBitangentBufferOffset;
+
+	std::vector<concurrency::task<void>> m_loadingJobs;
 };
 
 struct FView
@@ -138,6 +141,7 @@ private:
 
 namespace Demo
 {
+	bool IsRenderingPaused();
 	const FScene* GetScene();
 	const FView* GetView();
 	uint32_t GetEnvBrdfSrvIndex();
