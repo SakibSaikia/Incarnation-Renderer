@@ -494,7 +494,39 @@ bool LoadImageCallback(
 	else
 	{
 		// Initialize image data using built-in loader
-		return tinygltf::LoadImageData(image, image_idx, err, warn, req_width, req_height, bytes, size, user_data);
+		bool ok = tinygltf::LoadImageData(image, image_idx, err, warn, req_width, req_height, bytes, size, user_data);
+		if (ok)
+		{
+			DebugAssert(image->pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE);
+			size_t bpp = (image->bits * 4) / 8;
+			size_t rowPitch = bpp * image->width;
+
+			// If the image has less than 4 components, pad in the remaining channels.
+			if (image->component < 4)
+			{
+				std::vector<uint8_t> originalImageData{ image->image };
+				size_t originalBpp = (image->bits * image->component) / 8;
+				size_t originalRowPitch = originalBpp * image->width;
+
+				image->image.resize(rowPitch * image->height);
+				for (int row = 0; row < image->height; ++row)
+				{
+					for (int col = 0; col < image->width; ++col)
+					{
+						const size_t srcPixelOffset = row * originalRowPitch + col * originalBpp;
+						const size_t destPixelOffset = row * rowPitch + col * bpp;
+						image->image[destPixelOffset + 0] = originalImageData[srcPixelOffset + 0];
+						image->image[destPixelOffset + 1] = image->component > 1 ? originalImageData[srcPixelOffset + 1] : 0;
+						image->image[destPixelOffset + 2] = image->component > 2 ? originalImageData[srcPixelOffset + 2] : 0;
+						image->image[destPixelOffset + 3] = image->component > 3 ? originalImageData[srcPixelOffset + 3] : 255;
+					}
+				}
+
+				image->component = 4;
+			}
+		}
+
+		return ok;
 	}
 }
 
