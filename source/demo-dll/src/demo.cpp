@@ -598,6 +598,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	LoadMeshBuffers(model);
 	LoadMeshBufferViews(model);
 	LoadMeshAccessors(model);
+	LoadMaterials(model);
 	m_entities.Resize(model.meshes.size());
 	
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
@@ -769,7 +770,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		}
 
 		// Material
-		outPrimitive.m_material = LoadMaterial(model, primitive.material);
+		outPrimitive.m_materialIndex = primitive.material;
 
 		// Bounds
 		DirectX::BoundingBox primitiveBounds = CalcBounds(posIt->second);
@@ -863,6 +864,32 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
+void FScene::LoadMaterials(const tinygltf::Model& model)
+{
+	SCOPED_CPU_EVENT("load_materials", PIX_COLOR_DEFAULT);
+
+	// Load material and initialize CPU-side copy
+	std::vector<FMaterial> materials(model.materials.size());
+	for (int i = 0; i < model.materials.size(); ++i)
+	{
+		materials[i] = LoadMaterial(model, i);
+	}
+
+	const size_t bufferSize = materials.size() * sizeof(FMaterial);
+	FResourceUploadContext uploader{ bufferSize };
+
+	m_packedMaterials = RenderBackend12::CreateBindlessBuffer(
+		L"scene_materials",
+		bufferSize,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		(const uint8_t*)materials.data(),
+		&uploader);
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+}
+
 FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialIndex)
 {
 	SCOPED_CPU_EVENT("load_material", PIX_COLOR_DEFAULT);
@@ -873,7 +900,6 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 	DebugAssert(material.occlusionTexture.index == -1 || (material.occlusionTexture.index != material.pbrMetallicRoughness.metallicRoughnessTexture.index), "Not supported");
 
 	FMaterial mat = {};
-	mat.m_materialName = material.name;
 	mat.m_emissiveFactor = Vector3{ (float)material.emissiveFactor[0], (float)material.emissiveFactor[1], (float)material.emissiveFactor[2] };
 	mat.m_baseColorFactor = Vector3{ (float)material.pbrMetallicRoughness.baseColorFactor[0], (float)material.pbrMetallicRoughness.baseColorFactor[1], (float)material.pbrMetallicRoughness.baseColorFactor[2] };
 	mat.m_metallicFactor = (float)material.pbrMetallicRoughness.metallicFactor;
@@ -1299,6 +1325,11 @@ void FScene::Clear()
 {
 	m_cameras.clear();
 	m_entities.Clear();
+	m_meshBuffers.clear();
+
+	m_packedMeshBufferViews.reset(nullptr);
+	m_packedMeshAccessors.reset(nullptr);
+	m_packedMaterials.reset(nullptr);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------

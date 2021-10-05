@@ -115,8 +115,8 @@ namespace RenderJob
 				Matrix sceneRotation;
 				int sceneMeshAccessorsIndex;
 				int sceneMeshBufferViewsIndex;
+				int sceneMaterialBufferIndex;
 				int envBrdfTextureIndex;
-				int _pad0;
 				FLightProbe sceneProbeData;
 			};
 
@@ -130,11 +130,12 @@ namespace RenderJob
 					cbDest->sceneRotation = scene->m_rootTransform;
 					cbDest->sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
 					cbDest->sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
+					cbDest->sceneMaterialBufferIndex = scene->m_packedMaterials->m_srvIndex;
 					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
 					cbDest->sceneProbeData = scene->m_globalLightProbe;
 				});
 
-			d3dCmdList->SetGraphicsRootConstantBufferView(3, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// View constant buffer
 			struct ViewCbLayout
@@ -158,7 +159,7 @@ namespace RenderJob
 					cbDest->exposure = Config::g_exposure;
 				});
 
-			d3dCmdList->SetGraphicsRootConstantBufferView(2, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			D3DDescriptorHeap_t* descriptorHeaps[] = 
 			{ 
@@ -166,10 +167,10 @@ namespace RenderJob
 				RenderBackend12::GetBindlessSamplerHeap() 
 			};
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
-			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(7, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 0));
+			d3dCmdList->SetGraphicsRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 0));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -273,6 +274,7 @@ namespace RenderJob
 						int m_uvAccessor;
 						int m_normalAccessor;
 						int m_tangentAccessor;
+						int m_materialIndex;
 					} primCb =
 					{
 						passDesc.scene->m_entities.m_transformList[meshIndex],
@@ -280,56 +282,11 @@ namespace RenderJob
 						primitive.m_positionAccessor,
 						primitive.m_uvAccessor,
 						primitive.m_normalAccessor,
-						primitive.m_tangentAccessor
+						primitive.m_tangentAccessor,
+						primitive.m_materialIndex
 					};
 
 					d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(PrimitiveCbLayout) / 4, &primCb, 0);
-
-					// Material constants
-					struct MaterialCbLayout
-					{
-						Vector3 emissiveFactor;
-						float metallicFactor;
-						Vector3 baseColorFactor;
-						float roughnessFactor;
-						float aoStrength;
-						int emissiveTextureIndex;
-						int baseColorTextureIndex;
-						int metallicRoughnessTextureIndex;
-						int normalTextureIndex;
-						int aoTextureIndex;
-						int emissiveSamplerIndex;
-						int baseColorSamplerIndex;
-						int metallicRoughnessSamplerIndex;
-						int normalSamplerIndex;
-						int aoSamplerIndex;
-					};
-
-					std::unique_ptr<FTransientBuffer> materialCb = RenderBackend12::CreateTransientBuffer(
-						L"material_cb",
-						sizeof(MaterialCbLayout),
-						cmdList,
-						[mat = &primitive.m_material](uint8_t* pDest)
-					{
-						auto cbDest = reinterpret_cast<MaterialCbLayout*>(pDest);
-						cbDest->emissiveFactor = mat->m_emissiveFactor;
-						cbDest->metallicFactor = mat->m_metallicFactor;
-						cbDest->baseColorFactor = mat->m_baseColorFactor;
-						cbDest->roughnessFactor = mat->m_roughnessFactor;
-						cbDest->aoStrength = mat->m_aoStrength;
-						cbDest->emissiveTextureIndex = mat->m_emissiveTextureIndex;
-						cbDest->baseColorTextureIndex = mat->m_baseColorTextureIndex;
-						cbDest->metallicRoughnessTextureIndex = mat->m_metallicRoughnessTextureIndex;
-						cbDest->normalTextureIndex = mat->m_normalTextureIndex;
-						cbDest->aoTextureIndex = mat->m_aoTextureIndex;
-						cbDest->emissiveSamplerIndex = mat->m_emissiveSamplerIndex;
-						cbDest->baseColorSamplerIndex = mat->m_baseColorSamplerIndex;
-						cbDest->metallicRoughnessSamplerIndex = mat->m_metallicRoughnessSamplerIndex;
-						cbDest->normalSamplerIndex = mat->m_normalSamplerIndex;
-						cbDest->aoSamplerIndex = mat->m_aoSamplerIndex;
-					});
-
-					d3dCmdList->SetGraphicsRootConstantBufferView(1, materialCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 					d3dCmdList->DrawInstanced(primitive.m_indexCount, 1, 0, 0);
 				}

@@ -1,8 +1,11 @@
-#ifdef __HLSL
+#ifndef __cplusplus
 	#define uint32_t	uint
 	#define Vector3		float3
 	#define Vector4		float4
 	#define Matrix		float4x4
+#else
+	#include <SimpleMath.h>
+	using namespace DirectX::SimpleMath;
 #endif
 
 
@@ -22,11 +25,32 @@ struct FMeshAccessor
 	uint32_t m_byteStride;
 };
 
-#ifdef __HLSL
+struct FMaterial
+{
+	Vector3 m_emissiveFactor;
+	Vector3 m_baseColorFactor;
+	float m_metallicFactor;
+	float m_roughnessFactor;
+	float m_aoStrength;
+
+	int m_emissiveTextureIndex;
+	int m_baseColorTextureIndex;
+	int m_metallicRoughnessTextureIndex;
+	int m_normalTextureIndex;
+	int m_aoTextureIndex;
+
+	int m_emissiveSamplerIndex;
+	int m_baseColorSamplerIndex;
+	int m_metallicRoughnessSamplerIndex;
+	int m_normalSamplerIndex;
+	int m_aoSamplerIndex;
+};
+
+#ifndef __cplusplus
 
 Texture2D g_bindless2DTextures[] : register(t0, space0);
-ByteAddressBuffer g_bindlessBuffers[] : register(t1, space0);
-TextureCube g_bindlessCubeTextures[] : register(t2, space1);
+ByteAddressBuffer g_bindlessBuffers[] : register(t1, space1);
+TextureCube g_bindlessCubeTextures[] : register(t2, space2);
 SamplerState g_bindlessSamplers[] : register(s0, space0);
 
 namespace MeshMaterial
@@ -140,6 +164,11 @@ namespace MeshMaterial
 			default:
 				return 0.f.xx;
 		}
+	}
+
+	FMaterial GetMaterial(int materialIndex, int materialBufferIndex)
+	{
+		return g_bindlessBuffers[materialBufferIndex].Load<FMaterial>(materialIndex * sizeof(FMaterial));
 	}
 }
 #endif // __HLSL

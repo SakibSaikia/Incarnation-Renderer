@@ -14,28 +14,6 @@ namespace tinygltf
 
 class FController;
 
-struct FMaterial
-{
-	std::string m_materialName;
-	Vector3 m_emissiveFactor;
-	Vector3 m_baseColorFactor;
-	float m_metallicFactor;
-	float m_roughnessFactor;
-	float m_aoStrength;
-
-	int m_emissiveTextureIndex;
-	int m_baseColorTextureIndex;
-	int m_metallicRoughnessTextureIndex;
-	int m_normalTextureIndex;
-	int m_aoTextureIndex;
-
-	int m_emissiveSamplerIndex;
-	int m_baseColorSamplerIndex;
-	int m_metallicRoughnessSamplerIndex;
-	int m_normalSamplerIndex;
-	int m_aoSamplerIndex;
-};
-
 // Corresponds to GLTF Primitive
 struct FMeshPrimitive
 {
@@ -46,7 +24,7 @@ struct FMeshPrimitive
 	int m_tangentAccessor;
 	size_t m_indexCount;
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
-	FMaterial m_material;
+	int m_materialIndex;
 };
 
 // Corresponds to GLTF Mesh
@@ -114,6 +92,7 @@ struct FScene
 	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
+	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Image based lighting
@@ -126,6 +105,7 @@ private:
 	void LoadMeshBuffers(const tinygltf::Model& model);
 	void LoadMeshBufferViews(const tinygltf::Model& model);
 	void LoadMeshAccessors(const tinygltf::Model& model);
+	void LoadMaterials(const tinygltf::Model& model);
 	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN, const DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN);
 	std::pair<int, int> PrefilterNormalRoughnessTextures(const tinygltf::Image& normalmap, const tinygltf::Image& metallicRoughnessmap);

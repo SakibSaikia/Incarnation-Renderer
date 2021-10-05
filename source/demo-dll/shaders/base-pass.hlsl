@@ -3,13 +3,12 @@
 #include "mesh-material.h"
 
 #define rootsig \
-    "RootConstants(b0, num32BitConstants=21, visibility = SHADER_VISIBILITY_VERTEX)," \
-    "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_PIXEL"), \
+    "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_ALL)," \
+    "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
-    "CBV(b3, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
-    "DescriptorTable(SRV(t1, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_VERTEX), " \
-    "DescriptorTable(SRV(t2, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
+    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), " \
+    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
 	"DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16), visibility = SHADER_VISIBILITY_PIXEL), " \
 	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
 
@@ -24,8 +23,8 @@ struct FrameCbLayout
 	float4x4 sceneRotation;
 	int sceneMeshAccessorsIndex;
 	int sceneMeshBufferViewsIndex;
+	int sceneMaterialBufferIndex;
 	int envBrdfTextureIndex;
-	int _pad0;
 	LightProbeData sceneLightProbe;
 };
 
@@ -45,32 +44,13 @@ struct PrimitiveCbLayout
 	int uvAccessor;
 	int normalAccessor;
 	int tangentAccessor;
-};
-
-struct MaterialCbLayout
-{
-	float3 emissiveFactor;
-	float metallicFactor;
-	float3 baseColorFactor;
-	float roughnessFactor;
-	float occlusionStrength;
-	int emissiveTextureIndex;
-	int baseColorTextureIndex;
-	int metallicRoughnessTextureIndex;
-	int normalTextureIndex;
-	int aoTextureIndex;
-	int emissiveSamplerIndex;
-	int baseColorSamplerIndex;
-	int metallicRoughnessSamplerIndex;
-	int normalSamplerIndex;
-	int aoSamplerIndex;
+	int materialIndex;
 };
 
 SamplerState g_trilinearSampler : register(s1, space1);
 ConstantBuffer<PrimitiveCbLayout> g_primitiveConstants : register(b0);
-ConstantBuffer<MaterialCbLayout> g_materialConstants : register(b1);
-ConstantBuffer<ViewCbLayout> g_viewConstants : register(b2);
-ConstantBuffer<FrameCbLayout> g_frameConstants : register(b3);
+ConstantBuffer<ViewCbLayout> g_viewConstants : register(b1);
+ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
 
 struct vs_to_ps
 {
@@ -119,8 +99,10 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
+	FMaterial mat = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
+
 	// Alpha clip
-	float alpha = g_materialConstants.baseColorTextureIndex != -1 ? g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.baseColorSamplerIndex], input.uv).a : 1.f;
+	float alpha = mat.m_baseColorTextureIndex != -1 ? g_bindless2DTextures[mat.m_baseColorTextureIndex].Sample(g_bindlessSamplers[mat.m_baseColorSamplerIndex], input.uv).a : 1.f;
 	clip(alpha - 0.5);
 
 	// Tangent space transform
@@ -129,38 +111,38 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 N = normalize(input.normal.xyz);
 	float3x3 TBN = float3x3(T, B, N);
 
-	float3 emissive = g_materialConstants.emissiveTextureIndex != -1 ?
-		g_materialConstants.emissiveFactor * g_bindless2DTextures[g_materialConstants.emissiveTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.emissiveSamplerIndex], input.uv).rgb :
-		g_materialConstants.emissiveFactor;
+	float3 emissive = mat.m_emissiveTextureIndex != -1 ?
+		mat.m_emissiveFactor * g_bindless2DTextures[mat.m_emissiveTextureIndex].Sample(g_bindlessSamplers[mat.m_emissiveSamplerIndex], input.uv).rgb :
+		mat.m_emissiveFactor;
 
 #if LIGHTING_ONLY
 	float3 baseColor = 0.5.xxx;
 #else
-	float3 baseColor = g_materialConstants.baseColorTextureIndex != -1 ?
-		g_materialConstants.baseColorFactor * g_bindless2DTextures[g_materialConstants.baseColorTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.baseColorSamplerIndex], input.uv).rgb :
-		g_materialConstants.baseColorFactor;
+	float3 baseColor = mat.m_baseColorTextureIndex != -1 ?
+		mat.m_baseColorFactor * g_bindless2DTextures[mat.m_baseColorTextureIndex].Sample(g_bindlessSamplers[mat.m_baseColorSamplerIndex], input.uv).rgb :
+		mat.m_baseColorFactor;
 #endif
 
-	if (g_materialConstants.normalTextureIndex != -1)
+	if (mat.m_normalTextureIndex != -1)
 	{
-		float2 normalXY = g_bindless2DTextures[g_materialConstants.normalTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.normalSamplerIndex], input.uv).rg;
+		float2 normalXY = g_bindless2DTextures[mat.m_normalTextureIndex].Sample(g_bindlessSamplers[mat.m_normalSamplerIndex], input.uv).rg;
 		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
 		N = normalize(mul(float3(normalXY, normalZ), TBN));
 	}
 
 	// Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
 	// use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
-	float2 metallicRoughnessMap = g_materialConstants.metallicRoughnessTextureIndex != -1 ?
-		g_bindless2DTextures[g_materialConstants.metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.metallicRoughnessSamplerIndex], input.uv).rg :
+	float2 metallicRoughnessMap = mat.m_metallicRoughnessTextureIndex != -1 ?
+		g_bindless2DTextures[mat.m_metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[mat.m_metallicRoughnessSamplerIndex], input.uv).rg :
 		1.f.xx;
 
-	float ao = g_materialConstants.aoTextureIndex != -1 ?
-		g_bindless2DTextures[g_materialConstants.aoTextureIndex].Sample(g_bindlessSamplers[g_materialConstants.aoSamplerIndex], input.uv).r :
+	float ao = mat.m_aoTextureIndex != -1 ?
+		g_bindless2DTextures[mat.m_aoTextureIndex].Sample(g_bindlessSamplers[mat.m_aoSamplerIndex], input.uv).r :
 		1.f;
 
-	float aoStrength = g_materialConstants.occlusionStrength;
-	float metallic = g_materialConstants.metallicFactor * metallicRoughnessMap.x;
-	float perceptualRoughness = g_materialConstants.roughnessFactor * metallicRoughnessMap.y;
+	float aoStrength = mat.m_aoStrength;
+	float metallic = mat.m_metallicFactor * metallicRoughnessMap.x;
+	float perceptualRoughness = mat.m_roughnessFactor * metallicRoughnessMap.y;
 
 	float3 L = normalize(float3(1, 1, -1));
 	float3 H = normalize(N + L);
