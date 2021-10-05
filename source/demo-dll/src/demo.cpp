@@ -568,44 +568,38 @@ void FScene::ReloadModel(const std::wstring& filename)
 	std::string errors, warnings;
 	tinygltf::Model model;
 	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, modelFilepath);
-
-	if (!warnings.empty())
+	if (!ok)
 	{
-		printf("Warn: %s\n", warnings.c_str());
+		if (!warnings.empty())
+		{
+			printf("Warn: %s\n", warnings.c_str());
+		}
+
+		if (!errors.empty())
+		{
+			printf("Error: %s\n", errors.c_str());
+			DebugAssert(ok, "Failed to parse glTF");
+		}
 	}
 
-	if (!errors.empty())
-	{
-		printf("Error: %s\n", errors.c_str());
-	}
-
-	DebugAssert(ok, "Failed to parse glTF");
 	m_modelFilename = filename;
 
 	// Clear previous scene
 	Clear();
 
-	// Scratch data 
-	size_t maxSize = 0;
-	for (const tinygltf::Buffer& buf : model.buffers)
+	// Generate tangent, bi-tangents, etc. if required
+	bool requiresResave = false;
+	for( int meshIndex = 0; meshIndex < model.meshes.size(); ++meshIndex )
 	{
-		maxSize += buf.data.size();
+		requiresResave |= MeshUtils::CleanupMesh(meshIndex, model);
 	}
 
-	m_scratchIndexBuffer = new uint8_t[maxSize];
-	m_scratchPositionBuffer = new uint8_t[maxSize];
-	m_scratchUvBuffer = new uint8_t[maxSize];
-	m_scratchNormalBuffer = new uint8_t[maxSize];
-	m_scratchTangentBuffer = new uint8_t[maxSize];
-	m_scratchBitangentBuffer = new uint8_t[maxSize];
-
-	m_scratchIndexBufferOffset = 0;
-	m_scratchPositionBufferOffset = 0;
-	m_scratchUvBufferOffset = 0;
-	m_scratchNormalBufferOffset = 0;
-	m_scratchTangentBufferOffset = 0;
-	m_scratchBitangentBufferOffset = 0;
-
+	// Load mesh data
+	LoadMeshBuffers(model);
+	LoadMeshBufferViews(model);
+	LoadMeshAccessors(model);
+	m_entities.Resize(model.meshes.size());
+	
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
 	Matrix RH2LH = Matrix
 	{
@@ -616,12 +610,11 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// Parse GLTF and initialize scene
 	// See https://github.com/KhronosGroup/glTF-Tutorials/blob/master/gltfTutorial/gltfTutorial_003_MinimalGltfFile.md
-	bool requiresResave = false;
 	for (tinygltf::Scene& scene : model.scenes)
 	{
 		for (const int nodeIndex : scene.nodes)
 		{
-			requiresResave |= LoadNode(nodeIndex, model, RH2LH);
+			LoadNode(nodeIndex, model, RH2LH);
 		}
 	}
 
@@ -634,10 +627,10 @@ void FScene::ReloadModel(const std::wstring& filename)
 	}
 
 	// Scene bounds
-	std::vector<DirectX::BoundingBox> meshWorldBounds(m_meshBounds.size());
-	for (int i = 0; i < m_meshBounds.size(); ++i)
+	std::vector<DirectX::BoundingBox> meshWorldBounds(m_entities.m_objectSpaceBoundsList.size());
+	for (int i = 0; i < meshWorldBounds.size(); ++i)
 	{
-		m_meshBounds[i].Transform(meshWorldBounds[i], m_meshTransforms[i]);
+		m_entities.m_objectSpaceBoundsList[i].Transform(meshWorldBounds[i], m_entities.m_transformList[i]);
 	}
 
 	m_sceneBounds = meshWorldBounds[0];
@@ -645,68 +638,6 @@ void FScene::ReloadModel(const std::wstring& filename)
 	{
 		DirectX::BoundingBox::CreateMerged(m_sceneBounds, m_sceneBounds, bb);
 	}
-
-	// Create and upload scene buffers
-	// @TODO - Fix arbitrary multiplier
-	FResourceUploadContext uploader{ 3 * maxSize }; 
-	m_meshIndexBuffer = RenderBackend12::CreateBindlessBuffer(
-		L"scene_index_buffer",
-		m_scratchIndexBufferOffset,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-		m_scratchIndexBuffer,
-		&uploader);
-
-	m_meshPositionBuffer = RenderBackend12::CreateBindlessBuffer(
-		L"scene_position_buffer",
-		m_scratchPositionBufferOffset,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-		m_scratchPositionBuffer,
-		&uploader);
-
-	m_meshUvBuffer = RenderBackend12::CreateBindlessBuffer(
-		L"scene_uv_buffer",
-		m_scratchUvBufferOffset,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-		m_scratchUvBuffer,
-		&uploader);
-
-	m_meshNormalBuffer = RenderBackend12::CreateBindlessBuffer(
-		L"scene_normal_buffer",
-		m_scratchNormalBufferOffset,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-		m_scratchNormalBuffer,
-		&uploader);
-
-	if (m_scratchTangentBufferOffset != 0)
-	{
-		m_meshTangentBuffer = RenderBackend12::CreateBindlessBuffer(
-			L"scene_tangent_buffer",
-			m_scratchTangentBufferOffset,
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-			m_scratchTangentBuffer,
-			&uploader);
-	}
-
-	if (m_scratchBitangentBufferOffset != 0)
-	{
-		m_meshBitangentBuffer = RenderBackend12::CreateBindlessBuffer(
-			L"scene_bitangent_buffer",
-			m_scratchBitangentBufferOffset,
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-			m_scratchBitangentBuffer,
-			&uploader);
-	}
-
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-	uploader.SubmitUploads(cmdList);
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-	delete[] m_scratchIndexBuffer;
-	delete[] m_scratchPositionBuffer;
-	delete[] m_scratchUvBuffer;
-	delete[] m_scratchNormalBuffer;
-	delete[] m_scratchTangentBuffer;
-	delete[] m_scratchBitangentBuffer;
 
 	// Wait for all loading jobs to finish
 	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
@@ -720,9 +651,8 @@ void FScene::ReloadEnvironment(const std::wstring& filename)
 	m_environmentFilename = filename;
 }
 
-bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
+void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
 {
-	bool requiresResave = false;
 	const tinygltf::Node& node = model.nodes[nodeIndex];
 	
 	// Transform (GLTF uses column-major storage)
@@ -753,103 +683,18 @@ bool FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 
 	if (node.mesh != -1)
 	{
-		requiresResave |= MeshUtils::CleanupMesh(node.mesh, model);
 		LoadMesh(node.mesh, model, nodeTransform * parentTransform);
 	}
 
 	for (const int childIndex : node.children)
 	{
-		requiresResave |= LoadNode(childIndex, model, nodeTransform * parentTransform);
+		LoadNode(childIndex, model, nodeTransform * parentTransform);
 	}
-
-	return requiresResave;
 }
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
 {
 	SCOPED_CPU_EVENT("load_mesh", PIX_COLOR_DEFAULT);
-
-	auto CopyIndexData = [&model](const tinygltf::Accessor& accessor, uint8_t* copyDest) -> size_t
-	{
-		size_t bytesCopied = 0;
-		const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
-		size_t dataSize = tinygltf::GetComponentSizeInBytes(accessor.componentType) * tinygltf::GetNumComponentsInType(accessor.type);
-		size_t dataStride = accessor.ByteStride(bufferView);
-
-		const uint8_t* pSrc = &model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
-		uint32_t* indexDest = (uint32_t*)copyDest;
-
-		if (dataSize == sizeof(uint16_t))
-		{
-			// 16-bit indices
-			auto pSrc = (const uint16_t*)&model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
-			uint32_t* pDest = (uint32_t*)copyDest;
-
-			for (int i = 0; i < accessor.count; ++i)
-			{
-				*(pDest++) = *(pSrc++);
-				bytesCopied += sizeof(uint32_t);
-			}
-		}
-		else
-		{
-			// 32-bit indices
-			DebugAssert(dataSize == sizeof(uint32_t));
-			auto pSrc = (const uint32_t*)&model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
-			uint32_t* pDest = (uint32_t*)copyDest;
-
-			for (int i = 0; i < accessor.count; ++i)
-			{
-				*(pDest++) = *(pSrc++);
-				bytesCopied += sizeof(uint32_t);
-			}
-		}
-
-		return bytesCopied;
-	};
-
-	auto CopyBufferData = [&model](const tinygltf::Accessor& accessor, const uint32_t dataSize, uint8_t* copyDest) -> size_t
-	{
-		size_t bytesCopied = 0;
-		const tinygltf::BufferView& bufferView = model.bufferViews[accessor.bufferView];
-		size_t dataStride = accessor.ByteStride(bufferView);
-
-		const uint8_t* pSrc = &model.buffers[bufferView.buffer].data[bufferView.byteOffset + accessor.byteOffset];
-		for (int i = 0; i < accessor.count; ++i)
-		{
-			memcpy(copyDest + i * dataSize, pSrc + i * dataStride, dataSize);
-			bytesCopied += dataSize;
-		}
-
-		return bytesCopied;
-	};
-
-	auto GenerateAndCopyBitangentData = [&model](const tinygltf::Accessor& normalAccessor, const tinygltf::Accessor& tangentAccessor, const uint32_t dataSize, uint8_t* copyDest) -> size_t
-	{
-		size_t bytesCopied = 0;
-		const tinygltf::BufferView& normalBufferView = model.bufferViews[normalAccessor.bufferView];
-		const tinygltf::BufferView& tangentBufferView = model.bufferViews[tangentAccessor.bufferView];
-
-		DebugAssert(normalAccessor.ByteStride(normalBufferView) == sizeof(Vector3));
-		DebugAssert(tangentAccessor.ByteStride(tangentBufferView) == sizeof(Vector4));
-		const Vector3* pNormal = (Vector3*)&model.buffers[normalBufferView.buffer].data[normalBufferView.byteOffset + normalAccessor.byteOffset];
-		const Vector4* pTangent = (Vector4*)&model.buffers[tangentBufferView.buffer].data[tangentBufferView.byteOffset + tangentAccessor.byteOffset];
-
-		DebugAssert(normalAccessor.count == tangentAccessor.count);
-		size_t numVectors = normalAccessor.count;
-
-		Vector3* pBitangent = (Vector3*)copyDest;
-		for (int i = 0; i < normalAccessor.count; ++i)
-		{
-			*pBitangent = pNormal->Cross(Vector3(pTangent->x, pTangent->y, pTangent->z)) * pTangent->w;
-
-			pNormal++;
-			pTangent++;
-			pBitangent++;
-		}
-
-		return numVectors * sizeof(Vector3);
-	};
 
 	auto CalcBounds = [&model](int positionAccessorIndex) -> DirectX::BoundingBox
 	{
@@ -866,79 +711,156 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		return bb;
 	};
 
-
 	const tinygltf::Mesh& mesh = model.meshes[meshIndex];
+	FMesh& outMesh = m_entities.m_meshList[meshIndex];
+	outMesh.m_name = s2ws(mesh.name);
+	outMesh.m_primitives.resize(mesh.primitives.size());
+
+	DirectX::BoundingBox meshBounds = {};
 
 	// Each primitive is a separate render mesh with its own vertex and index buffers
-	for (const tinygltf::Primitive& primitive : mesh.primitives)
+	for (int primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex)
 	{
-		// Index data (converted to uint32_t)
-		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-		const size_t indexBytesCopied = CopyIndexData(indexAccessor, m_scratchIndexBuffer + m_scratchIndexBufferOffset);
+		const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
+		FMeshPrimitive& outPrimitive = outMesh.m_primitives[primitiveIndex];
 
-		// FLOAT3 position data
+		// Index data
+		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+		outPrimitive.m_indexCount = indexAccessor.count;
+		outPrimitive.m_indexAccessor = primitive.indices;
+
+		// Position data
 		auto posIt = primitive.attributes.find("POSITION");
 		DebugAssert(posIt != primitive.attributes.cend());
-		const tinygltf::Accessor& positionAccessor = model.accessors[posIt->second];
-		const size_t positionSize = tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type);
-		DebugAssert(positionSize == 3 * sizeof(float));
-		const size_t positionBytesCopied = CopyBufferData(positionAccessor, positionSize, m_scratchPositionBuffer + m_scratchPositionBufferOffset);
+		outPrimitive.m_positionAccessor = posIt->second;
 
-		// FLOAT2 UV data
+		// UV data
 		auto uvIt = primitive.attributes.find("TEXCOORD_0");
-		size_t uvSize = 0;
-		size_t uvBytesCopied = 0;
-		if (uvIt != primitive.attributes.cend())
-		{
-			const tinygltf::Accessor& uvAccessor = model.accessors[uvIt->second];
-			uvSize = tinygltf::GetComponentSizeInBytes(uvAccessor.componentType) * tinygltf::GetNumComponentsInType(uvAccessor.type);
-			DebugAssert(uvSize == 2 * sizeof(float));
-			uvBytesCopied = CopyBufferData(uvAccessor, uvSize, m_scratchUvBuffer + m_scratchUvBufferOffset);
-		}
+		outPrimitive.m_uvAccessor = (uvIt != primitive.attributes.cend() ? uvIt->second : -1);
 
-		// FLOAT3 normal data
+		// Normal data
 		auto normalIt = primitive.attributes.find("NORMAL");
-		DebugAssert(normalIt != primitive.attributes.cend());
-		const tinygltf::Accessor& normalAccessor = model.accessors[normalIt->second];
-		const size_t normalSize = tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type);
-		DebugAssert(normalSize == 3 * sizeof(float));
-		const size_t normalBytesCopied = CopyBufferData(normalAccessor, normalSize, m_scratchNormalBuffer + m_scratchNormalBufferOffset);
+		outPrimitive.m_normalAccessor = (normalIt != primitive.attributes.cend() ? normalIt->second : -1);
 
-		// FLOAT3 tangent & bitangent data (OPTIONAL)
-		size_t tangentBytesCopied = 0;
-		size_t bitangentBytesCopied = 0;
+		// Tangent data
 		auto tangentIt = primitive.attributes.find("TANGENT");
-		if (tangentIt != primitive.attributes.cend())
+		outPrimitive.m_tangentAccessor = (tangentIt != primitive.attributes.cend() ? tangentIt->second : -1);
+
+		// Topology
+		switch (primitive.mode)
 		{
-			const tinygltf::Accessor& tangentAccessor = model.accessors[tangentIt->second];
-			const size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
-			DebugAssert(tangentSize == 4 * sizeof(float));
-			tangentBytesCopied = CopyBufferData(tangentAccessor, 3 * sizeof(float), m_scratchTangentBuffer + m_scratchTangentBufferOffset);
-			bitangentBytesCopied = GenerateAndCopyBitangentData(normalAccessor, tangentAccessor, 3 * sizeof(float), m_scratchBitangentBuffer + m_scratchBitangentBufferOffset);
+		case TINYGLTF_MODE_POINTS:
+			outPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+			break;
+		case TINYGLTF_MODE_LINE:
+			outPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+			break;
+		case TINYGLTF_MODE_LINE_STRIP:
+			outPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+			break;
+		case TINYGLTF_MODE_TRIANGLES:
+			outPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+			break;
+		case TINYGLTF_MODE_TRIANGLE_STRIP:
+			outPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+			break;
+		default:
+			DebugAssert(false);
 		}
 
-		FRenderMesh newMesh = {};
-		newMesh.m_name = mesh.name;
-		newMesh.m_indexOffset = m_scratchIndexBufferOffset / sizeof(uint32_t);
-		newMesh.m_positionOffset = m_scratchPositionBufferOffset / positionSize;
-		newMesh.m_uvOffset = uvBytesCopied > 0 ? m_scratchUvBufferOffset / uvSize : 0;
-		newMesh.m_normalOffset = m_scratchNormalBufferOffset / normalSize;
-		newMesh.m_tangentOffset = tangentBytesCopied > 0 ? m_scratchTangentBufferOffset / normalSize : 0;
-		newMesh.m_bitangentOffset = bitangentBytesCopied > 0 ? m_scratchBitangentBufferOffset / normalSize : 0;
-		newMesh.m_indexCount = indexAccessor.count;
-		newMesh.m_material = LoadMaterial(model, primitive.material);
-		m_meshGeo.push_back(newMesh);
-		m_meshTransforms.push_back(parentTransform);
+		// Material
+		outPrimitive.m_material = LoadMaterial(model, primitive.material);
 
-		m_scratchIndexBufferOffset += indexBytesCopied;
-		m_scratchPositionBufferOffset += positionBytesCopied;
-		m_scratchUvBufferOffset += uvBytesCopied;
-		m_scratchNormalBufferOffset += normalBytesCopied;
-		m_scratchTangentBufferOffset += tangentBytesCopied;
-		m_scratchBitangentBufferOffset += bitangentBytesCopied;
-
-		m_meshBounds.push_back(CalcBounds(posIt->second));
+		// Bounds
+		DirectX::BoundingBox primitiveBounds = CalcBounds(posIt->second);
+		DirectX::BoundingBox::CreateMerged(meshBounds, meshBounds, primitiveBounds);
 	}
+
+	m_entities.m_transformList[meshIndex] = parentTransform;
+	m_entities.m_objectSpaceBoundsList[meshIndex] = meshBounds;
+}
+
+void FScene::LoadMeshBuffers(const tinygltf::Model& model)
+{
+	size_t uploadSize = 0;
+	for (const tinygltf::Buffer& buffer : model.buffers)
+	{
+		uploadSize += buffer.data.size();
+	}
+
+	FResourceUploadContext uploader{ uploadSize };
+
+	m_meshBuffers.resize(model.buffers.size());
+	for (int bufferIndex = 0; bufferIndex < model.buffers.size(); ++bufferIndex)
+	{
+		std::wstringstream s;
+		s << L"scene_mesh_buffer_" << bufferIndex;
+
+		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBindlessBuffer(
+			s.str(),
+			model.buffers[bufferIndex].data.size(),
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			model.buffers[bufferIndex].data.data(),
+			&uploader);
+	}
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+}
+
+void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
+{
+	// CPU Copy
+	std::vector<FMeshBufferView> views(model.bufferViews.size());
+	for (int viewIndex = 0; viewIndex < model.bufferViews.size(); ++viewIndex)
+	{
+		const int meshBufferIndex = model.bufferViews[viewIndex].buffer;
+		views[viewIndex].m_bufferSrvIndex = m_meshBuffers[meshBufferIndex]->m_srvIndex;
+		views[viewIndex].m_byteLength = model.bufferViews[viewIndex].byteLength;
+		views[viewIndex].m_byteOffset = model.bufferViews[viewIndex].byteOffset;
+	}
+
+	const size_t bufferSize = views.size() * sizeof(FMeshBufferView);
+	FResourceUploadContext uploader{ bufferSize };
+
+	m_packedMeshBufferViews = RenderBackend12::CreateBindlessBuffer(
+		L"scene_mesh_buffer_views",
+		bufferSize,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		(const uint8_t*) views.data(),
+		&uploader);
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+}
+
+void FScene::LoadMeshAccessors(const tinygltf::Model& model)
+{
+	// CPU Copy
+	std::vector<FMeshAccessor> accessors(model.accessors.size());
+	for (int i = 0; i < model.accessors.size(); ++i)
+	{
+		const int bufferViewIndex = model.accessors[i].bufferView;
+		accessors[i].m_bufferViewIndex = bufferViewIndex;
+		accessors[i].m_byteOffset = (uint32_t) model.accessors[i].byteOffset;
+		accessors[i].m_byteStride = model.accessors[i].ByteStride(model.bufferViews[bufferViewIndex]);
+	}
+
+	const size_t bufferSize = accessors.size() * sizeof(FMeshAccessor);
+	FResourceUploadContext uploader{ bufferSize };
+
+	m_packedMeshAccessors = RenderBackend12::CreateBindlessBuffer(
+		L"scene_mesh_accessors",
+		bufferSize,
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		(const uint8_t*) accessors.data(),
+		&uploader);
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
 FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialIndex)
@@ -1376,9 +1298,7 @@ void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Mat
 void FScene::Clear()
 {
 	m_cameras.clear();
-	m_meshGeo.clear();
-	m_meshTransforms.clear();
-	m_meshBounds.clear();
+	m_entities.Clear();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------

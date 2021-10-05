@@ -1,8 +1,9 @@
 #include "pbr.hlsli"
 #include "spherical-harmonics.hlsli"
+#include "mesh-material.h"
 
 #define rootsig \
-    "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_VERTEX)," \
+    "RootConstants(b0, num32BitConstants=21, visibility = SHADER_VISIBILITY_VERTEX)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_PIXEL"), \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
     "CBV(b3, space = 0, visibility = SHADER_VISIBILITY_ALL"), \
@@ -21,12 +22,8 @@ struct LightProbeData
 struct FrameCbLayout
 {
 	float4x4 sceneRotation;
-	int sceneIndexBufferBindlessIndex;
-	int scenePositionBufferBindlessIndex;
-	int sceneUvBufferBindlessIndex;
-	int sceneNormalBufferBindlessIndex;
-	int sceneTangentBufferBindlessIndex;
-	int sceneBitangentBufferBindlessIndex;
+	int sceneMeshAccessorsIndex;
+	int sceneMeshBufferViewsIndex;
 	int envBrdfTextureIndex;
 	int _pad0;
 	LightProbeData sceneLightProbe;
@@ -40,15 +37,14 @@ struct ViewCbLayout
 	float exposure;
 };
 
-struct MeshCbLayout
+struct PrimitiveCbLayout
 {
 	float4x4 localToWorld;
-	uint indexOffset;
-	uint positionOffset;
-	uint uvOffset;
-	uint normalOffset;
-	uint tangentOffset;
-	uint bitangentOffset;
+	int indexAccessor;
+	int positionAccessor;
+	int uvAccessor;
+	int normalAccessor;
+	int tangentAccessor;
 };
 
 struct MaterialCbLayout
@@ -70,15 +66,11 @@ struct MaterialCbLayout
 	int aoSamplerIndex;
 };
 
-SamplerState g_bindlessSamplers[] : register(s0, space0);
 SamplerState g_trilinearSampler : register(s1, space1);
-ConstantBuffer<MeshCbLayout> g_meshConstants : register(b0);
+ConstantBuffer<PrimitiveCbLayout> g_primitiveConstants : register(b0);
 ConstantBuffer<MaterialCbLayout> g_materialConstants : register(b1);
 ConstantBuffer<ViewCbLayout> g_viewConstants : register(b2);
 ConstantBuffer<FrameCbLayout> g_frameConstants : register(b3);
-Texture2D g_bindless2DTextures[] : register(t0, space0);
-ByteAddressBuffer g_bindlessBuffers[] : register(t1, space0);
-TextureCube g_bindlessCubeTextures[] : register(t2, space1);
 
 struct vs_to_ps
 {
@@ -90,40 +82,36 @@ struct vs_to_ps
 	float4 worldPos : INTERPOLATED_WORLD_POS;
 };
 
-vs_to_ps vs_main(uint vertexId : SV_VertexID)
+vs_to_ps vs_main(uint index : SV_VertexID)
 {
 	vs_to_ps o;
 
-	float4x4 localToWorld = mul(g_meshConstants.localToWorld, g_frameConstants.sceneRotation);
+	float4x4 localToWorld = mul(g_primitiveConstants.localToWorld, g_frameConstants.sceneRotation);
 	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
 
-	// size of 4 for 32 bit indices
-	uint index = g_bindlessBuffers[g_frameConstants.sceneIndexBufferBindlessIndex].Load(4*(vertexId + g_meshConstants.indexOffset));
+	// index
+	uint vertIndex = MeshMaterial::GetUint(index, g_primitiveConstants.indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 
-	// size of 12 for float3 positions
-	const int bindlessIndexBuffer = g_frameConstants.scenePositionBufferBindlessIndex;
-	float3 position = g_bindlessBuffers[bindlessIndexBuffer].Load<float3>(12 * (index + g_meshConstants.positionOffset));
+	// position
+	float3 position = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	o.worldPos = worldPos;
 	o.pos = mul(worldPos, viewProjTransform);
 
-	// size of 8 for float2 uv's
-	const int bindlessUvBuffer = g_frameConstants.sceneUvBufferBindlessIndex;
-	o.uv = g_bindlessBuffers[bindlessUvBuffer].Load<float2>(8 * (index + g_meshConstants.uvOffset));
+	// uv
+	o.uv = MeshMaterial::GetFloat2(vertIndex, g_primitiveConstants.uvAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 
-	// size of 12 for float3 normals
-	const int bindlessNormalBuffer = g_frameConstants.sceneNormalBufferBindlessIndex;
-	float3 normal = g_bindlessBuffers[bindlessNormalBuffer].Load<float3>(12 * (index + g_meshConstants.normalOffset));
+	// normal
+	float3 normal = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.normalAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 	o.normal = mul(float4(normal, 0.f), localToWorld);
 
-	// size of 12 for float3 tangents
-	const int bindlessTangentBuffer = g_frameConstants.sceneTangentBufferBindlessIndex;
-	float3 tangent = g_bindlessBuffers[bindlessTangentBuffer].Load<float3>(12 * (index + g_meshConstants.tangentOffset));
+	// tangent
+	float4 packedTangent = MeshMaterial::GetFloat4(vertIndex, g_primitiveConstants.tangentAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float3 tangent = packedTangent.xyz;
 	o.tangent = mul(float4(tangent, 0.f), localToWorld);
 
-	// size of 12 for float3 bitangents
-	const int bindlessBitangentBuffer = g_frameConstants.sceneBitangentBufferBindlessIndex;
-	float3 bitangent = g_bindlessBuffers[bindlessBitangentBuffer].Load<float3>(12 * (index + g_meshConstants.bitangentOffset));
+	// bitangent
+	float3 bitangent = cross(normal, tangent) * packedTangent.w;
 	o.bitangent = mul(float4(bitangent, 0.f), localToWorld);
 
 	return o;

@@ -15,6 +15,7 @@ namespace Profiling
 	struct ScopedCpuEvent
 	{
 		ScopedCpuEvent(const char* groupName, const char* eventName, uint64_t color);
+		ScopedCpuEvent(const char* groupName, const wchar_t* eventName, uint64_t color);
 		~ScopedCpuEvent();
 	};
 
@@ -23,6 +24,7 @@ namespace Profiling
 		FCommandList* m_cmdList;
 
 		ScopedCommandListEvent(FCommandList* cmdList, const char* eventName, uint64_t color);
+		ScopedCommandListEvent(FCommandList* cmdList, const wchar_t* eventName, uint64_t color);
 		~ScopedCommandListEvent();
 	};
 
@@ -31,6 +33,7 @@ namespace Profiling
 		D3DCommandQueue_t* m_cmdQueue;
 
 		ScopedCommandQueueEvent(D3D12_COMMAND_LIST_TYPE queueType, const char* eventName, uint64_t color);
+		ScopedCommandQueueEvent(D3D12_COMMAND_LIST_TYPE queueType, const wchar_t* eventName, uint64_t color);
 		~ScopedCommandQueueEvent();
 	};
 }

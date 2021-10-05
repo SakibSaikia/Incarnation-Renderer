@@ -8,6 +8,11 @@ Profiling::ScopedCpuEvent::ScopedCpuEvent(const char* groupName, const char* eve
 	PIXBeginEvent(color, eventName);
 }
 
+Profiling::ScopedCpuEvent::ScopedCpuEvent(const char* groupName, const wchar_t* eventName, uint64_t color)
+{
+	PIXBeginEvent(color, eventName);
+}
+
 Profiling::ScopedCpuEvent::~ScopedCpuEvent()
 {
 	PIXEndEvent();
@@ -19,12 +24,24 @@ Profiling::ScopedCommandListEvent::ScopedCommandListEvent(FCommandList* cmdList,
 	PIXBeginEvent(cmdList->m_d3dCmdList.get(), color, eventName);
 }
 
+Profiling::ScopedCommandListEvent::ScopedCommandListEvent(FCommandList* cmdList, const wchar_t* eventName, uint64_t color) :
+	m_cmdList{ cmdList }
+{
+	PIXBeginEvent(cmdList->m_d3dCmdList.get(), color, eventName);
+}
+
 Profiling::ScopedCommandListEvent::~ScopedCommandListEvent()
 {
 	PIXEndEvent(m_cmdList->m_d3dCmdList.get());
 }
 
 Profiling::ScopedCommandQueueEvent::ScopedCommandQueueEvent(D3D12_COMMAND_LIST_TYPE queueType, const char* eventName, uint64_t color)
+{
+	m_cmdQueue = RenderBackend12::GetCommandQueue(queueType);
+	PIXBeginEvent(m_cmdQueue, color, eventName);
+}
+
+Profiling::ScopedCommandQueueEvent::ScopedCommandQueueEvent(D3D12_COMMAND_LIST_TYPE queueType, const wchar_t* eventName, uint64_t color)
 {
 	m_cmdQueue = RenderBackend12::GetCommandQueue(queueType);
 	PIXBeginEvent(m_cmdQueue, color, eventName);

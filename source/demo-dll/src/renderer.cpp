@@ -113,12 +113,8 @@ namespace RenderJob
 			struct FrameCbLayout
 			{
 				Matrix sceneRotation;
-				int sceneIndexBufferBindlessIndex;
-				int scenePositionBufferBindlessIndex;
-				int sceneUvBufferBindlessIndex;
-				int sceneNormalBufferBindlessIndex;
-				int sceneTangentBufferBindlessIndex;
-				int sceneBitangentBufferBindlessIndex;
+				int sceneMeshAccessorsIndex;
+				int sceneMeshBufferViewsIndex;
 				int envBrdfTextureIndex;
 				int _pad0;
 				FLightProbe sceneProbeData;
@@ -132,12 +128,8 @@ namespace RenderJob
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = scene->m_rootTransform;
-					cbDest->sceneIndexBufferBindlessIndex = scene->m_meshIndexBuffer->m_srvIndex;
-					cbDest->scenePositionBufferBindlessIndex = scene->m_meshPositionBuffer->m_srvIndex;
-					cbDest->sceneUvBufferBindlessIndex = scene->m_meshUvBuffer->m_srvIndex;
-					cbDest->sceneNormalBufferBindlessIndex = scene->m_meshNormalBuffer->m_srvIndex;
-					cbDest->sceneTangentBufferBindlessIndex = scene->m_meshTangentBuffer ? scene->m_meshTangentBuffer->m_srvIndex : -1;
-					cbDest->sceneBitangentBufferBindlessIndex = scene->m_meshBitangentBuffer ? scene->m_meshBitangentBuffer->m_srvIndex : -1;
+					cbDest->sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
+					cbDest->sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
 					cbDest->sceneProbeData = scene->m_globalLightProbe;
 				});
@@ -261,62 +253,63 @@ namespace RenderJob
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
-
-			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			
 			// Issue scene draws
-			for (int meshIndex = 0; meshIndex < passDesc.scene->m_meshGeo.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < passDesc.scene->m_entities.m_meshList.size(); ++meshIndex)
 			{
-				const FRenderMesh& mesh = passDesc.scene->m_meshGeo[meshIndex];
+				const FMesh& mesh = passDesc.scene->m_entities.m_meshList[meshIndex];
+				SCOPED_COMMAND_LIST_EVENT(cmdList, mesh.m_name.c_str(), 0);
 
-				// Geometry constants
-				struct MeshCbLayout
+				for (const FMeshPrimitive& primitive : mesh.m_primitives)
 				{
-					Matrix localToWorldTransform;
-					uint32_t indexOffset;
-					uint32_t positionOffset;
-					uint32_t uvOffset;
-					uint32_t normalOffset;
-					uint32_t tangentOffset;
-					uint32_t bitangentOffset;
-				} meshCb =
-				{
-					passDesc.scene->m_meshTransforms[meshIndex],
-					passDesc.scene->m_meshGeo[meshIndex].m_indexOffset,
-					passDesc.scene->m_meshGeo[meshIndex].m_positionOffset,
-					passDesc.scene->m_meshGeo[meshIndex].m_uvOffset,
-					passDesc.scene->m_meshGeo[meshIndex].m_normalOffset,
-					passDesc.scene->m_meshGeo[meshIndex].m_tangentOffset,
-					passDesc.scene->m_meshGeo[meshIndex].m_bitangentOffset
-				};	
+					d3dCmdList->IASetPrimitiveTopology(primitive.m_topology);
 
-				d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(MeshCbLayout)/4, &meshCb, 0);
+					// Geometry constants
+					struct PrimitiveCbLayout
+					{
+						Matrix localToWorldTransform;
+						int m_indexAccessor;
+						int m_positionAccessor;
+						int m_uvAccessor;
+						int m_normalAccessor;
+						int m_tangentAccessor;
+					} primCb =
+					{
+						passDesc.scene->m_entities.m_transformList[meshIndex],
+						primitive.m_indexAccessor,
+						primitive.m_positionAccessor,
+						primitive.m_uvAccessor,
+						primitive.m_normalAccessor,
+						primitive.m_tangentAccessor
+					};
 
-				// Material constants
-				struct MaterialCbLayout
-				{
-					Vector3 emissiveFactor;
-					float metallicFactor;
-					Vector3 baseColorFactor;
-					float roughnessFactor;
-					float aoStrength;
-					int emissiveTextureIndex;
-					int baseColorTextureIndex;
-					int metallicRoughnessTextureIndex;
-					int normalTextureIndex;
-					int aoTextureIndex;
-					int emissiveSamplerIndex;
-					int baseColorSamplerIndex;
-					int metallicRoughnessSamplerIndex;
-					int normalSamplerIndex;
-					int aoSamplerIndex;
-				};
+					d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(PrimitiveCbLayout) / 4, &primCb, 0);
 
-				std::unique_ptr<FTransientBuffer> materialCb = RenderBackend12::CreateTransientBuffer(
-					L"material_cb",
-					sizeof(MaterialCbLayout),
-					cmdList,
-					[mat = &mesh.m_material](uint8_t* pDest)
+					// Material constants
+					struct MaterialCbLayout
+					{
+						Vector3 emissiveFactor;
+						float metallicFactor;
+						Vector3 baseColorFactor;
+						float roughnessFactor;
+						float aoStrength;
+						int emissiveTextureIndex;
+						int baseColorTextureIndex;
+						int metallicRoughnessTextureIndex;
+						int normalTextureIndex;
+						int aoTextureIndex;
+						int emissiveSamplerIndex;
+						int baseColorSamplerIndex;
+						int metallicRoughnessSamplerIndex;
+						int normalSamplerIndex;
+						int aoSamplerIndex;
+					};
+
+					std::unique_ptr<FTransientBuffer> materialCb = RenderBackend12::CreateTransientBuffer(
+						L"material_cb",
+						sizeof(MaterialCbLayout),
+						cmdList,
+						[mat = &primitive.m_material](uint8_t* pDest)
 					{
 						auto cbDest = reinterpret_cast<MaterialCbLayout*>(pDest);
 						cbDest->emissiveFactor = mat->m_emissiveFactor;
@@ -336,9 +329,10 @@ namespace RenderJob
 						cbDest->aoSamplerIndex = mat->m_aoSamplerIndex;
 					});
 
-				d3dCmdList->SetGraphicsRootConstantBufferView(1, materialCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+					d3dCmdList->SetGraphicsRootConstantBufferView(1, materialCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
-				d3dCmdList->DrawInstanced(mesh.m_indexCount, 1, 0, 0);
+					d3dCmdList->DrawInstanced(primitive.m_indexCount, 1, 0, 0);
+				}
 			}
 	
 			return cmdList;

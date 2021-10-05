@@ -9,12 +9,12 @@
 namespace
 {
 #if defined (_DEBUG)
-	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-Od", L"-WX", L"-I", SHADER_DIR};
+	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-Zi", L"-Od", L"-WX", L"-I", SHADER_DIR, L"-I", SRC_INCLUDE_DIR};
 #else
-	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-I", SHADER_DIR };
+	std::vector<LPCWSTR> k_compilerArguments = { L"-Zpr", L"-I", SHADER_DIR, L"-I", SRC_INCLUDE_DIR };
 #endif
 
-	std::vector<LPCWSTR> k_rootsigArguments = { L"-I", SHADER_DIR };
+	std::vector<LPCWSTR> k_rootsigArguments = { L"-I", SHADER_DIR, L"-I", SRC_INCLUDE_DIR };
 }
 
 namespace ShaderCompiler
@@ -84,7 +84,7 @@ HRESULT ShaderCompiler::CompileShader(
 	winrt::com_ptr<IDxcCompiler> compiler;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.put())));
 
-	std::vector<DxcDefine> defines;
+	std::vector<DxcDefine> defines{ DxcDefine{_wcsdup(L"__HLSL"), _wcsdup(L"1")} };
 	std::wstring str = defineStr;
 	size_t index = str.find_first_of(' ');
 	while(!str.empty())

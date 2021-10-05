@@ -2,6 +2,7 @@
 
 #include <SimpleMath.h>
 #include <ppltasks.h>
+#include <mesh-material.h>
 using namespace DirectX::SimpleMath;
 
 namespace tinygltf
@@ -35,17 +36,46 @@ struct FMaterial
 	int m_aoSamplerIndex;
 };
 
-struct FRenderMesh
+// Corresponds to GLTF Primitive
+struct FMeshPrimitive
 {
-	std::string m_name;
+	int m_indexAccessor;
+	int m_positionAccessor;
+	int m_uvAccessor;
+	int m_normalAccessor;
+	int m_tangentAccessor;
 	size_t m_indexCount;
-	uint32_t m_indexOffset;
-	uint32_t m_positionOffset;
-	uint32_t m_uvOffset;
-	uint32_t m_normalOffset;
-	uint32_t m_tangentOffset;
-	uint32_t m_bitangentOffset;
+	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	FMaterial m_material;
+};
+
+// Corresponds to GLTF Mesh
+struct FMesh
+{
+	std::wstring m_name;
+	std::vector<FMeshPrimitive> m_primitives;
+};
+
+// SOA struct for scene entities
+struct FSceneEntities
+{
+	std::vector<FMesh> m_meshList;
+	std::vector<Matrix> m_transformList;
+	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
+
+	void Resize(const size_t count)
+	{
+		m_meshList.resize(count);
+		m_transformList.resize(count);
+		m_objectSpaceBoundsList.resize(count);
+	}
+
+	void Clear()
+	{
+		m_meshList.clear();
+		m_transformList.clear();
+		m_objectSpaceBoundsList.clear();
+	}
 };
 
 struct FCamera
@@ -65,7 +95,7 @@ struct FScene
 {
 	void ReloadModel(const std::wstring& gltfFilename);
 	void ReloadEnvironment(const std::wstring& hdriFilename);
-	bool LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform);
+	void LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform);
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
@@ -77,18 +107,13 @@ struct FScene
 	std::string m_modelCachePath = {};
 
 	// Scene entity lists
-	std::vector<FRenderMesh> m_meshGeo;
-	std::vector<Matrix> m_meshTransforms;
-	std::vector<DirectX::BoundingBox> m_meshBounds; // object space
+	FSceneEntities m_entities;
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::unique_ptr<FBindlessShaderResource> m_meshIndexBuffer;
-	std::unique_ptr<FBindlessShaderResource> m_meshPositionBuffer;
-	std::unique_ptr<FBindlessShaderResource> m_meshUvBuffer;
-	std::unique_ptr<FBindlessShaderResource> m_meshNormalBuffer;
-	std::unique_ptr<FBindlessShaderResource> m_meshTangentBuffer;
-	std::unique_ptr<FBindlessShaderResource> m_meshBitangentBuffer;
+	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
+	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
+	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Image based lighting
@@ -98,26 +123,15 @@ struct FScene
 	Matrix m_rootTransform;
 
 private:
+	void LoadMeshBuffers(const tinygltf::Model& model);
+	void LoadMeshBufferViews(const tinygltf::Model& model);
+	void LoadMeshAccessors(const tinygltf::Model& model);
 	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN, const DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN);
 	std::pair<int, int> PrefilterNormalRoughnessTextures(const tinygltf::Image& normalmap, const tinygltf::Image& metallicRoughnessmap);
 	void ProcessReadbackTexture(FResourceReadbackContext* context, const std::string& filename, const int width, const int height, const size_t mipCount, const DXGI_FORMAT fmt, const int bpp);
 
 private:
-	uint8_t* m_scratchIndexBuffer;
-	uint8_t* m_scratchPositionBuffer;
-	uint8_t* m_scratchUvBuffer;
-	uint8_t* m_scratchNormalBuffer;
-	uint8_t* m_scratchTangentBuffer;
-	uint8_t* m_scratchBitangentBuffer;
-
-	size_t m_scratchIndexBufferOffset;
-	size_t m_scratchPositionBufferOffset;
-	size_t m_scratchUvBufferOffset;
-	size_t m_scratchNormalBufferOffset;
-	size_t m_scratchTangentBufferOffset;
-	size_t m_scratchBitangentBufferOffset;
-
 	std::vector<concurrency::task<void>> m_loadingJobs;
 };
 
