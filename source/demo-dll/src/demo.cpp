@@ -11,6 +11,7 @@
 #include <concurrent_unordered_map.h>
 #include <spookyhash_api.h>
 #include <ppltasks.h>
+#include <ppl.h>
 
 namespace
 {
@@ -814,13 +815,13 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 {
 	// CPU Copy
 	std::vector<FMeshBufferView> views(model.bufferViews.size());
-	for (int viewIndex = 0; viewIndex < model.bufferViews.size(); ++viewIndex)
+	concurrency::parallel_for(0, (int)model.bufferViews.size(), [&](int viewIndex)
 	{
 		const int meshBufferIndex = model.bufferViews[viewIndex].buffer;
 		views[viewIndex].m_bufferSrvIndex = m_meshBuffers[meshBufferIndex]->m_srvIndex;
 		views[viewIndex].m_byteLength = model.bufferViews[viewIndex].byteLength;
 		views[viewIndex].m_byteOffset = model.bufferViews[viewIndex].byteOffset;
-	}
+	});
 
 	const size_t bufferSize = views.size() * sizeof(FMeshBufferView);
 	FResourceUploadContext uploader{ bufferSize };
@@ -841,13 +842,13 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 {
 	// CPU Copy
 	std::vector<FMeshAccessor> accessors(model.accessors.size());
-	for (int i = 0; i < model.accessors.size(); ++i)
+	concurrency::parallel_for(0, (int)model.accessors.size(), [&](int i)
 	{
 		const int bufferViewIndex = model.accessors[i].bufferView;
 		accessors[i].m_bufferViewIndex = bufferViewIndex;
-		accessors[i].m_byteOffset = (uint32_t) model.accessors[i].byteOffset;
+		accessors[i].m_byteOffset = (uint32_t)model.accessors[i].byteOffset;
 		accessors[i].m_byteStride = model.accessors[i].ByteStride(model.bufferViews[bufferViewIndex]);
-	}
+	});
 
 	const size_t bufferSize = accessors.size() * sizeof(FMeshAccessor);
 	FResourceUploadContext uploader{ bufferSize };
@@ -870,10 +871,10 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 
 	// Load material and initialize CPU-side copy
 	std::vector<FMaterial> materials(model.materials.size());
-	for (int i = 0; i < model.materials.size(); ++i)
+	concurrency::parallel_for(0, (int)model.materials.size(), [&](int i)
 	{
 		materials[i] = LoadMaterial(model, i);
-	}
+	});
 
 	const size_t bufferSize = materials.size() * sizeof(FMaterial);
 	FResourceUploadContext uploader{ bufferSize };

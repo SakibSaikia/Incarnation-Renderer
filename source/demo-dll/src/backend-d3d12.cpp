@@ -1890,7 +1890,12 @@ D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAP
 	}
 	else
 	{
-		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(s_graphicsPSOPool[desc].put())));
+		// PSO creation calls have associated latency. So create a temp object on the stack and 
+		// copy it to the PSO pool once done so that multiple threads calling it simultaneously
+		// do not access a PSO mid-creation!
+		winrt::com_ptr<D3DPipelineState_t> newPSO;
+		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(newPSO.put())));
+		s_graphicsPSOPool[desc] = newPSO;
 		return s_graphicsPSOPool[desc].get();
 	}
 }
@@ -1904,7 +1909,12 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 	}
 	else
 	{
-		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(s_computePSOPool[desc].put())));
+		// PSO creation calls have associated latency. So create a temp object on the stack and 
+		// copy it to the PSO pool once done so that multiple threads calling it simultaneously
+		// do not access a PSO mid-creation!
+		winrt::com_ptr<D3DPipelineState_t> newPSO;
+		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(newPSO.put())));
+		s_computePSOPool[desc] = newPSO;
 		return s_computePSOPool[desc].get();
 	}
 }
