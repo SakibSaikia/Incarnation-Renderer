@@ -588,14 +588,8 @@ void FScene::ReloadModel(const std::wstring& filename)
 	// Clear previous scene
 	Clear();
 
-	// Generate tangent, bi-tangents, etc. if required
-	bool requiresResave = false;
-	for( int meshIndex = 0; meshIndex < model.meshes.size(); ++meshIndex )
-	{
-		requiresResave |= MeshUtils::CleanupMesh(meshIndex, model);
-	}
-
-	// Load mesh data
+	// Load assets
+	bool requiresResave = MeshUtils::FixupMeshes(model);
 	LoadMeshBuffers(model);
 	LoadMeshBufferViews(model);
 	LoadMeshAccessors(model);

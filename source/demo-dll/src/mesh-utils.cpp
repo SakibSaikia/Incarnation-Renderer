@@ -3,6 +3,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <mesh-utils.h>
 #include <MikkTSpace/mikktspace.h>
+#include <ppl.h>
+#include <profiling.h>
 
 namespace
 {
@@ -117,69 +119,82 @@ namespace
 	}
 }
 
-bool MeshUtils::CleanupMesh(int meshIndex, tinygltf::Model& model)
+bool MeshUtils::FixupMeshes(tinygltf::Model& model)
 {
+	SCOPED_CPU_EVENT("fixup_meshes", PIX_COLOR_DEFAULT);
+
 	bool requiresResave = false;
-	tinygltf::Mesh& mesh = model.meshes[meshIndex];
+	std::vector<PrimitiveIdentifier> fixupPrimitives;
 
-	for (int i = 0; i < mesh.primitives.size(); i++)
+	for (int meshIndex = 0; meshIndex < model.meshes.size(); ++meshIndex)
 	{
-		// Generate tangents if the material requires a normal map and the mesh doesn't include tangents
-		tinygltf::Primitive& primitive = mesh.primitives[i];
-		tinygltf::Material material = model.materials[primitive.material];
-		if (material.normalTexture.index != -1 && primitive.attributes.find("TANGENT") == primitive.attributes.cend())
+		tinygltf::Mesh& mesh = model.meshes[meshIndex];
+
+		for (int primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex)
 		{
-			// Get vert count based on the POSITION accessor
-			auto posIt = primitive.attributes.find("POSITION");
-			const tinygltf::Accessor& positionAccessor = model.accessors[posIt->second];
-			size_t vertCount = positionAccessor.count;
+			// Generate tangents if the material requires a normal map and the mesh doesn't include tangents
+			tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
+			tinygltf::Material material = model.materials[primitive.material];
+			if (material.normalTexture.index != -1 && primitive.attributes.find("TANGENT") == primitive.attributes.cend())
+			{
+				// Get vert count based on the POSITION accessor
+				auto posIt = primitive.attributes.find("POSITION");
+				const tinygltf::Accessor& positionAccessor = model.accessors[posIt->second];
+				size_t vertCount = positionAccessor.count;
 
-			// New Tangent Buffer
-			model.buffers.emplace_back();
+				// New Tangent Buffer
+				model.buffers.emplace_back();
 
-			// New Tangent Buffer View
-			tinygltf::BufferView tangentBufferView = {};
-			tangentBufferView.buffer = model.buffers.size() - 1;
-			model.bufferViews.push_back(tangentBufferView);
+				// New Tangent Buffer View
+				tinygltf::BufferView tangentBufferView = {};
+				tangentBufferView.buffer = model.buffers.size() - 1;
+				model.bufferViews.push_back(tangentBufferView);
 
-			// New Tangent Accessor
-			tinygltf::Accessor tangentAccessor = {};
-			tangentAccessor.bufferView = model.bufferViews.size() - 1;
-			tangentAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
-			tangentAccessor.type = TINYGLTF_TYPE_VEC4;
-			tangentAccessor.count = vertCount;
-			model.accessors.push_back(tangentAccessor);
+				// New Tangent Accessor
+				tinygltf::Accessor tangentAccessor = {};
+				tangentAccessor.bufferView = model.bufferViews.size() - 1;
+				tangentAccessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+				tangentAccessor.type = TINYGLTF_TYPE_VEC4;
+				tangentAccessor.count = vertCount;
+				model.accessors.push_back(tangentAccessor);
 
-			// New Tangent Attribute
-			primitive.attributes["TANGENT"] = model.accessors.size() - 1;
+				// New Tangent Attribute
+				primitive.attributes["TANGENT"] = model.accessors.size() - 1;
 
-			// Resize buffer
-			size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
-			model.buffers.back().data.resize(vertCount * tangentSize);
+				// Resize buffer
+				size_t tangentSize = tinygltf::GetComponentSizeInBytes(tangentAccessor.componentType) * tinygltf::GetNumComponentsInType(tangentAccessor.type);
+				model.buffers.back().data.resize(vertCount * tangentSize);
 
-			// Initialize MikkTSpace
-			PrimitiveIdentifier primId = {};
-			primId.m_model = &model;
-			primId.m_meshIndex = meshIndex;
-			primId.m_primitiveIndex = i;
+				PrimitiveIdentifier primId = {};
+				primId.m_model = &model;
+				primId.m_meshIndex = meshIndex;
+				primId.m_primitiveIndex = primitiveIndex;
+				fixupPrimitives.push_back(primId);
 
-			SMikkTSpaceInterface tspaceInterface = {};
-			tspaceInterface.m_getNumFaces = &GetNumFaces;
-			tspaceInterface.m_getNumVerticesOfFace = &GetNumVerticesOfFace;
-			tspaceInterface.m_getPosition = &GetPosition;
-			tspaceInterface.m_getNormal = &GetNormal;
-			tspaceInterface.m_getTexCoord = &GetUV;
-			tspaceInterface.m_setTSpaceBasic = &SetTSpaceBasic;
-
-			SMikkTSpaceContext tspaceContext = {};
-			tspaceContext.m_pInterface = &tspaceInterface;
-			tspaceContext.m_pUserData = &primId;
-
-			// Generate TSpace
-			genTangSpaceDefault(&tspaceContext);
-			requiresResave |= true;
+				requiresResave |= true;
+			}
 		}
 	}
+
+	concurrency::parallel_for_each(fixupPrimitives.begin(), fixupPrimitives.end(), [](PrimitiveIdentifier& primitive)
+	{
+		// Initialize MikkTSpace
+		SMikkTSpaceInterface tspaceInterface = {};
+		tspaceInterface.m_getNumFaces = &GetNumFaces;
+		tspaceInterface.m_getNumVerticesOfFace = &GetNumVerticesOfFace;
+		tspaceInterface.m_getPosition = &GetPosition;
+		tspaceInterface.m_getNormal = &GetNormal;
+		tspaceInterface.m_getTexCoord = &GetUV;
+		tspaceInterface.m_setTSpaceBasic = &SetTSpaceBasic;
+
+		SMikkTSpaceContext tspaceContext = {};
+		tspaceContext.m_pInterface = &tspaceInterface;
+		tspaceContext.m_pUserData = &primitive;
+
+		// Generate TSpace
+		genTangSpaceDefault(&tspaceContext);
+	});
+
 
 	return requiresResave;
 }
