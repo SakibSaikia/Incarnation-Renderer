@@ -531,10 +531,10 @@ bool LoadImageCallback(
 	}
 }
 
-std::string GetCachePath(const std::string filename, const std::string dirName)
+std::string GetContentCachePath(const std::string filename)
 {
 	std::filesystem::path filepath { filename };
-	std::filesystem::path dir{ dirName };
+	std::filesystem::path dir{ ".content-cache" };
 	std::filesystem::path dirPath = filepath.parent_path() / dir;
 
 	if (!std::filesystem::exists(dirPath))
@@ -553,12 +553,12 @@ void FScene::ReloadModel(const std::wstring& filename)
 	std::string modelFilepath = GetFilepathA(ws2s(filename));
 
 	tinygltf::TinyGLTF loader;
-	m_textureCachePath = GetCachePath(modelFilepath, ".texture-cache");
+	m_textureCachePath = GetContentCachePath(modelFilepath);
 	const char* path = m_textureCachePath.c_str();
 	loader.SetImageLoader(&LoadImageCallback, (void*)path);
 
 	// Load from model cache if a cached version exists
-	m_modelCachePath = GetCachePath(modelFilepath, ".model-cache");
+	m_modelCachePath = GetContentCachePath(modelFilepath);
 	std::filesystem::path cachedFilepath = std::filesystem::path{ m_modelCachePath } / std::filesystem::path{ ws2s(filename) };
 	if (Config::g_useContentCache && std::filesystem::exists(cachedFilepath))
 	{
@@ -616,7 +616,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// If the model required fixup during load, resave a cached copy so that 
 	// subsequent loads are faster.
-	if (requiresResave)
+	if (requiresResave && Config::g_useContentCache)
 	{
 		ok = loader.WriteGltfSceneToFile(&model, cachedFilepath.string(), false, false, true, false);
 		DebugAssert(ok, "Failed to save cached glTF model");
@@ -1000,12 +1000,15 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 			AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
 			// Save to disk
-			std::filesystem::path dirPath{ m_textureCachePath };
-			std::filesystem::path srcFilename{ image.uri };
-			std::filesystem::path destFilename = dirPath / srcFilename.stem();
-			destFilename += std::filesystem::path{ ".dds" };
-			DirectX::TexMetadata compressedMetadata = compressedScratch.GetMetadata();
-			AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
+			if (Config::g_useContentCache)
+			{
+				std::filesystem::path dirPath{ m_textureCachePath };
+				std::filesystem::path srcFilename{ image.uri };
+				std::filesystem::path destFilename = dirPath / srcFilename.stem();
+				destFilename += std::filesystem::path{ ".dds" };
+				DirectX::TexMetadata compressedMetadata = compressedScratch.GetMetadata();
+				AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
+			}
 
 			std::wstring name{ image.uri.begin(), image.uri.end() };
 			FResourceUploadContext uploader{ RenderBackend12::GetResourceSize(compressedScratch) };
@@ -1255,12 +1258,15 @@ void FScene::ProcessReadbackTexture(FResourceReadbackContext* context, const std
 	AssertIfFailed(DirectX::Compress(mipchain.data(), mipchain.size(), metadata, fmt, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
 	// Save to disk
-	std::filesystem::path dirPath{ m_textureCachePath };
-	std::filesystem::path srcFilename{ filename };
-	std::filesystem::path destFilename = dirPath / srcFilename.stem();
-	destFilename += std::filesystem::path{ ".dds" };
-	DirectX::TexMetadata compressedMetadata = compressedScratch.GetMetadata();
-	AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
+	if (Config::g_useContentCache)
+	{
+		std::filesystem::path dirPath{ m_textureCachePath };
+		std::filesystem::path srcFilename{ filename };
+		std::filesystem::path destFilename = dirPath / srcFilename.stem();
+		destFilename += std::filesystem::path{ ".dds" };
+		DirectX::TexMetadata compressedMetadata = compressedScratch.GetMetadata();
+		AssertIfFailed(DirectX::SaveToDDSFile(compressedScratch.GetImages(), compressedScratch.GetImageCount(), compressedMetadata, DirectX::DDS_FLAGS_NONE, destFilename.wstring().c_str()));
+	}
 
 	// Upload texture data
 	FResourceUploadContext uploader{ RenderBackend12::GetResourceSize(compressedScratch) };
