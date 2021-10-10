@@ -51,6 +51,7 @@ struct FMaterial
 Texture2D g_bindless2DTextures[] : register(t0, space0);
 ByteAddressBuffer g_bindlessBuffers[] : register(t1, space1);
 TextureCube g_bindlessCubeTextures[] : register(t2, space2);
+RaytracingAccelerationStructure g_accelerationStructures[] : register(t3, space3);
 SamplerState g_bindlessSamplers[] : register(s0, space0);
 
 namespace MeshMaterial

@@ -797,6 +797,7 @@ void FScene::LoadMeshBuffers(const tinygltf::Model& model)
 
 		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBindlessBuffer(
 			s.str(),
+			BindlessResourceType::Buffer,
 			model.buffers[bufferIndex].data.size(),
 			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			model.buffers[bufferIndex].data.data(),
@@ -825,6 +826,7 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 
 	m_packedMeshBufferViews = RenderBackend12::CreateBindlessBuffer(
 		L"scene_mesh_buffer_views",
+		BindlessResourceType::Buffer,
 		bufferSize,
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*) views.data(),
@@ -852,6 +854,7 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 
 	m_packedMeshAccessors = RenderBackend12::CreateBindlessBuffer(
 		L"scene_mesh_accessors",
+		BindlessResourceType::Buffer,
 		bufferSize,
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*) accessors.data(),
@@ -865,6 +868,8 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
+	instanceDescs.reserve(m_entities.m_meshList.size());
 
 	for (int meshIndex = 0; meshIndex < m_entities.m_meshList.size(); ++meshIndex)
 	{
@@ -875,8 +880,8 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 
 			// The bottom level acceleration structures are indexed via the index accessor
 			// Create a new BLAS if one doesn't already exist for the indexed geometry
-			auto search = m_Blas.find(primitive.m_indexAccessor);
-			if (search == m_Blas.cend())
+			auto search = m_blasList.find(primitive.m_indexAccessor);
+			if (search == m_blasList.cend())
 			{
 				tinygltf::Accessor posAccessor = model.accessors[primitive.m_positionAccessor];
 				tinygltf::Accessor indexAccessor = model.accessors[primitive.m_indexAccessor];
@@ -923,104 +928,102 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				geometryDesc.Triangles.Transform3x4 = 0;
 				geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
 
-				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS asInputsDesc = {};
-				asInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-				asInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-				asInputsDesc.pGeometryDescs = &geometryDesc;
-				asInputsDesc.NumDescs = 1;
-				asInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blasInputsDesc = {};
+				blasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+				blasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+				blasInputsDesc.pGeometryDescs = &geometryDesc;
+				blasInputsDesc.NumDescs = 1;
+				blasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
-				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO asPreBuildInfo = {};
-				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&asInputsDesc, &asPreBuildInfo);
+				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO blasPreBuildInfo = {};
+				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&blasInputsDesc, &blasPreBuildInfo);
 
 				// BLAS scratch buffer
 				auto blasScratch = RenderBackend12::CreateBindlessUavBuffer(
 					L"blas_scratch",
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, asPreBuildInfo.ScratchDataSizeInBytes),
-					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes),
 					false);
 
 				// BLAS buffer
 				std::wstringstream s;
 				s << L"blas_buffer_" << primitive.m_indexAccessor;
-				m_Blas[primitive.m_indexAccessor] = RenderBackend12::CreateBindlessUavBuffer(
+				m_blasList[primitive.m_indexAccessor] = RenderBackend12::CreateBindlessBuffer(
 					s.str(),
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, asPreBuildInfo.ResultDataMaxSizeInBytes),
-					D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-					false);
+					BindlessResourceType::AccelerationStructure,
+					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes),
+					D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
 				// Build BLAS
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-				buildDesc.Inputs = asInputsDesc;
+				buildDesc.Inputs = blasInputsDesc;
 				buildDesc.ScratchAccelerationStructureData = blasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				buildDesc.DestAccelerationStructureData = m_Blas[primitive.m_indexAccessor]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				buildDesc.DestAccelerationStructureData = m_blasList[primitive.m_indexAccessor]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 				cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-				m_Blas[primitive.m_indexAccessor]->UavBarrier(cmdList);
+				m_blasList[primitive.m_indexAccessor]->m_resource->UavBarrier(cmdList);
 			}
 
-			// Create TLAS for each primitive
+			// Create D3D12_RAYTRACING_INSTANCE_DESC for each primitive
 			{
-				D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
-				instanceDesc.InstanceID = 0;
-				instanceDesc.InstanceContributionToHitGroupIndex = 0;
-				instanceDesc.InstanceMask = 1;
-				instanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-				instanceDesc.AccelerationStructure = m_Blas[primitive.m_indexAccessor]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				D3D12_RAYTRACING_INSTANCE_DESC instance = {};
+				instance.InstanceID = 0;
+				instance.InstanceContributionToHitGroupIndex = 0;
+				instance.InstanceMask = 1;
+				instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+				instance.AccelerationStructure = m_blasList[primitive.m_indexAccessor]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
 				// Transpose and convert to 3x4 matrix
 				const Matrix& localToWorld = m_entities.m_transformList[meshIndex];
-				decltype(instanceDesc.Transform)& dest = instanceDesc.Transform;
+				decltype(instance.Transform)& dest = instance.Transform;
 				dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
 				dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
 				dest[0][2] = localToWorld._31;	dest[1][2] = localToWorld._32;	dest[2][2] = localToWorld._33;
 				dest[0][3] = localToWorld._41;	dest[1][3] = localToWorld._42;	dest[2][3] = localToWorld._43;
 
-				auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
-					L"tlas_desc_buffer",
-					sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
-					cmdList,
-					[pData = &instanceDesc](uint8_t* pDest)
-					{
-						memcpy(pDest, pData, sizeof(D3D12_RAYTRACING_INSTANCE_DESC));
-					});
-
-				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS asInputsDesc = {};
-				asInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-				asInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-				asInputsDesc.InstanceDescs = instanceDescBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				asInputsDesc.NumDescs = 1;
-				asInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-
-				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO asPreBuildInfo = {};
-				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&asInputsDesc, &asPreBuildInfo);
-
-				// TLAS scratch buffer
-				auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
-					L"tlas_scratch",
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, asPreBuildInfo.ScratchDataSizeInBytes),
-					D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-					false);
-
-				// TLAS buffer
-				std::wstringstream s;
-				s << L"tlas_buffer_" << m_Tlas.size();
-				m_Tlas.push_back(
-					RenderBackend12::CreateBindlessUavBuffer(
-						s.str(),
-						GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, asPreBuildInfo.ResultDataMaxSizeInBytes),
-						D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-						false));
-
-				// Build TLAS
-				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-				buildDesc.Inputs = asInputsDesc;
-				buildDesc.ScratchAccelerationStructureData = tlasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				buildDesc.DestAccelerationStructureData = m_Tlas.back()->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-				m_Tlas.back()->UavBarrier(cmdList);
+				instanceDescs.push_back(instance);
 			}
 		}
 	}
+
+	const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
+	auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
+		L"instance_descs_buffer",
+		instanceDescBufferSize,
+		cmdList,
+		[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
+		{
+			memcpy(pDest, pData, instanceDescBufferSize);
+		});
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
+	tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+	tlasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	tlasInputsDesc.InstanceDescs = instanceDescBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
+	tlasInputsDesc.NumDescs = instanceDescs.size();
+	tlasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
+	RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
+
+	// TLAS scratch buffer
+	auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
+		L"tlas_scratch",
+		GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes),
+		false);
+
+	// TLAS buffer
+	m_tlas = RenderBackend12::CreateBindlessBuffer(
+		L"tlas_buffer",
+		BindlessResourceType::AccelerationStructure,
+		GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes),
+		D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+
+	// Build TLAS
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+	buildDesc.Inputs = tlasInputsDesc;
+	buildDesc.ScratchAccelerationStructureData = tlasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
+	buildDesc.DestAccelerationStructureData = m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress();
+	cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+	m_tlas->m_resource->UavBarrier(cmdList);
 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
@@ -1042,6 +1045,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 
 	m_packedMaterials = RenderBackend12::CreateBindlessBuffer(
 		L"scene_materials",
+		BindlessResourceType::Buffer,
 		bufferSize,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*)materials.data(),
@@ -1338,8 +1342,8 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	}
 
 	// Transition to COMMON because we will be doing a GPU readback after filtering is done on the GPU
-	normalmapFilterUav->Transition(cmdList, normalmapFilterUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
-	metallicRoughnessFilterUav->Transition(cmdList, metallicRoughnessFilterUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
+	normalmapFilterUav->m_resource->Transition(cmdList, normalmapFilterUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
+	metallicRoughnessFilterUav->m_resource->Transition(cmdList, metallicRoughnessFilterUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
 
 	// Execute CL
 	RenderBackend12::BeginCapture();
@@ -1494,10 +1498,12 @@ void FScene::Clear()
 	m_cameras.clear();
 	m_entities.Clear();
 	m_meshBuffers.clear();
+	m_blasList.clear();
 
 	m_packedMeshBufferViews.reset(nullptr);
 	m_packedMeshAccessors.reset(nullptr);
 	m_packedMaterials.reset(nullptr);
+	m_tlas.reset(nullptr);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -1775,7 +1781,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		const size_t filteredEnvmapSize = cubemapSize >> 1;
 		const int filteredEnvmapMips = numMips - 1;
 		auto texFilteredEnvmapUav = RenderBackend12::CreateBindlessUavTexture(L"filtered_envmap", metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6);
-		texCubeUav->Transition(cmdList, texCubeUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
@@ -1841,10 +1847,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 
 		// Copy from UAV to destination cubemap texture
-		texFilteredEnvmapUav->Transition(cmdList, texFilteredEnvmapUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		texFilteredEnvmapUav->m_resource->Transition(cmdList, texFilteredEnvmapUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		auto filteredEnvmapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, BindlessResourceType::TextureCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
-		filteredEnvmapTex->Transition(cmdList, filteredEnvmapTex->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		filteredEnvmapTex->m_resource->Transition(cmdList, filteredEnvmapTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -1944,7 +1950,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 			// Dispatch (Reduction)
 			width = metadata.width >> srcMipIndex, height = metadata.height >> srcMipIndex;
-			uavs[src]->UavBarrier(cmdList);
+			uavs[src]->m_resource->UavBarrier(cmdList);
 
 			while (width >= (threadGroupSizeX * threadGroupSizeZ) ||
 				height >= threadGroupSizeY)
@@ -1968,7 +1974,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 				d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 
-				uavs[dest]->UavBarrier(cmdList);
+				uavs[dest]->m_resource->UavBarrier(cmdList);
 
 				width = threadGroupCountX;
 				height = threadGroupCountY;
@@ -2024,10 +2030,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		}
 
 		// Copy from UAV to destination texture
-		shTexureUavAccum->Transition(cmdList, shTexureUavAccum->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		shTexureUavAccum->m_resource->Transition(cmdList, shTexureUavAccum->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		auto shTex = RenderBackend12::CreateBindlessTexture(shTextureName, BindlessResourceType::Texture2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
-		shTex->Transition(cmdList, shTex->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		shTex->m_resource->Transition(cmdList, shTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });

@@ -88,8 +88,8 @@ namespace RenderJob
 	concurrency::task<void> BasePass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
-		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->GetTransitionToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
+		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -102,8 +102,8 @@ namespace RenderJob
 
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "base_pass", 0);
 
-			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-			passDesc.depthStencilTarget->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"base-pass.hlsl", L"rootsig" });
@@ -118,6 +118,7 @@ namespace RenderJob
 				int sceneMaterialBufferIndex;
 				int envBrdfTextureIndex;
 				FLightProbe sceneProbeData;
+				int sceneBvhIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -128,11 +129,12 @@ namespace RenderJob
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = scene->m_rootTransform;
-					cbDest->sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
-					cbDest->sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
-					cbDest->sceneMaterialBufferIndex = scene->m_packedMaterials->m_srvIndex;
+					cbDest->sceneMeshAccessorsIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Buffer, scene->m_packedMeshAccessors->m_srvIndex);
+					cbDest->sceneMeshBufferViewsIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Buffer, scene->m_packedMeshBufferViews->m_srvIndex);
+					cbDest->sceneMaterialBufferIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Buffer, scene->m_packedMaterials->m_srvIndex);
 					cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
 					cbDest->sceneProbeData = scene->m_globalLightProbe;
+					cbDest->sceneBvhIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::AccelerationStructure, scene->m_tlas->m_srvIndex);
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -170,7 +172,8 @@ namespace RenderJob
 			d3dCmdList->SetGraphicsRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
 			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
 			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 0));
+			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(7, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 0));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -303,8 +306,8 @@ namespace RenderJob
 	concurrency::task<void> BackgroundPass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
-		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->GetTransitionToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
+		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -317,8 +320,8 @@ namespace RenderJob
 
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "background_pass", 0);
 
-			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-			passDesc.depthStencilTarget->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
+			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemap-bg.hlsl", L"rootsig" });
@@ -433,8 +436,8 @@ namespace RenderJob
 	concurrency::task<void> Postprocess(RenderJob::Sync& jobSync, const PostprocessPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t colorSourceTransitionToken = passDesc.colorSource->GetTransitionToken();
-		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
+		size_t colorSourceTransitionToken = passDesc.colorSource->m_resource->GetTransitionToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -448,8 +451,8 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "post_process", 0);
 
 			// MSAA resolve
-			passDesc.colorSource->Transition(cmdList, colorSourceTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+			passDesc.colorSource->m_resource->Transition(cmdList, colorSourceTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_DEST);
 			d3dCmdList->ResolveSubresource(
 				passDesc.colorTarget->m_resource->m_d3dResource,
 				0,
@@ -468,7 +471,7 @@ namespace RenderJob
 	concurrency::task<void> UI(RenderJob::Sync& jobSync, const UIPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t colorTargetTransitionToken = passDesc.colorTarget->GetTransitionToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -664,7 +667,7 @@ namespace RenderJob
 			const float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
 			d3dCmdList->OMSetBlendFactor(blendFactor);
 
-			passDesc.colorTarget->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, RenderBackend12::GetBackBuffer()->m_renderTextureIndices[0]) };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
@@ -730,7 +733,7 @@ namespace RenderJob
 	concurrency::task<void> Present(RenderJob::Sync& jobSync, const PresentDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t transitionToken = passDesc.backBuffer->GetTransitionToken();
+		size_t transitionToken = passDesc.backBuffer->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -738,7 +741,7 @@ namespace RenderJob
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 			cmdList->SetName(L"present_job");
 
-			passDesc.backBuffer->Transition(cmdList, transitionToken, 0, D3D12_RESOURCE_STATE_PRESENT);
+			passDesc.backBuffer->m_resource->Transition(cmdList, transitionToken, 0, D3D12_RESOURCE_STATE_PRESENT);
 
 			return cmdList;
 
@@ -867,10 +870,10 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 	}
 
 	// Copy from UAV to destination texture
-	brdfUav->Transition(cmdList, brdfUav->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
 	auto brdfTex = RenderBackend12::CreateBindlessTexture(L"env_brdf_tex", BindlessResourceType::Texture2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 	d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
-	brdfTex->Transition(cmdList, brdfTex->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 

@@ -93,8 +93,8 @@ struct FScene
 	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
-	std::unordered_map<int, std::unique_ptr<FBindlessUav>> m_Blas;
-	std::vector<std::unique_ptr<FBindlessUav>> m_Tlas;
+	std::unordered_map<int, std::unique_ptr<FBindlessShaderResource>> m_blasList;
+	std::unique_ptr<FBindlessShaderResource> m_tlas;
 	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
 	DirectX::BoundingBox m_sceneBounds; // world space
 

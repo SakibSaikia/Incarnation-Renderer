@@ -44,6 +44,7 @@ enum class BindlessResourceType
 	TextureCube,
 	RWTexture2D,
 	RWTexture2DArray,
+	AccelerationStructure,
 	Count
 };
 
@@ -55,7 +56,8 @@ enum class BindlessDescriptorType
 	Texture2DArray,
 	TextureCube,
 	RWTexture2D,
-	RWTexture2DArray
+	RWTexture2DArray,
+	AccelerationStructure
 };
 
 enum class BindlessDescriptorRange : uint32_t
@@ -74,6 +76,8 @@ enum class BindlessDescriptorRange : uint32_t
 	RWTexture2DEnd = RWTexture2DBegin + 999,
 	RWTexture2DArrayBegin,
 	RWTexture2DArrayEnd = RWTexture2DArrayBegin + 999,
+	AccelerationStructureBegin,
+	AccelerationStructureEnd = AccelerationStructureBegin + 999,
 	TotalCount
 };
 
@@ -141,6 +145,7 @@ struct FResource
 	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
 	size_t GetTransitionToken();
 	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
+	void UavBarrier(FCommandList* cmdList);
 	size_t GetSizeBytes() const;
 };
 
@@ -150,8 +155,6 @@ struct FBindlessShaderResource
 	uint32_t m_srvIndex = ~0u;
 
 	~FBindlessShaderResource();
-	size_t GetTransitionToken();
-	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 struct FBindlessUav
@@ -161,9 +164,6 @@ struct FBindlessUav
 	uint32_t m_srvIndex;
 
 	~FBindlessUav();
-	size_t GetTransitionToken();
-	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
-	void UavBarrier(FCommandList* cmdList);
 };
 
 struct FTransientBuffer
@@ -183,8 +183,6 @@ struct FRenderTexture
 	bool m_isSwapChainBuffer;
 
 	~FRenderTexture();
-	size_t GetTransitionToken();
-	void Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState);
 };
 
 class FResourceUploadContext
@@ -338,6 +336,7 @@ namespace RenderBackend12
 
 	std::unique_ptr<FBindlessShaderResource> CreateBindlessBuffer(
 		const std::wstring& name,
+		const BindlessResourceType type,
 		const size_t size,
 		D3D12_RESOURCE_STATES resourceState,
 		const uint8_t* pData = nullptr,
@@ -355,7 +354,6 @@ namespace RenderBackend12
 	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
 		const std::wstring& name,
 		const size_t size,
-		const D3D12_RESOURCE_STATES resourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		const bool bCreateSRV = true);
 
 	uint32_t CreateBindlessSampler(

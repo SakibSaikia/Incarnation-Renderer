@@ -109,6 +109,9 @@ namespace
 		case D3D12_SRV_DIMENSION_TEXTURECUBE:
 			format = DXGI_FORMAT_R8G8B8A8_UNORM; 
 			break;
+		case D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE:
+			format = DXGI_FORMAT_UNKNOWN;
+			break;
 		default:
 			DebugAssert(false, "Unsupported");
 		}
@@ -939,6 +942,14 @@ void FResource::Transition(FCommandList* cmdList, const size_t token, const uint
 	}
 }
 
+void FResource::UavBarrier(FCommandList* cmdList)
+{
+	D3D12_RESOURCE_BARRIER barrierDesc = {};
+	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrierDesc.UAV.pResource = m_d3dResource;
+	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
+}
+
 FTransientBuffer::~FTransientBuffer()
 {
 	GetUploadBufferPool()->Retire(m_resource, m_fenceMarker);
@@ -1055,6 +1066,18 @@ public:
 
 			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(i);
 		}
+
+		// AccelerationStructure
+		D3D12_SHADER_RESOURCE_VIEW_DESC nullASDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE);
+		for (int i = (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin; i <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd; ++i)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE srv;
+			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, srv);
+
+			m_indices[(uint32_t)BindlessResourceType::AccelerationStructure].push(i);
+		}
 	}
 
 	uint32_t FetchIndex(BindlessResourceType type)
@@ -1111,6 +1134,12 @@ public:
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, descriptor);
 			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(index);
+		}
+		else if (index <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC nullASDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE);
+			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, descriptor);
+			m_indices[(uint32_t)BindlessResourceType::AccelerationStructure].push(index);
 		}
 		else
 		{
@@ -1333,37 +1362,9 @@ FBindlessShaderResource::~FBindlessShaderResource()
 	waitForFenceTask.then(freeResource);
 }
 
-size_t FBindlessShaderResource::GetTransitionToken()
-{ 
-	return m_resource->GetTransitionToken(); 
-}
-
-void FBindlessShaderResource::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
-{
-	m_resource->Transition(cmdList, token, subresourceIndex, destState);
-}
-
 FBindlessUav::~FBindlessUav()
 {
 	GetSharedResourcePool()->Retire(this);
-}
-
-size_t FBindlessUav::GetTransitionToken()
-{
-	return m_resource->GetTransitionToken();
-}
-
-void FBindlessUav::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
-{
-	m_resource->Transition(cmdList, token, subresourceIndex, destState);
-}
-
-void FBindlessUav::UavBarrier(FCommandList* cmdList)
-{
-	D3D12_RESOURCE_BARRIER barrierDesc = {};
-	barrierDesc.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-	barrierDesc.UAV.pResource = m_resource->m_d3dResource;
-	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
 }
 
 FRenderTexture::~FRenderTexture()
@@ -1376,16 +1377,6 @@ FRenderTexture::~FRenderTexture()
 	{
 		GetSharedResourcePool()->Retire(this);
 	}
-}
-
-size_t FRenderTexture::GetTransitionToken()
-{
-	return m_resource->GetTransitionToken();
-}
-
-void FRenderTexture::Transition(FCommandList* cmdList, const size_t token, const uint32_t subresourceIndex, const D3D12_RESOURCE_STATES destState)
-{
-	m_resource->Transition(cmdList, token, subresourceIndex, destState);
 }
 
 struct FTimestampedBlob
@@ -2069,6 +2060,10 @@ uint32_t RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType descri
 		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin;
 		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd);
 		return offset;
+	case BindlessDescriptorType::AccelerationStructure:
+		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin;
+		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd);
+		return offset;
 	default:
 		DebugAssert("Not Implemented");
 		return offset;
@@ -2352,7 +2347,7 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 			srcData,
 			[texture = newTexture.get(), resourceState](FCommandList* cmdList)
 			{
-				texture->Transition(cmdList, texture->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				texture->m_resource->Transition(cmdList, texture->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
@@ -2388,6 +2383,7 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 
 std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessBuffer(
 	const std::wstring& name,
+	const BindlessResourceType type,
 	const size_t size,
 	D3D12_RESOURCE_STATES resourceState,
 	const uint8_t* pData,
@@ -2413,13 +2409,14 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessBuffer(
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
 		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-		desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+		desc.Flags = (type == BindlessResourceType::AccelerationStructure ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE);
 
 		newBuffer->m_resource = new FResource;
-		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, D3D12_RESOURCE_STATE_COPY_DEST));
+		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
 	}
 
 	// Upload buffer data
+	if(pData)
 	{
 		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
 		srcData[0].pData = pData;
@@ -2430,24 +2427,38 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessBuffer(
 			srcData,
 			[buffer = newBuffer.get(), resourceState](FCommandList* cmdList)
 			{
-				buffer->Transition(cmdList, buffer->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				buffer->m_resource->Transition(cmdList, buffer->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
 	// Descriptor
 	{
-		newBuffer->m_srvIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
+		newBuffer->m_srvIndex = GetBindlessPool()->FetchIndex(type);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newBuffer->m_srvIndex);
-
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = size / 4; // number of R32 elements
-		srvDesc.Buffer.StructureByteStride = 0;
-		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		GetDevice()->CreateShaderResourceView(newBuffer->m_resource->m_d3dResource, &srvDesc, srv);
+
+		switch (type)
+		{
+		case BindlessResourceType::Buffer:
+			srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			srvDesc.Buffer.FirstElement = 0;
+			srvDesc.Buffer.NumElements = size / 4; // number of R32 elements
+			srvDesc.Buffer.StructureByteStride = 0;
+			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			GetDevice()->CreateShaderResourceView(newBuffer->m_resource->m_d3dResource, &srvDesc, srv);
+			break;
+		case BindlessResourceType::AccelerationStructure:
+			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			srvDesc.RaytracingAccelerationStructure.Location = newBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
+			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
+			break;
+		default:
+			DebugAssert(false, "Not Implemented");
+		}
 	}
 
 	return std::move(newBuffer);
@@ -2549,7 +2560,6 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	const std::wstring& name,
 	const size_t size,
-	const D3D12_RESOURCE_STATES resourceState,
 	const bool bCreateSRV)
 {
 	D3D12_RESOURCE_DESC desc = {};
@@ -2565,24 +2575,20 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-	FResource* uavResource = s_sharedResourcePool.GetOrCreate(name, desc, resourceState, nullptr);
+	FResource* uavResource = s_sharedResourcePool.GetOrCreate(name, desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr);
 
 	// Descriptor
 	uint32_t uavIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 
-	// Acceleration structures are opaque and do not require a UAV descriptor
-	if (resourceState != D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE)
-	{
-		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-		uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
-		uavDesc.Buffer.StructureByteStride = 0;
-		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
-		GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, descriptor);
-	}
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.FirstElement = 0;
+	uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
+	uavDesc.Buffer.StructureByteStride = 0;
+	uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+	GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, descriptor);
 
 	// SRV Descriptor
 	uint32_t srvIndex = ~0u;

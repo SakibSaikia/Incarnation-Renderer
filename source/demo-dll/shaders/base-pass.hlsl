@@ -9,6 +9,7 @@
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
     "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL), " \
     "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
+	"DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL), " \
 	"DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16), visibility = SHADER_VISIBILITY_PIXEL), " \
 	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE), " \
 
@@ -26,6 +27,7 @@ struct FrameCbLayout
 	int sceneMaterialBufferIndex;
 	int envBrdfTextureIndex;
 	LightProbeData sceneLightProbe;
+	int sceneBvhIndex;
 };
 
 struct ViewCbLayout
@@ -169,13 +171,25 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	// diffuse BRDF
 	float3 Fd = albedo * Fd_Lambert();
 
+	RayDesc ray;
+	ray.Origin = input.worldPos.xyz;
+	ray.Direction = L;
+	ray.TMin = 0.1f;
+	ray.TMax = 1000.f;
+
+	RaytracingAccelerationStructure sceneBvh = g_accelerationStructures[g_frameConstants.sceneBvhIndex];
+	RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
+	q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
+	q.Proceed();
+	float shadow = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
+
 	// Apply direct lighting
 	const float lightIntensity = 100000.f;
 	float illuminance = lightIntensity * NoL;
 	float3 luminance = 0.f;
 	
 #if DIRECT_LIGHTING
-	luminance += (Fr + Fd)* illuminance;
+	luminance += (Fr + Fd) * illuminance * shadow;
 #endif
 
 	// Diffuse IBL
