@@ -355,6 +355,7 @@ namespace RenderBackend12
 	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
 		const std::wstring& name,
 		const size_t size,
+		const D3D12_RESOURCE_STATES resourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
 		const bool bCreateSRV = true);
 
 	uint32_t CreateBindlessSampler(

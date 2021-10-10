@@ -25,6 +25,7 @@ struct FMeshPrimitive
 	size_t m_indexCount;
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	int m_materialIndex;
+	int m_tlasIndex;
 };
 
 // Corresponds to GLTF Mesh
@@ -92,6 +93,8 @@ struct FScene
 	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
+	std::unordered_map<int, std::unique_ptr<FBindlessUav>> m_Blas;
+	std::vector<std::unique_ptr<FBindlessUav>> m_Tlas;
 	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
@@ -105,6 +108,7 @@ private:
 	void LoadMeshBuffers(const tinygltf::Model& model);
 	void LoadMeshBufferViews(const tinygltf::Model& model);
 	void LoadMeshAccessors(const tinygltf::Model& model);
+	void CreateAccelerationStructures(const tinygltf::Model& model);
 	void LoadMaterials(const tinygltf::Model& model);
 	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN, const DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN);

@@ -118,3 +118,8 @@ inline std::string ws2s(const std::wstring& wstr)
 
 	return converterX.to_bytes(wstr);
 }
+
+constexpr size_t GetAlignedSize(const size_t alignment, const size_t size)
+{
+	return (size + (alignment - 1)) & ~(alignment - 1);
+}

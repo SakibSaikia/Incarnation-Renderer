@@ -1286,7 +1286,7 @@ public:
 	void Clear()
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
-		DebugAssert(m_useList.empty(), "All render textures should be retired at this point");
+		DebugAssert(m_useList.empty(), "All pooled resources should be retired at this point");
 		m_freeList.clear();
 	}
 
@@ -2549,6 +2549,7 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	const std::wstring& name,
 	const size_t size,
+	const D3D12_RESOURCE_STATES resourceState,
 	const bool bCreateSRV)
 {
 	D3D12_RESOURCE_DESC desc = {};
@@ -2564,20 +2565,24 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-	FResource* uavResource = s_sharedResourcePool.GetOrCreate(name, desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr);
+	FResource* uavResource = s_sharedResourcePool.GetOrCreate(name, desc, resourceState, nullptr);
 
 	// Descriptor
 	uint32_t uavIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
 	D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 
-	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-	uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	uavDesc.Buffer.FirstElement = 0;
-	uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
-	uavDesc.Buffer.StructureByteStride = 0;
-	uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
-	GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, descriptor);
+	// Acceleration structures are opaque and do not require a UAV descriptor
+	if (resourceState != D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE)
+	{
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
+		uavDesc.Buffer.StructureByteStride = 0;
+		uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+		GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, descriptor);
+	}
 
 	// SRV Descriptor
 	uint32_t srvIndex = ~0u;
