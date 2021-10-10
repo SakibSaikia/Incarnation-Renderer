@@ -1031,10 +1031,11 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 
 	// Load material and initialize CPU-side copy
 	std::vector<FMaterial> materials(model.materials.size());
-	concurrency::parallel_for(0, (int)model.materials.size(), [&](int i)
+	//concurrency::parallel_for(0, (int)model.materials.size(), [&](int i)
+	for(int i = 0; i < model.materials.size(); ++i)
 	{
 		materials[i] = LoadMaterial(model, i);
-	});
+	}//);
 
 	const size_t bufferSize = materials.size() * sizeof(FMaterial);
 	FResourceUploadContext uploader{ bufferSize };
