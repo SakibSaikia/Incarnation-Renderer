@@ -122,12 +122,14 @@ struct FShaderDesc
 	std::wstring m_filename;
 	std::wstring m_entrypoint;
 	std::wstring m_defines;
+	std::wstring m_profile;
 };
 
 struct FRootsigDesc
 {
 	std::wstring m_filename;
 	std::wstring m_entrypoint;
+	std::wstring m_profile;
 };
 
 struct FResource
@@ -283,8 +285,9 @@ namespace RenderBackend12
 	void PresentDisplay();
 
 	// Shaders
-	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile);
-	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile);
+	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc);
+	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc);
+	void RecompileShaders();
 
 	// Descriptor Management
 	D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();

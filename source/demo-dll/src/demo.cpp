@@ -1278,11 +1278,11 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_normal_roughness", 0);
 
 		// Root Signature
-		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter-normal-roughness.hlsl", L"rootsig" });
+		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter-normal-roughness.hlsl", L"rootsig", L"rootsig_1_1" });
 		d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 		// PSO
-		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter-normal-roughness.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter-normal-roughness.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16", L"cs_6_6" });
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = rootsig.get();
@@ -1723,11 +1723,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "cubemap_gen", 0);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemapgen.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"cubemapgen.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"cubemapgen.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16", L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1787,11 +1787,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"prefilter.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"prefilter.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" , L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1864,11 +1864,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-projection.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-projection.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-projection.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-projection.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" , L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1919,7 +1919,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_integration", 0);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-integration.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-integration.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			// See https://gpuopen.com/wp-content/uploads/2017/07/GDC2017-Wave-Programming-D3D12-Vulkan.pdf
@@ -1933,7 +1933,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				" THREAD_GROUP_SIZE_Z=" << threadGroupSizeZ;
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-integration.hlsl", L"cs_main", s.str() }, L"cs_6_6");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-integration.hlsl", L"cs_main", s.str() , L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -1988,7 +1988,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-accumulation.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"sh-accumulation.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 			std::wstringstream s;
@@ -1996,7 +1996,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				" THREAD_GROUP_SIZE_Y=" << height;
 
 			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-accumulation.hlsl", L"cs_main", s.str() }, L"cs_6_6");
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"sh-accumulation.hlsl", L"cs_main", s.str() , L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.pRootSignature = rootsig.get();
@@ -2111,5 +2111,16 @@ void FSamplerCache::Clear()
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT Demo::WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	switch (msg)
+	{
+	case WM_KEYUP:
+	case WM_SYSKEYUP:
+	{
+		if (wParam == VK_F7)
+			RenderBackend12::RecompileShaders();
+		return 0;
+	}
+	}
+
 	return ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
 }

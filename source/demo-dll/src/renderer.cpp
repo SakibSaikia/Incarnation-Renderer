@@ -106,7 +106,7 @@ namespace RenderJob
 			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"base-pass.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"base-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			// Frame constant buffer
@@ -198,8 +198,8 @@ namespace RenderJob
 					L" DIFFUSE_IBL=" << (Config::g_enableDiffuseIBL ? L"1" : L"0") <<
 					L" SPECULAR_IBL=" << (Config::g_enableSpecularIBL ? L"1" : L"0");
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" }, L"vs_6_6");
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() }, L"ps_6_6");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -324,7 +324,7 @@ namespace RenderJob
 			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemap-bg.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemap-bg.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
@@ -348,8 +348,8 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"cubemap-bg.hlsl", L"vs_main", L"" }, L"vs_6_6");
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"cubemap-bg.hlsl", L"ps_main", L"" }, L"ps_6_6");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"cubemap-bg.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"cubemap-bg.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -541,7 +541,7 @@ namespace RenderJob
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
 			}
 
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"imgui.hlsl", L"rootsig" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"imgui.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 			rootsig->SetName(L"imgui_rootsig");
 
@@ -591,8 +591,8 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"vs_main", L"" }, L"vs_6_6");
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"ps_main", L"" }, L"ps_6_6");
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -826,11 +826,11 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
 
 		// Root Signature
-		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"env-brdf-integration.hlsl", L"rootsig" });
+		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"env-brdf-integration.hlsl", L"rootsig", L"rootsig_1_1" });
 		d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 		// PSO
-		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"env-brdf-integration.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" }, L"cs_6_6");
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"env-brdf-integration.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" , L"cs_6_6" });
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = rootsig.get();

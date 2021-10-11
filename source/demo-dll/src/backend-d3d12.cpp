@@ -267,6 +267,7 @@ struct std::hash<FShaderDesc>
 		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());
 		spookyhash_update(&context, key.m_entrypoint.c_str(), key.m_entrypoint.size());
 		spookyhash_update(&context, key.m_defines.c_str(), key.m_defines.size());
+		spookyhash_update(&context, key.m_profile.c_str(), key.m_profile.size());
 		spookyhash_final(&context, &seed1, &seed2);
 
 		return seed1 ^ (seed2 << 1);
@@ -283,6 +284,7 @@ struct std::hash<FRootsigDesc>
 		spookyhash_context_init(&context, seed1, seed2);
 		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());
 		spookyhash_update(&context, key.m_entrypoint.c_str(), key.m_entrypoint.size());
+		spookyhash_update(&context, key.m_profile.c_str(), key.m_profile.size());
 		spookyhash_final(&context, &seed1, &seed2);
 
 		return seed1 ^ (seed2 << 1);
@@ -293,13 +295,15 @@ bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 {
 	return lhs.m_filename == rhs.m_filename &&
 		lhs.m_entrypoint == rhs.m_entrypoint &&
-		lhs.m_defines == rhs.m_defines;
+		lhs.m_defines == rhs.m_defines &&
+		lhs.m_profile == rhs.m_profile;
 }
 
 bool operator==(const FRootsigDesc& lhs, const FRootsigDesc& rhs)
 {
 	return lhs.m_filename == rhs.m_filename &&
-		lhs.m_entrypoint == rhs.m_entrypoint;
+		lhs.m_entrypoint == rhs.m_entrypoint &&
+		lhs.m_profile == rhs.m_profile;
 }
 
 bool operator==(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& lhs, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& rhs)
@@ -1780,33 +1784,12 @@ FCommandList* RenderBackend12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE ty
 	return s_commandListPool.GetOrCreate(type);
 }
 
-IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std::wstring& profile)
+IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 {
-	FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
-
 	auto search = s_shaderCache.find(shaderDesc);
 	if (search != s_shaderCache.cend())
 	{
-		winrt::com_ptr<IDxcBlob> newBlob;
-		if (search->second.m_timestamp != currentTimestamp &&
-			SUCCEEDED(ShaderCompiler::CompileShader(
-				shaderDesc.m_filename,
-				shaderDesc.m_entrypoint,
-				shaderDesc.m_defines,
-				profile,
-				newBlob.put())))
-		{
-			search->second.m_timestamp = currentTimestamp;
-			search->second.m_blob = newBlob;
-			return search->second.m_blob.get();
-		}
-		else
-		{
-			// Use pre-cached shader if it is cached and up-to-date or if the current changes fail to compile.
-			// Update timestamp so that we don't retry compilation on a failed shader every frame.
-			search->second.m_timestamp = currentTimestamp;
-			return search->second.m_blob.get();
-		}
+		return search->second.m_blob.get();
 	}
 	else
 	{
@@ -1815,40 +1798,20 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc, const std:
 			shaderDesc.m_filename,
 			shaderDesc.m_entrypoint,
 			shaderDesc.m_defines,
-			profile,
+			shaderDesc.m_profile,
 			shaderBlob.m_blob.put()));
 
-		shaderBlob.m_timestamp = currentTimestamp;
+		shaderBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
 		return shaderBlob.m_blob.get();
 	}
 }
 
-IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, const std::wstring& profile)
+IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 {
-	FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
-
 	auto search = s_rootsigCache.find(rootsigDesc);
 	if (search != s_rootsigCache.cend())
 	{
-		winrt::com_ptr<IDxcBlob> newBlob;
-		if (search->second.m_timestamp != currentTimestamp &&
-			SUCCEEDED(ShaderCompiler::CompileRootsignature(
-				rootsigDesc.m_filename,
-				rootsigDesc.m_entrypoint,
-				profile,
-				newBlob.put())))
-		{
-			search->second.m_timestamp = currentTimestamp;
-			search->second.m_blob = newBlob;
-			return search->second.m_blob.get();
-		}
-		else
-		{
-			// Use pre-cached rootsig if it is cached and up-to-date or if the current changes fail to compile.
-			// Update timestamp so that we don't retry compilation on failure every frame.
-			search->second.m_timestamp = currentTimestamp;
-			return search->second.m_blob.get();
-		}
+		return search->second.m_blob.get();
 	}
 	else
 	{
@@ -1856,17 +1819,57 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc, c
 		AssertIfFailed(ShaderCompiler::CompileRootsignature(
 			rootsigDesc.m_filename,
 			rootsigDesc.m_entrypoint,
-			profile,
+			rootsigDesc.m_profile,
 			rsBlob.m_blob.put()));
 
-		rsBlob.m_timestamp = currentTimestamp;
+		rsBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
 		return rsBlob.m_blob.get();
+	}
+}
+
+void RenderBackend12::RecompileShaders()
+{
+	for (auto& [shaderDesc, blob] : s_shaderCache)
+	{
+		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
+		winrt::com_ptr<IDxcBlob> newBlob;
+		if (blob.m_timestamp != currentTimestamp)
+		{
+			if (SUCCEEDED(ShaderCompiler::CompileShader(
+					shaderDesc.m_filename,
+					shaderDesc.m_entrypoint,
+					shaderDesc.m_defines,
+					shaderDesc.m_profile,
+					newBlob.put())))
+			{
+				blob.m_timestamp = currentTimestamp;
+				blob.m_blob = newBlob;
+			}
+		}
+	}
+
+	for (auto& [rootsigDesc, blob] : s_rootsigCache)
+	{
+		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
+		winrt::com_ptr<IDxcBlob> newBlob;
+		if (blob.m_timestamp != currentTimestamp)
+		{
+			if (SUCCEEDED(ShaderCompiler::CompileRootsignature(
+				rootsigDesc.m_filename,
+				rootsigDesc.m_entrypoint,
+				rootsigDesc.m_profile,
+				newBlob.put())))
+			{
+				blob.m_timestamp = currentTimestamp;
+				blob.m_blob = newBlob;
+			}
+		}
 	}
 }
 
 winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(const FRootsigDesc& rootsig)
 {
-	IDxcBlob* rsBlob = CacheRootsignature(rootsig, L"rootsig_1_1");
+	IDxcBlob* rsBlob = CacheRootsignature(rootsig);
 	winrt::com_ptr<D3DRootSignature_t> rs;
 	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
 	return rs;
