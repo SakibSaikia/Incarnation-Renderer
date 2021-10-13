@@ -1695,7 +1695,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 	}
 	else
 	{
-		// Read HDR spehere map from file
+		// Read HDR sphere map from file
 		DirectX::TexMetadata metadata;
 		DirectX::ScratchImage scratch;
 		AssertIfFailed(DirectX::LoadFromHDRFile(GetFilepathW(name).c_str(), &metadata, scratch));
