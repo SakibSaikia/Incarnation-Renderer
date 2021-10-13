@@ -287,7 +287,7 @@ namespace RenderBackend12
 	// Shaders
 	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc);
 	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc);
-	void RecompileShaders();
+	void RecompileModifiedShaders();
 
 	// Descriptor Management
 	D3DDescriptorHeap_t* GetBindlessShaderResourceHeap();

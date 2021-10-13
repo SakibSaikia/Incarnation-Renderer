@@ -312,6 +312,15 @@ void Demo::Tick(float deltaTime)
 	UpdateUI(deltaTime);
 }
 
+void Demo::HeartbeatThread()
+{
+	while (true)
+	{
+		RenderBackend12::RecompileModifiedShaders();
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	}
+}
+
 void Demo::Teardown(HWND& windowHandle)
 {
 	RenderBackend12::FlushGPU();
@@ -2111,16 +2120,5 @@ void FSamplerCache::Clear()
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT Demo::WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	switch (msg)
-	{
-	case WM_KEYUP:
-	case WM_SYSKEYUP:
-	{
-		if (wParam == VK_F7)
-			RenderBackend12::RecompileShaders();
-		return 0;
-	}
-	}
-
 	return ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
 }

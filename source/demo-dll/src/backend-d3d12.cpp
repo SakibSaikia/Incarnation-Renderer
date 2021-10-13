@@ -1827,7 +1827,7 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 	}
 }
 
-void RenderBackend12::RecompileShaders()
+void RenderBackend12::RecompileModifiedShaders()
 {
 	for (auto& [shaderDesc, blob] : s_shaderCache)
 	{

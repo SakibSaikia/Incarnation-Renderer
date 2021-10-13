@@ -16,6 +16,7 @@ struct ModuleProcs
 	decltype(Demo::Teardown)* teardown;
 	decltype(Demo::Tick)* tick;
 	decltype(Demo::Render)* render;
+	decltype(Demo::HeartbeatThread)* heartbeat;
 	decltype(Demo::OnMouseMove)* mouseMove;
 	decltype(Demo::WndProcHandler)* wndProc;
 };
@@ -50,6 +51,7 @@ bool LoadModule(LPCWSTR modulePath, LPCWSTR moduleName, HMODULE& moduleHnd, Modu
 	exportedProcs.teardown = reinterpret_cast<decltype(Demo::Teardown)*>(GetProcAddress(moduleHnd, "Teardown"));
 	exportedProcs.tick = reinterpret_cast<decltype(Demo::Tick)*>(GetProcAddress(moduleHnd, "Tick"));
 	exportedProcs.render = reinterpret_cast<decltype(Demo::Render)*>(GetProcAddress(moduleHnd, "Render"));
+	exportedProcs.heartbeat = reinterpret_cast<decltype(Demo::HeartbeatThread)*>(GetProcAddress(moduleHnd, "HeartbeatThread"));
 	exportedProcs.mouseMove = reinterpret_cast<decltype(Demo::OnMouseMove)*>(GetProcAddress(moduleHnd, "OnMouseMove"));
 	exportedProcs.wndProc = reinterpret_cast<decltype(Demo::WndProcHandler)*>(GetProcAddress(moduleHnd, "WndProcHandler"));
 
@@ -224,6 +226,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	InitializeWindow(hInstance, windowHandle, windowWidth, windowHeight);
 	CleanTempFiles(PROJECT_BIN_DIR, LIB_DEMO_NAME L"_");
 
+	// Start the heartbeat thread
+	std::thread heartbeatThread;
+
 	while (msg.wParam != VK_ESCAPE)
 	{
 		FILETIME currentWriteTimestamp{};
@@ -242,6 +247,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 					ErrorExit((LPTSTR)TEXT("LoadModule"));
 				}
 				
+				heartbeatThread = std::thread{ s_demoProcs.heartbeat };
 				s_demoProcs.init(windowHandle, windowWidth, windowHeight);
 				lastWriteTimestamp = currentWriteTimestamp;
 			}
