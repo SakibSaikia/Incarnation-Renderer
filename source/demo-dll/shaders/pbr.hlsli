@@ -53,8 +53,8 @@ float G_Smith_IBL(float NoV, float NoL, float roughness)
 {
     float a2 = roughness * roughness;
     float k = 0.5f * a2 * a2;
-    float masking = G_SchlickGGX(NoL, k);
-    float shadowing = G_SchlickGGX(NoV, k);
+    float masking = G_SchlickGGX(NoV, k);
+    float shadowing = G_SchlickGGX(NoL, k);
     return masking * shadowing;
 }
 

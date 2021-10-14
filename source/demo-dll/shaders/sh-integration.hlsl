@@ -28,6 +28,7 @@ void cs_main(
     RWTexture2DArray<float4> src = g_uavBindless2DTextureArrays[g_constants.srcUavIndex];
     RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_constants.destUavIndex];
 
+    // Sum SH coefficients for all threads in the wave
     SH9Color sum;
     int i;
     [unroll]
@@ -55,7 +56,7 @@ void cs_main(
     [unroll]
     for (int k = 0; k < SH_COEFFICIENTS; ++k)
     {
-        [UNROLL]
+        [unroll]
         for (int i = 0; i < NUM_SLICES; ++i)
         {
             result.c[k] += g_sum[i].c[k];

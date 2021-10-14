@@ -1,7 +1,7 @@
 #include "spherical-harmonics.hlsli"
 
 #define rootsig \
-    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL)," \
+    "RootConstants(b0, num32BitConstants=6, visibility = SHADER_VISIBILITY_ALL)," \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
     "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
 
@@ -14,6 +14,7 @@ struct CbLayout
     uint hdriWidth;
     uint hdriHeight;
     uint hdriMip;
+    float radianceScale;
 };
 
 ConstantBuffer<CbLayout> g_constants : register(b0);
@@ -37,9 +38,9 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
     // Project radiance to SH basis
     RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_constants.outputUavIndex];
 
-    [UNROLL]
+    [unroll]
     for (int i = 0; i < SH_COEFFICIENTS; ++i)
     {
-        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = radiance * sh.c[i];
+        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = g_constants.radianceScale * radiance * sh.c[i];
     }
 }

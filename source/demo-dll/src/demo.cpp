@@ -1899,13 +1899,15 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t hdriWidth;
 				uint32_t hdriHeight;
 				uint32_t srcMip;
+				float radianceScale;
 			} cb =
 			{
 				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Texture2D, srcHdrTex->m_srvIndex),
 				RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2DArray, shTexureUav0->m_uavIndices[0]),
 				(uint32_t)metadata.width,
 				(uint32_t)metadata.height,
-				srcMipIndex
+				srcMipIndex,
+				25000.f
 			};
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
