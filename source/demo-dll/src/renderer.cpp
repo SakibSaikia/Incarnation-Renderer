@@ -43,7 +43,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	};
 
 	renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
-	renderJobs.push_back(RenderJob::BackgroundPass(jobSync, baseDesc));
+	renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
 	// Post Process
 	RenderJob::PostprocessPassDesc postDesc
