@@ -48,7 +48,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
             float2 Xi = Hammersley(i, NumSamples);
             float3 H = ImportanceSampleGGX(Xi, Roughness, N);
-            float3 L = 2.f * dot(V, H) * H - V;
+            float3 L = normalize(2.f * dot(V, H) * H - V);
 
             float NoL = saturate(L.z);
             float NoH = saturate(H.z);

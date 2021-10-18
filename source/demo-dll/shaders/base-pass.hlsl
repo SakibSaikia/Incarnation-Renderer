@@ -188,7 +188,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 luminance = 0.f;
 	
 #if DIRECT_LIGHTING
-	luminance += (Fr + Fd) * illuminance * shadow;
+	luminance += (Fr + (1.f - F) * Fd) * illuminance * shadow;
 #endif
 
 	// Diffuse IBL
@@ -223,7 +223,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 R = reflect(-V, N);
 		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
 		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
-		float3 specularIBL = F * prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
+		float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
 		luminance += lerp(specularIBL, ao * specularIBL, aoStrength);
 	}
 #endif
