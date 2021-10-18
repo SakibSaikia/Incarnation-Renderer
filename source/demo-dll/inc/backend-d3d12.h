@@ -119,7 +119,7 @@ struct FCommandList
 
 struct FShaderDesc
 {
-	std::wstring m_filename;
+	std::wstring m_relativepath;
 	std::wstring m_entrypoint;
 	std::wstring m_defines;
 	std::wstring m_profile;
@@ -127,7 +127,7 @@ struct FShaderDesc
 
 struct FRootsigDesc
 {
-	std::wstring m_filename;
+	std::wstring m_relativepath;
 	std::wstring m_entrypoint;
 	std::wstring m_profile;
 };

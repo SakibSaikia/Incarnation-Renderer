@@ -826,11 +826,19 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
 
 		// Root Signature
-		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"env-brdf-integration.hlsl", L"rootsig", L"rootsig_1_1" });
+		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
+			L"image-based-lighting/split-sum-approx/brdf-integration.hlsl", 
+			L"rootsig", 
+			L"rootsig_1_1" });
+
 		d3dCmdList->SetComputeRootSignature(rootsig.get());
 
 		// PSO
-		IDxcBlob* csBlob = RenderBackend12::CacheShader({ L"env-brdf-integration.hlsl", L"cs_main", L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" , L"cs_6_6" });
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
+			L"image-based-lighting/split-sum-approx/brdf-integration.hlsl",
+			L"cs_main", 
+			L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" , 
+			L"cs_6_6" });
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = rootsig.get();

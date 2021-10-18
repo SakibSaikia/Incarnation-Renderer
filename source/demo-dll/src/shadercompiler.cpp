@@ -52,31 +52,31 @@ void ShaderCompiler::Teardown()
 	FreeLibrary(s_validationModule);
 }
 
-FILETIME ShaderCompiler::GetLastModifiedTime(const std::wstring& filename)
+FILETIME ShaderCompiler::GetLastModifiedTime(const std::wstring& relativepath)
 {
-	const std::filesystem::path filepath = SearchShaderDir(filename);
-	DebugAssert(!filepath.empty(), "Shader source file not found");
+	const std::wstring filepath = SHADER_DIR L"/" + relativepath;
+	DebugAssert(std::filesystem::exists(std::filesystem::path(filepath)));
 
 	_WIN32_FILE_ATTRIBUTE_DATA fileAttributeData{};
-	GetFileAttributesExW(filepath.wstring().c_str(), GetFileExInfoStandard, &fileAttributeData);
+	GetFileAttributesExW(filepath.c_str(), GetFileExInfoStandard, &fileAttributeData);
 	return fileAttributeData.ftLastWriteTime;
 }
 
 HRESULT ShaderCompiler::CompileShader(
-	const std::wstring& filename, 
+	const std::wstring& relativepath, 
 	const std::wstring& entrypoint, 
 	const std::wstring& defineStr,
 	const std::wstring& profile,
 	IDxcBlob** compiledBlob)
 {
-	const std::filesystem::path filepath = SearchShaderDir(filename);
-	DebugAssert(!filepath.empty(), "Shader source file not found");
+	const std::wstring filepath = SHADER_DIR L"/" + relativepath;
+	DebugAssert(std::filesystem::exists(std::filesystem::path(filepath)));
 
 	winrt::com_ptr<IDxcUtils> utils;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(utils.put())));
 
 	winrt::com_ptr<IDxcBlobEncoding> source;
-	AssertIfFailed(utils->LoadFile(filepath.wstring().c_str(), nullptr, source.put()));
+	AssertIfFailed(utils->LoadFile(filepath.c_str(), nullptr, source.put()));
 
 	winrt::com_ptr<IDxcIncludeHandler> includeHandler;
 	AssertIfFailed(utils->CreateDefaultIncludeHandler(includeHandler.put()));
@@ -117,7 +117,7 @@ HRESULT ShaderCompiler::CompileShader(
 	winrt::com_ptr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
 		source.get(),
-		filename.c_str(),
+		filepath.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
 		k_compilerArguments.data(), (UINT)k_compilerArguments.size(),
@@ -179,19 +179,19 @@ HRESULT ShaderCompiler::CompileShader(
 }
 
 HRESULT ShaderCompiler::CompileRootsignature(
-	const std::wstring& filename,
+	const std::wstring& relativepath,
 	const std::wstring& entrypoint,
 	const std::wstring& profile,
 	IDxcBlob** compiledBlob)
 {
-	const std::filesystem::path filepath = SearchShaderDir(filename);
-	DebugAssert(!filepath.empty(), "Rootsignature source file not found");
+	const std::wstring filepath = SHADER_DIR L"/" + relativepath;
+	DebugAssert(std::filesystem::exists(std::filesystem::path(filepath)));
 
 	winrt::com_ptr<IDxcUtils> utils;
 	AssertIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(utils.put())));
 
 	winrt::com_ptr<IDxcBlobEncoding> source;
-	AssertIfFailed(utils->LoadFile(filepath.wstring().c_str(), nullptr, source.put()));
+	AssertIfFailed(utils->LoadFile(filepath.c_str(), nullptr, source.put()));
 
 	winrt::com_ptr<IDxcIncludeHandler> includeHandler;
 	AssertIfFailed(utils->CreateDefaultIncludeHandler(includeHandler.put()));
@@ -202,7 +202,7 @@ HRESULT ShaderCompiler::CompileRootsignature(
 	winrt::com_ptr<IDxcOperationResult> result;
 	AssertIfFailed(compiler->Compile(
 		source.get(),
-		filename.c_str(),
+		filepath.c_str(),
 		entrypoint.c_str(),
 		profile.c_str(),
 		k_rootsigArguments.data(), (UINT)k_rootsigArguments.size(),

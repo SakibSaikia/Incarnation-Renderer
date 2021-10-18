@@ -264,7 +264,7 @@ struct std::hash<FShaderDesc>
 		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
-		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());
+		spookyhash_update(&context, key.m_relativepath.c_str(), key.m_relativepath.size());
 		spookyhash_update(&context, key.m_entrypoint.c_str(), key.m_entrypoint.size());
 		spookyhash_update(&context, key.m_defines.c_str(), key.m_defines.size());
 		spookyhash_update(&context, key.m_profile.c_str(), key.m_profile.size());
@@ -282,7 +282,7 @@ struct std::hash<FRootsigDesc>
 		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
 		spookyhash_context_init(&context, seed1, seed2);
-		spookyhash_update(&context, key.m_filename.c_str(), key.m_filename.size());
+		spookyhash_update(&context, key.m_relativepath.c_str(), key.m_relativepath.size());
 		spookyhash_update(&context, key.m_entrypoint.c_str(), key.m_entrypoint.size());
 		spookyhash_update(&context, key.m_profile.c_str(), key.m_profile.size());
 		spookyhash_final(&context, &seed1, &seed2);
@@ -293,7 +293,7 @@ struct std::hash<FRootsigDesc>
 
 bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 {
-	return lhs.m_filename == rhs.m_filename &&
+	return lhs.m_relativepath == rhs.m_relativepath &&
 		lhs.m_entrypoint == rhs.m_entrypoint &&
 		lhs.m_defines == rhs.m_defines &&
 		lhs.m_profile == rhs.m_profile;
@@ -301,7 +301,7 @@ bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 
 bool operator==(const FRootsigDesc& lhs, const FRootsigDesc& rhs)
 {
-	return lhs.m_filename == rhs.m_filename &&
+	return lhs.m_relativepath == rhs.m_relativepath &&
 		lhs.m_entrypoint == rhs.m_entrypoint &&
 		lhs.m_profile == rhs.m_profile;
 }
@@ -1795,13 +1795,13 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 	{
 		FTimestampedBlob& shaderBlob = s_shaderCache[shaderDesc];
 		AssertIfFailed(ShaderCompiler::CompileShader(
-			shaderDesc.m_filename,
+			shaderDesc.m_relativepath,
 			shaderDesc.m_entrypoint,
 			shaderDesc.m_defines,
 			shaderDesc.m_profile,
 			shaderBlob.m_blob.put()));
 
-		shaderBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
+		shaderBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_relativepath);
 		return shaderBlob.m_blob.get();
 	}
 }
@@ -1817,12 +1817,12 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 	{
 		FTimestampedBlob& rsBlob = s_rootsigCache[rootsigDesc];
 		AssertIfFailed(ShaderCompiler::CompileRootsignature(
-			rootsigDesc.m_filename,
+			rootsigDesc.m_relativepath,
 			rootsigDesc.m_entrypoint,
 			rootsigDesc.m_profile,
 			rsBlob.m_blob.put()));
 
-		rsBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
+		rsBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_relativepath);
 		return rsBlob.m_blob.get();
 	}
 }
@@ -1831,12 +1831,12 @@ void RenderBackend12::RecompileModifiedShaders()
 {
 	for (auto& [shaderDesc, blob] : s_shaderCache)
 	{
-		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_filename);
+		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_relativepath);
 		winrt::com_ptr<IDxcBlob> newBlob;
 		if (blob.m_timestamp != currentTimestamp)
 		{
 			if (SUCCEEDED(ShaderCompiler::CompileShader(
-					shaderDesc.m_filename,
+					shaderDesc.m_relativepath,
 					shaderDesc.m_entrypoint,
 					shaderDesc.m_defines,
 					shaderDesc.m_profile,
@@ -1850,12 +1850,12 @@ void RenderBackend12::RecompileModifiedShaders()
 
 	for (auto& [rootsigDesc, blob] : s_rootsigCache)
 	{
-		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_filename);
+		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_relativepath);
 		winrt::com_ptr<IDxcBlob> newBlob;
 		if (blob.m_timestamp != currentTimestamp)
 		{
 			if (SUCCEEDED(ShaderCompiler::CompileRootsignature(
-				rootsigDesc.m_filename,
+				rootsigDesc.m_relativepath,
 				rootsigDesc.m_entrypoint,
 				rootsigDesc.m_profile,
 				newBlob.put())))

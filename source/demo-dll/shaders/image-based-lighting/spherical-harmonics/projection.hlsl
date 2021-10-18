@@ -1,4 +1,4 @@
-#include "spherical-harmonics.hlsli"
+#include "image-based-lighting/spherical-harmonics/common.hlsli"
 
 #define rootsig \
     "RootConstants(b0, num32BitConstants=6, visibility = SHADER_VISIBILITY_ALL)," \

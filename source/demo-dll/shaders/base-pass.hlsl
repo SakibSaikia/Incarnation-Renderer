@@ -1,5 +1,5 @@
 #include "pbr.hlsli"
-#include "spherical-harmonics.hlsli"
+#include "image-based-lighting/spherical-harmonics/common.hlsli"
 #include "mesh-material.h"
 
 #define rootsig \
