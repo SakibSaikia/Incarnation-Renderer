@@ -74,22 +74,68 @@ namespace MeshMaterial
 		else if (accessor.m_byteStride == 2)
 		{
 			// Raw address buffer addressing needs to be clamped to a 4 byte boundary
-			int clampedIndex = (index * 2) / 4;
-			uint bufferValue = buffer.Load(accessor.m_byteOffset + view.m_byteOffset + clampedIndex * 4);
+			uint byteOffset = index * 2;
+			uint dwordAlignedByteOffset = byteOffset & ~3;
+			uint bufferValue = buffer.Load(accessor.m_byteOffset + view.m_byteOffset + dwordAlignedByteOffset);
 
 			// Return Low or High half word depending on the index
-			if ((index & 0x1) == 0)
+			if (dwordAlignedByteOffset == byteOffset)
 			{
-				return bufferValue & 0x0000ffff;
+				return bufferValue & 0xffff;
 			}
 			else
 			{
-				return (bufferValue & 0xffff0000) >> 16;
+				return (bufferValue >> 16) & 0xffff;
 			}
 		}
 		else
 		{
 			return 0;
+		}
+	}
+
+	uint3 GetUint3(int index, int accessorIndex, int accessorBufferIndex, int viewBufferIndex)
+	{
+		if (index == -1 || accessorIndex == -1 || accessorBufferIndex == -1 || viewBufferIndex == -1)
+		{
+			return 0;
+		}
+
+		FMeshAccessor accessor = g_bindlessBuffers[accessorBufferIndex].Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
+		FMeshBufferView view = g_bindlessBuffers[viewBufferIndex].Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
+		ByteAddressBuffer buffer = g_bindlessBuffers[view.m_bufferSrvIndex];
+
+		if (accessor.m_byteStride == 4)
+		{
+			return buffer.Load3(accessor.m_byteOffset + view.m_byteOffset + index * 4);
+		}
+		else if (accessor.m_byteStride == 2)
+		{
+			// Raw address buffer addressing needs to be clamped to a 4 byte boundary
+			uint byteOffset = index * 2;
+			uint dwordAlignedByteOffset = byteOffset & ~3;
+			uint2 four16BitData = buffer.Load2(accessor.m_byteOffset + view.m_byteOffset + dwordAlignedByteOffset);
+
+			// Start at Low or High half word depending on the index
+			uint3 data;
+			if (dwordAlignedByteOffset == byteOffset)
+			{
+				data.x = four16BitData.x & 0xffff;
+				data.y = (four16BitData.x >> 16) & 0xffff;
+				data.z = four16BitData.y & 0xffff;
+			}
+			else
+			{
+				data.x = (four16BitData.x >> 16) & 0xffff;
+				data.y = four16BitData.y & 0xffff;
+				data.z = (four16BitData.y >> 16) & 0xffff;
+			}
+
+			return data;
+		}
+		else
+		{
+			return 0.xxx;
 		}
 	}
 
