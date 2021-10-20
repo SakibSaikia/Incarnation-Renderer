@@ -17,7 +17,8 @@ LocalRootSignature k_hitGroupLocalRootsig =
 
 LocalRootSignature k_missShaderLocalRootsig =
 {
-    "RootConstants(b2, num32BitConstants = 1)"
+    "RootConstants(b2, num32BitConstants = 1),"
+    "StaticSampler(s0, space = 1, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP)"
 };
 
 TriangleHitGroup k_hitGroup =
@@ -81,8 +82,9 @@ struct MissCbLayout
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
-ConstantBuffer<HitgroupCbLayout> g_hitConstants : register(b1);
+ConstantBuffer<HitgroupCbLayout> g_hitgroupConstants : register(b1);
 ConstantBuffer<MissCbLayout> g_missConstants : register(b2);
+SamplerState g_anisoSampler : register(s0, space1);
 
 [shader("raygeneration")]
 void rgsMain()
@@ -99,39 +101,38 @@ void rgsMain()
 [shader("closesthit")]
 void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+    const int globalMeshAccessorsIndex = g_globalConstants.sceneMeshAccessorsIndex;
+    const int globalMehsBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
+
     float3 hitPosition = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
-    // Get the base index of the triangle's first 16 bit index.
-    uint indexSizeInBytes = 2;
-    uint indicesPerTriangle = 3;
-    uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-    uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+    // Get the base index of the hit triangle
+    const uint indicesPerTriangle = 3;
+    uint baseIndex = PrimitiveIndex() * indicesPerTriangle;
 
-    // Load up 3 16 bit indices for the triangle.
-    const uint3 indices = Load3x16BitIndices(baseIndex);
+    // Load up 3 indices for the triangle
+    const uint3 indices = MeshMaterial::GetUint(baseIndex, g_hitgroupConstants.indexAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex);
 
-    // Retrieve corresponding vertex normals for the triangle vertices.
-    float3 vertexNormals[3] = {
-        Vertices[indices[0]].normal,
-        Vertices[indices[1]].normal,
-        Vertices[indices[2]].normal
+    // Retrieve corresponding vertex normals for the triangle vertices
+    float3 vertexNormals[3] = 
+    {
+        MeshMaterial::GetFloat3(indices.x, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex),
+        MeshMaterial::GetFloat3(indices.y, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex),
+        MeshMaterial::GetFloat3(indices.z, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex)
     };
 
-    // Compute the triangle's normal.
-    // This is redundant and done for illustration purposes 
-    // as all the per-vertex normals are the same and match triangle's normal in this sample. 
-    float3 triangleNormal = HitAttribute(vertexNormals, attr.barycentrics);
+    // Compute the triangle's normal
+    float3 N = HitAttribute(vertexNormals, attr.barycentrics);
+    float3 L = normalize(float3(1, 1, -1));
+    float NoL = saturate(dot(N, L));
 
-    float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
-    float4 color = g_sceneCB.lightAmbientColor + diffuseColor;
-
-    payload.color = color;
+    payload.color = NoL;
 }
 
 [shader("miss")]
 void msMain(inout RayPayload payload)
 {
-    payload.color = g_bindlessCubeTextures[g_frameConstants.envmapTextureIndex].Sample(g_anisoSampler, WorldRayDirection()).rgb;;
+    payload.color = g_bindlessCubeTextures[g_missConstants.envmapTextureIndex].Sample(g_anisoSampler, WorldRayDirection()).rgb;
 }
 
 

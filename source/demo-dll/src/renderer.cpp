@@ -27,9 +27,21 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	const uint32_t sampleCount = 4;
 	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Config::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
+	std::unique_ptr<FBindlessUav> raytraceOutput = RenderBackend12::CreateBindlessUavTexture(L"raytrace_output", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 
 	std::vector<concurrency::task<void>> renderJobs;
 	static RenderJob::Sync jobSync;
+
+	RenderJob::PathTracingDesc pathtraceDesc
+	{
+		.target = raytraceOutput.get(),
+		.resX = resX,
+		.resY = resY,
+		.scene = GetScene(),
+		.view = GetView()
+	};
+
+	renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 	// Base pass
 	RenderJob::BasePassDesc baseDesc
