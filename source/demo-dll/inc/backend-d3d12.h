@@ -281,6 +281,7 @@ namespace RenderBackend12
 	// Pipeline States
 	D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
 	D3DPipelineState_t* FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC&  desc);
+	D3DStateObject_t* FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc);
 
 	// Swap chain and back buffers
 	FRenderTexture* GetBackBuffer();

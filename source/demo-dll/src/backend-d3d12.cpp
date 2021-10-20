@@ -257,6 +257,38 @@ struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC >
 };
 
 template<>
+struct std::hash<D3D12_STATE_OBJECT_DESC >
+{
+	std::size_t operator()(const D3D12_STATE_OBJECT_DESC& key) const
+	{
+		uint64_t seed1{}, seed2{};
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, &key.NumSubobjects, sizeof(key.NumSubobjects));
+		for (int subObjectId = 0; subObjectId < key.NumSubobjects; ++subObjectId)
+		{
+			const D3D12_STATE_SUBOBJECT& subObject = key.pSubobjects[subObjectId];
+
+			DebugAssert(subObject.Type == D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, "Only DXIL embedded subobjects are supported currrent!");
+			const auto libDesc = (D3D12_DXIL_LIBRARY_DESC*)subObject.pDesc;
+			spookyhash_update(&context, libDesc->DXILLibrary.pShaderBytecode, libDesc->DXILLibrary.BytecodeLength);
+			spookyhash_update(&context, &libDesc->NumExports, sizeof(libDesc->NumExports));
+
+			for (int exportId = 0; exportId < libDesc->NumExports; ++exportId)
+			{
+				const D3D12_EXPORT_DESC& exp = libDesc->pExports[exportId];
+				spookyhash_update(&context, exp.Name, sizeof(exp.Name));
+				spookyhash_update(&context, exp.ExportToRename, sizeof(exp.ExportToRename));
+				spookyhash_update(&context, &exp.Flags, sizeof(exp.Flags));
+			}
+		}
+
+		spookyhash_final(&context, &seed1, &seed2);
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+template<>
 struct std::hash<FShaderDesc>
 {
 	std::size_t operator()(const FShaderDesc& key) const
@@ -314,6 +346,11 @@ bool operator==(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& lhs, const D3D12_GRAPH
 bool operator==(const D3D12_COMPUTE_PIPELINE_STATE_DESC& lhs, const D3D12_COMPUTE_PIPELINE_STATE_DESC& rhs)
 {
 	return std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(lhs) == std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(rhs);
+}
+
+bool operator==(const D3D12_STATE_OBJECT_DESC& lhs, const D3D12_STATE_OBJECT_DESC& rhs)
+{
+	return std::hash<D3D12_STATE_OBJECT_DESC>{}(lhs) == std::hash<D3D12_STATE_OBJECT_DESC>{}(rhs);
 }
 
 bool operator==(const FILETIME& lhs, const FILETIME& rhs)
@@ -1431,6 +1468,7 @@ namespace RenderBackend12
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
 	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
+	concurrency::concurrent_unordered_map<D3D12_STATE_OBJECT_DESC, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_samplerIndexPool;
@@ -1910,6 +1948,25 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(newPSO.put())));
 		s_computePSOPool[desc] = newPSO;
 		return s_computePSOPool[desc].get();
+	}
+}
+
+D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc)
+{
+	auto search = s_raytracePSOPool.find(desc);
+	if (search != s_raytracePSOPool.cend())
+	{
+		return search->second.get();
+	}
+	else
+	{
+		// PSO creation calls have associated latency. So create a temp object on the stack and 
+		// copy it to the PSO pool once done so that multiple threads calling it simultaneously
+		// do not access a PSO mid-creation!
+		winrt::com_ptr<D3DStateObject_t> newPSO;
+		AssertIfFailed(s_d3dDevice->CreateStateObject(&desc, IID_PPV_ARGS(newPSO.put())));
+		s_raytracePSOPool[desc] = newPSO;
+		return s_raytracePSOPool[desc].get();
 	}
 }
 
