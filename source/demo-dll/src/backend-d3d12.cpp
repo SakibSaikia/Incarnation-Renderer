@@ -22,7 +22,7 @@ using namespace RenderBackend12;
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														Constants
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-constexpr uint32_t k_backBufferCount = 2;
+constexpr uint32_t k_backBufferCount = 3;
 constexpr size_t k_rtvHeapSize = 32;
 constexpr size_t k_dsvHeapSize = 8;
 constexpr size_t k_samplerHeapSize = 16;
