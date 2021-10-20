@@ -15,6 +15,7 @@
 #include "render-jobs/post-process.inl"
 #include "render-jobs/ui-pass.inl"
 #include "render-jobs/present.inl"
+#include "render-jobs/path-tracing.inl"
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {

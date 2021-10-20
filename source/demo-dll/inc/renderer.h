@@ -55,6 +55,16 @@ struct FSceneEntities
 		m_transformList.clear();
 		m_objectSpaceBoundsList.clear();
 	}
+
+	size_t GetScenePrimitiveCount() const
+	{
+		size_t primCount = 0;
+		for (const auto& mesh : m_meshList)
+		{
+			primCount += mesh.m_primitives.size();
+		}
+		return primCount;
+	}
 };
 
 struct FCamera

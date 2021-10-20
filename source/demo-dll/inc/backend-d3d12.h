@@ -30,6 +30,8 @@ using D3DCommandList_t = ID3D12GraphicsCommandList4;
 using D3DFence_t = ID3D12Fence1;
 using D3DPipelineState_t = ID3D12PipelineState;
 using D3DRootSignature_t = ID3D12RootSignature;
+using D3DStateObject_t = ID3D12StateObject;
+using D3DStateObjectProperties_t = ID3D12StateObjectProperties;
 using PhysicalAlloc_t = std::vector<uint32_t>;
 
 struct IDxcBlob;
