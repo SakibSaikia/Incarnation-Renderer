@@ -269,7 +269,7 @@ struct std::hash<D3D12_STATE_OBJECT_DESC >
 		{
 			const D3D12_STATE_SUBOBJECT& subObject = key.pSubobjects[subObjectId];
 
-			DebugAssert(subObject.Type == D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, "Only DXIL embedded subobjects are supported currrent!");
+			DebugAssert(subObject.Type == D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, "Only DXIL embedded subobjects are supported currrently!");
 			const auto libDesc = (D3D12_DXIL_LIBRARY_DESC*)subObject.pDesc;
 			spookyhash_update(&context, libDesc->DXILLibrary.pShaderBytecode, libDesc->DXILLibrary.BytecodeLength);
 			spookyhash_update(&context, &libDesc->NumExports, sizeof(libDesc->NumExports));
@@ -1465,9 +1465,9 @@ namespace RenderBackend12
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
 	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
-	concurrency::concurrent_unordered_map<D3D12_GRAPHICS_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
-	concurrency::concurrent_unordered_map<D3D12_COMPUTE_PIPELINE_STATE_DESC, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
-	concurrency::concurrent_unordered_map<D3D12_STATE_OBJECT_DESC, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
+	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
+	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
+	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_samplerIndexPool;
@@ -1921,7 +1921,9 @@ winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(IDxcBlob*
 
 D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
-	auto search = s_graphicsPSOPool.find(desc);
+	size_t descHash = std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>{}(desc);
+
+	auto search = s_graphicsPSOPool.find(descHash);
 	if (search != s_graphicsPSOPool.cend())
 	{
 		return search->second.get();
@@ -1933,14 +1935,16 @@ D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAP
 		// do not access a PSO mid-creation!
 		winrt::com_ptr<D3DPipelineState_t> newPSO;
 		AssertIfFailed(s_d3dDevice->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(newPSO.put())));
-		s_graphicsPSOPool[desc] = newPSO;
-		return s_graphicsPSOPool[desc].get();
+		s_graphicsPSOPool[descHash] = newPSO;
+		return s_graphicsPSOPool[descHash].get();
 	}
 }
 
 D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC& desc)
 {
-	auto search = s_computePSOPool.find(desc);
+	size_t descHash = std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(desc);
+
+	auto search = s_computePSOPool.find(descHash);
 	if (search != s_computePSOPool.cend())
 	{
 		return search->second.get();
@@ -1952,14 +1956,16 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 		// do not access a PSO mid-creation!
 		winrt::com_ptr<D3DPipelineState_t> newPSO;
 		AssertIfFailed(s_d3dDevice->CreateComputePipelineState(&desc, IID_PPV_ARGS(newPSO.put())));
-		s_computePSOPool[desc] = newPSO;
-		return s_computePSOPool[desc].get();
+		s_computePSOPool[descHash] = newPSO;
+		return s_computePSOPool[descHash].get();
 	}
 }
 
 D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc)
 {
-	auto search = s_raytracePSOPool.find(desc);
+	size_t descHash = std::hash<D3D12_STATE_OBJECT_DESC>{}(desc);
+
+	auto search = s_raytracePSOPool.find(descHash);
 	if (search != s_raytracePSOPool.cend())
 	{
 		return search->second.get();
@@ -1971,8 +1977,8 @@ D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_
 		// do not access a PSO mid-creation!
 		winrt::com_ptr<D3DStateObject_t> newPSO;
 		AssertIfFailed(s_d3dDevice->CreateStateObject(&desc, IID_PPV_ARGS(newPSO.put())));
-		s_raytracePSOPool[desc] = newPSO;
-		return s_raytracePSOPool[desc].get();
+		s_raytracePSOPool[descHash] = newPSO;
+		return s_raytracePSOPool[descHash].get();
 	}
 }
 

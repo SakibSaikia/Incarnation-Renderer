@@ -1056,7 +1056,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 		L"scene_materials",
 		BindlessResourceType::Buffer,
 		bufferSize,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*)materials.data(),
 		&uploader);
 

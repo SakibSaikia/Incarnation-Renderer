@@ -6,10 +6,10 @@
     "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL)," \
-    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000), visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL)," \
-	"DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL)," \
+    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)," \
+    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL)," \
+    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)," \
+	"DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)," \
 	"DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16), visibility = SHADER_VISIBILITY_PIXEL)," \
 	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
