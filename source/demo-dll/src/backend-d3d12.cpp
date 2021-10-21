@@ -278,7 +278,6 @@ struct std::hash<D3D12_STATE_OBJECT_DESC >
 			{
 				const D3D12_EXPORT_DESC& exp = libDesc->pExports[exportId];
 				spookyhash_update(&context, exp.Name, sizeof(exp.Name));
-				spookyhash_update(&context, exp.ExportToRename, sizeof(exp.ExportToRename));
 				spookyhash_update(&context, &exp.Flags, sizeof(exp.Flags));
 			}
 		}

@@ -17,6 +17,8 @@ RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWo
     ray.Direction = normalize(world.xyz - cameraPos);
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
+
+    return ray;
 }
 
 // Retrieve attribute at a hit position interpolated from the hit's barycentrics.

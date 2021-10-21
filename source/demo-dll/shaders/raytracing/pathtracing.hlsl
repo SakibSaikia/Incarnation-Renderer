@@ -3,11 +3,12 @@
 
 #define global_rootsig \
     "CBV(b0, space = 0), " \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), " \
-    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000), " \
-    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000), " \
-    "DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000), " \
-    "DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16)"
+    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000)), " \
+    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000)), " \
+    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000)), " \
+    "DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000)), " \
+    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000))," \
+    "DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16))"
 
 
 LocalRootSignature k_hitGroupLocalRootsig =
@@ -62,18 +63,18 @@ struct GlobalCbLayout
     int sceneMaterialBufferIndex;
     int sceneBvhIndex;
     Vector3 cameraPosition;
-    int _pad0;
+    int destUavIndex;
     Matrix projectionToWorld;
 };
 
 struct HitgroupCbLayout
 {
-    int m_indexAccessor;
-    int m_positionAccessor;
-    int m_uvAccessor;
-    int m_normalAccessor;
-    int m_tangentAccessor;
-    int m_materialIndex;
+    int indexAccessor;
+    int positionAccessor;
+    int uvAccessor;
+    int normalAccessor;
+    int tangentAccessor;
+    int materialIndex;
 };
 
 struct MissCbLayout
@@ -81,6 +82,7 @@ struct MissCbLayout
     int envmapIndex;
 };
 
+RWTexture2D<float4> g_uavBindless2DTextures[] : register(u0);
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
 ConstantBuffer<HitgroupCbLayout> g_hitgroupConstants : register(b1);
 ConstantBuffer<MissCbLayout> g_missConstants : register(b2);
@@ -89,7 +91,7 @@ SamplerState g_anisoSampler : register(s0, space1);
 [shader("raygeneration")]
 void rgsMain()
 {
-    RWTexture2DArray<float4> destUav = g_uavBindless2DTextureArrays[g_globalConstants.destUavIndex];
+    RWTexture2D<float4> destUav = g_uavBindless2DTextures[g_globalConstants.destUavIndex];
     RaytracingAccelerationStructure sceneBvh = g_accelerationStructures[g_globalConstants.sceneBvhIndex];
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
@@ -126,13 +128,13 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float3 L = normalize(float3(1, 1, -1));
     float NoL = saturate(dot(N, L));
 
-    payload.color = NoL;
+    payload.color = float4(NoL, NoL, NoL, 1.f);
 }
 
 [shader("miss")]
 void msMain(inout RayPayload payload)
 {
-    payload.color = g_bindlessCubeTextures[g_missConstants.envmapTextureIndex].Sample(g_anisoSampler, WorldRayDirection()).rgb;
+    payload.color = float4(g_bindlessCubeTextures[g_missConstants.envmapIndex].SampleLevel(g_anisoSampler, WorldRayDirection(), 0).rgb, 1.f);
 }
 
 
