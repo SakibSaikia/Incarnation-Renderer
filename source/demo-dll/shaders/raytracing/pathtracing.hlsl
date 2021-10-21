@@ -1,14 +1,16 @@
 #include "raytracing/common.hlsli"
 #include "mesh-material.h"
 
-#define global_rootsig \
+GlobalRootSignature k_globalRootsig =
+{
     "CBV(b0, space = 0), " \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000)), " \
-    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000)), " \
-    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000)), " \
-    "DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000)), " \
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000))," \
+    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000)),"
+    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000)),"
+    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000)),"
+    "DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000)),"
+    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000)),"
     "DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16))"
+};
 
 
 LocalRootSignature k_hitGroupLocalRootsig =

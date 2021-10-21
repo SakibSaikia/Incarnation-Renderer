@@ -30,6 +30,7 @@ namespace RenderJob
 				{L"rgsMain", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"chsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"msMain", nullptr, D3D12_EXPORT_FLAG_NONE },
+				{L"k_globalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroupLocalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_missShaderLocalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroup", nullptr, D3D12_EXPORT_FLAG_NONE},
@@ -141,7 +142,7 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Global Root Signature
-			winrt::com_ptr<D3DRootSignature_t> globalRootsig = RenderBackend12::FetchRootSignature({ L"raytracing/pathtracing.hlsl", L"global_rootsig", L"rootsig_1_1" });
+			winrt::com_ptr<D3DRootSignature_t> globalRootsig = RenderBackend12::FetchRootSignature(rtLib);
 			d3dCmdList->SetComputeRootSignature(globalRootsig.get());
 
 			// Root signature arguments
@@ -172,7 +173,7 @@ namespace RenderJob
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 				});
 
-			d3dCmdList->SetGraphicsRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
 			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
 			d3dCmdList->SetComputeRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));

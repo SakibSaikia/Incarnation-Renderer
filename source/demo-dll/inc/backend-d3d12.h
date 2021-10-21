@@ -277,6 +277,7 @@ namespace RenderBackend12
 
 	// Root Signatures
 	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(const FRootsigDesc& rootsig);
+	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(IDxcBlob* blob);
 
 	// Pipeline States
 	D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);

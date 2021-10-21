@@ -1912,6 +1912,13 @@ winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(const FRo
 	return rs;
 }
 
+winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(IDxcBlob* blob)
+{
+	winrt::com_ptr<D3DRootSignature_t> rs;
+	s_d3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
+	return rs;
+}
+
 D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
 	auto search = s_graphicsPSOPool.find(desc);
