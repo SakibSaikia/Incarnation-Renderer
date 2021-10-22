@@ -2157,6 +2157,7 @@ std::unique_ptr<FTransientBuffer> RenderBackend12::CreateTransientBuffer(
 
 	uint8_t* pData;
 	buffer->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&pData));
+	memset(pData, 0, powOf2Size);
 
 	if (uploadFunc)
 	{

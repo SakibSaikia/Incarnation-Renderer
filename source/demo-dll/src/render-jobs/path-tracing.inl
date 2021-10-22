@@ -184,13 +184,13 @@ namespace RenderJob
 			// Dispatch rays
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
 			dispatchDesc.HitGroupTable.StartAddress = hitGroupShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			dispatchDesc.HitGroupTable.SizeInBytes = hitGroupShaderTable->m_resource->m_d3dResource->GetDesc().Width;
+			dispatchDesc.HitGroupTable.SizeInBytes = numHitGroups * hitGroupShaderRecordSize;
 			dispatchDesc.HitGroupTable.StrideInBytes = hitGroupShaderRecordSize;
 			dispatchDesc.MissShaderTable.StartAddress = missShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			dispatchDesc.MissShaderTable.SizeInBytes = missShaderTable->m_resource->m_d3dResource->GetDesc().Width;
+			dispatchDesc.MissShaderTable.SizeInBytes = 1 * missShaderRecordSize;
 			dispatchDesc.MissShaderTable.StrideInBytes = missShaderRecordSize;
 			dispatchDesc.RayGenerationShaderRecord.StartAddress = raygenShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			dispatchDesc.RayGenerationShaderRecord.SizeInBytes = raygenShaderTable->m_resource->m_d3dResource->GetDesc().Width;
+			dispatchDesc.RayGenerationShaderRecord.SizeInBytes = 1 * raygenShaderRecordSize;
 			dispatchDesc.Width = passDesc.resX;
 			dispatchDesc.Height = passDesc.resY;
 			dispatchDesc.Depth = 1;
