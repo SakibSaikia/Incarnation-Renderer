@@ -4,7 +4,8 @@
 GlobalRootSignature k_globalRootsig =
 {
     "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
-    "CBV(b0) " \
+    "CBV(b0), " \
+    "SRV(t0)"
 };
 
 
@@ -83,16 +84,16 @@ ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
 ConstantBuffer<HitgroupCbLayout> g_hitgroupConstants : register(b1);
 ConstantBuffer<MissCbLayout> g_missConstants : register(b2);
 SamplerState g_anisoSampler : register(s0, space1);
+RaytracingAccelerationStructure g_sceneBvh : register(t0);
 
 [shader("raygeneration")]
 void rgsMain()
 {
     RWTexture2D<float4> destUav = ResourceDescriptorHeap[g_globalConstants.destUavIndex];
-    RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_globalConstants.sceneBvhIndex];
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
     RayPayload payload = { float4(0, 0, 0, 0) };
-    TraceRay(sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
     destUav[DispatchRaysIndex().xy] = payload.color;
 }
 
