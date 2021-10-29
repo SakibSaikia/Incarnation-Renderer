@@ -48,12 +48,6 @@ struct FMaterial
 
 #ifndef __cplusplus
 
-Texture2D g_bindless2DTextures[] : register(t0, space0);
-ByteAddressBuffer g_bindlessBuffers[] : register(t1, space1);
-TextureCube g_bindlessCubeTextures[] : register(t2, space2);
-RaytracingAccelerationStructure g_accelerationStructures[] : register(t3, space3);
-SamplerState g_bindlessSamplers[] : register(s0, space0);
-
 namespace MeshMaterial
 {
 	uint GetUint(int index, int accessorIndex, int accessorBufferIndex, int viewBufferIndex)
@@ -63,9 +57,11 @@ namespace MeshMaterial
 			return 0;
 		}
 
-		FMeshAccessor accessor = g_bindlessBuffers[accessorBufferIndex].Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
-		FMeshBufferView view = g_bindlessBuffers[viewBufferIndex].Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
-		ByteAddressBuffer buffer = g_bindlessBuffers[view.m_bufferSrvIndex];
+		ByteAddressBuffer accessorBuffer = ResourceDescriptorHeap[accessorBufferIndex];
+		FMeshAccessor accessor = accessorBuffer.Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
+		ByteAddressBuffer viewBuffer = ResourceDescriptorHeap[viewBufferIndex];
+		FMeshBufferView view = viewBuffer.Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
+		ByteAddressBuffer buffer = ResourceDescriptorHeap[view.m_bufferSrvIndex];
 
 		if (accessor.m_byteStride == 4)
 		{
@@ -101,9 +97,11 @@ namespace MeshMaterial
 			return 0;
 		}
 
-		FMeshAccessor accessor = g_bindlessBuffers[accessorBufferIndex].Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
-		FMeshBufferView view = g_bindlessBuffers[viewBufferIndex].Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
-		ByteAddressBuffer buffer = g_bindlessBuffers[view.m_bufferSrvIndex];
+		ByteAddressBuffer accessorBuffer = ResourceDescriptorHeap[accessorBufferIndex];
+		FMeshAccessor accessor = accessorBuffer.Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
+		ByteAddressBuffer viewBuffer = ResourceDescriptorHeap[viewBufferIndex];
+		FMeshBufferView view = viewBuffer.Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
+		ByteAddressBuffer buffer = ResourceDescriptorHeap[view.m_bufferSrvIndex];
 
 		if (accessor.m_byteStride == 4)
 		{
@@ -146,9 +144,11 @@ namespace MeshMaterial
 			return 0.f.xxxx;
 		}
 
-		FMeshAccessor accessor = g_bindlessBuffers[accessorBufferIndex].Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
-		FMeshBufferView view = g_bindlessBuffers[viewBufferIndex].Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
-		ByteAddressBuffer buffer = g_bindlessBuffers[view.m_bufferSrvIndex];
+		ByteAddressBuffer accessorBuffer = ResourceDescriptorHeap[accessorBufferIndex];
+		FMeshAccessor accessor = accessorBuffer.Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
+		ByteAddressBuffer viewBuffer = ResourceDescriptorHeap[viewBufferIndex];
+		FMeshBufferView view = viewBuffer.Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
+		ByteAddressBuffer buffer = ResourceDescriptorHeap[view.m_bufferSrvIndex];
 
 		[branch]
 		switch (accessor.m_byteStride)
@@ -167,9 +167,11 @@ namespace MeshMaterial
 			return 0.f.xxx;
 		}
 
-		FMeshAccessor accessor = g_bindlessBuffers[accessorBufferIndex].Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
-		FMeshBufferView view = g_bindlessBuffers[viewBufferIndex].Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
-		ByteAddressBuffer buffer = g_bindlessBuffers[view.m_bufferSrvIndex];
+		ByteAddressBuffer accessorBuffer = ResourceDescriptorHeap[accessorBufferIndex];
+		FMeshAccessor accessor = accessorBuffer.Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
+		ByteAddressBuffer viewBuffer = ResourceDescriptorHeap[viewBufferIndex];
+		FMeshBufferView view = viewBuffer.Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
+		ByteAddressBuffer buffer = ResourceDescriptorHeap[view.m_bufferSrvIndex];
 
 		float4 temp;
 		[branch]
@@ -192,9 +194,11 @@ namespace MeshMaterial
 			return 0.f.xx;
 		}
 
-		FMeshAccessor accessor = g_bindlessBuffers[accessorBufferIndex].Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
-		FMeshBufferView view = g_bindlessBuffers[viewBufferIndex].Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
-		ByteAddressBuffer buffer = g_bindlessBuffers[view.m_bufferSrvIndex];
+		ByteAddressBuffer accessorBuffer = ResourceDescriptorHeap[accessorBufferIndex];
+		FMeshAccessor accessor = accessorBuffer.Load<FMeshAccessor>(accessorIndex * sizeof(FMeshAccessor));
+		ByteAddressBuffer viewBuffer = ResourceDescriptorHeap[viewBufferIndex];
+		FMeshBufferView view = viewBuffer.Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
+		ByteAddressBuffer buffer = ResourceDescriptorHeap[view.m_bufferSrvIndex];
 
 		float4 temp;
 		[branch]
@@ -215,7 +219,8 @@ namespace MeshMaterial
 
 	FMaterial GetMaterial(int materialIndex, int materialBufferIndex)
 	{
-		return g_bindlessBuffers[materialBufferIndex].Load<FMaterial>(materialIndex * sizeof(FMaterial));
+		ByteAddressBuffer materialBuffer = ResourceDescriptorHeap[materialBufferIndex];
+		return materialBuffer.Load<FMaterial>(materialIndex * sizeof(FMaterial));
 	}
 }
 #endif // __HLSL

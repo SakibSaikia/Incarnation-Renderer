@@ -3,13 +3,8 @@
 
 GlobalRootSignature k_globalRootsig =
 {
-    "CBV(b0), " \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
-    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
-    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
-    "DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
-    "DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16))"
+    "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
+    "CBV(b0) " \
 };
 
 
@@ -93,8 +88,8 @@ SamplerState g_anisoSampler : register(s0, space1);
 [shader("raygeneration")]
 void rgsMain()
 {
-    RWTexture2D<float4> destUav = g_uavBindless2DTextures[g_globalConstants.destUavIndex];
-    RaytracingAccelerationStructure sceneBvh = g_accelerationStructures[g_globalConstants.sceneBvhIndex];
+    RWTexture2D<float4> destUav = ResourceDescriptorHeap[g_globalConstants.destUavIndex];
+    RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_globalConstants.sceneBvhIndex];
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
     RayPayload payload = { float4(0, 0, 0, 0) };
@@ -136,7 +131,8 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 [shader("miss")]
 void msMain(inout RayPayload payload)
 {
-    payload.color = float4(g_bindlessCubeTextures[g_missConstants.envmapIndex].SampleLevel(g_anisoSampler, WorldRayDirection(), 0).rgb, 1.f);
+    TextureCube envmap = ResourceDescriptorHeap[g_missConstants.envmapIndex];
+    payload.color = float4(envmap.SampleLevel(g_anisoSampler, WorldRayDirection(), 0).rgb, 1.f);
 }
 
 

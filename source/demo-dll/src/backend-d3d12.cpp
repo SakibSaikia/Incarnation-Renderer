@@ -1527,7 +1527,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	// Device
 	AssertIfFailed(D3D12CreateDevice(
 		adapter.get(),
-		D3D_FEATURE_LEVEL_12_1,
+		D3D_FEATURE_LEVEL_12_2,
 		IID_PPV_ARGS(s_d3dDevice.put())));
 
 #if defined(_DEBUG)
@@ -1559,7 +1559,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &d3d12OptionsFlags5, sizeof(d3d12OptionsFlags5)));
 	AbortOnFailure(d3d12OptionsFlags5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1, "D3D12_RAYTRACING_TIER_1_1 is required for the app", windowHandle);
 
-	D3D12_FEATURE_DATA_SHADER_MODEL shaderModelFlags;
+	D3D12_FEATURE_DATA_SHADER_MODEL shaderModelFlags = { D3D_SHADER_MODEL_6_6 };
 	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModelFlags, sizeof(shaderModelFlags)));
 	AbortOnFailure(shaderModelFlags.HighestShaderModel >= D3D_SHADER_MODEL_6_6, "D3D_SHADER_MODEL_6_6 is required for the app", windowHandle);
 

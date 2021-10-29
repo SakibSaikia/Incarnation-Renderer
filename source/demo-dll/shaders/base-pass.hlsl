@@ -3,14 +3,10 @@
 #include "mesh-material.h"
 
 #define rootsig \
+	"RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
     "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)," \
-    "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)," \
-	"DescriptorTable(SRV(t3, space = 3, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)," \
-	"DescriptorTable(Sampler(s0, space = 0, numDescriptors = 16), visibility = SHADER_VISIBILITY_PIXEL)," \
 	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
 struct LightProbeData
@@ -104,8 +100,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	FMaterial mat = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
 
 	// Alpha clip
-	float alpha = mat.m_baseColorTextureIndex != -1 ? g_bindless2DTextures[mat.m_baseColorTextureIndex].Sample(g_bindlessSamplers[mat.m_baseColorSamplerIndex], input.uv).a : 1.f;
-	clip(alpha - 0.5);
+	if (mat.m_baseColorTextureIndex != -1)
+	{
+		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
+		SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
+		float alpha = baseColorTex.Sample(baseColorSampler, input.uv).a;
+		clip(alpha - 0.5);
+	}
 
 	// Tangent space transform
 	float3 T = normalize(input.tangent.xyz);
@@ -113,34 +114,52 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 N = normalize(input.normal.xyz);
 	float3x3 TBN = float3x3(T, B, N);
 
-	float3 emissive = mat.m_emissiveTextureIndex != -1 ?
-		mat.m_emissiveFactor * g_bindless2DTextures[mat.m_emissiveTextureIndex].Sample(g_bindlessSamplers[mat.m_emissiveSamplerIndex], input.uv).rgb :
-		mat.m_emissiveFactor;
+	float3 emissive = mat.m_emissiveFactor;
+	if (mat.m_emissiveTextureIndex != -1)
+	{
+		Texture2D emissiveTex = ResourceDescriptorHeap[mat.m_emissiveTextureIndex];
+		SamplerState emissiveSampler = SamplerDescriptorHeap[mat.m_emissiveSamplerIndex];
+		emissive *= emissiveTex.Sample(emissiveSampler, input.uv).rgb;
+	}
 
 #if LIGHTING_ONLY
 	float3 baseColor = 0.5.xxx;
 #else
-	float3 baseColor = mat.m_baseColorTextureIndex != -1 ?
-		mat.m_baseColorFactor * g_bindless2DTextures[mat.m_baseColorTextureIndex].Sample(g_bindlessSamplers[mat.m_baseColorSamplerIndex], input.uv).rgb :
-		mat.m_baseColorFactor;
+	float3 baseColor = mat.m_baseColorFactor;
+	if (mat.m_baseColorTextureIndex != -1)
+	{
+		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
+		SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
+		baseColor *= baseColorTex.Sample(baseColorSampler, input.uv).rgb;
+	}
 #endif
 
 	if (mat.m_normalTextureIndex != -1)
 	{
-		float2 normalXY = g_bindless2DTextures[mat.m_normalTextureIndex].Sample(g_bindlessSamplers[mat.m_normalSamplerIndex], input.uv).rg;
+		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
+		SamplerState normalmapSampler = SamplerDescriptorHeap[mat.m_normalSamplerIndex];
+		float2 normalXY = normalmapTex.Sample(normalmapSampler, input.uv).rg;
 		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
 		N = normalize(mul(float3(normalXY, normalZ), TBN));
 	}
 
 	// Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
 	// use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
-	float2 metallicRoughnessMap = mat.m_metallicRoughnessTextureIndex != -1 ?
-		g_bindless2DTextures[mat.m_metallicRoughnessTextureIndex].Sample(g_bindlessSamplers[mat.m_metallicRoughnessSamplerIndex], input.uv).rg :
-		1.f.xx;
+	float2 metallicRoughnessMap = 1.f.xx;
+	if (mat.m_metallicRoughnessTextureIndex != -1)
+	{
+		Texture2D metallicRoughnessTex = ResourceDescriptorHeap[mat.m_metallicRoughnessTextureIndex];
+		SamplerState metallicRoughnessSampler = SamplerDescriptorHeap[mat.m_metallicRoughnessSamplerIndex];
+		metallicRoughnessMap = metallicRoughnessTex.Sample(metallicRoughnessSampler, input.uv).rg;
+	}
 
-	float ao = mat.m_aoTextureIndex != -1 ?
-		g_bindless2DTextures[mat.m_aoTextureIndex].Sample(g_bindlessSamplers[mat.m_aoSamplerIndex], input.uv).r :
-		1.f;
+	float ao = 1.f;
+	if (mat.m_aoTextureIndex != -1)
+	{
+		Texture2D aoTex = ResourceDescriptorHeap[mat.m_aoTextureIndex];
+		SamplerState aoSampler = SamplerDescriptorHeap[mat.m_aoSamplerIndex];
+		ao = aoTex.Sample(aoSampler, input.uv).r;
+	}
 
 	float aoStrength = mat.m_aoStrength;
 	float metallic = mat.m_metallicFactor * metallicRoughnessMap.x;
@@ -176,7 +195,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	ray.TMin = 0.1f;
 	ray.TMax = 1000.f;
 
-	RaytracingAccelerationStructure sceneBvh = g_accelerationStructures[g_frameConstants.sceneBvhIndex];
+	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
 	RayQuery<RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
 	q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
 	q.Proceed();
@@ -196,7 +215,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
 	{
 		SH9Color shRadiance;
-		Texture2D shTex = g_bindless2DTextures[g_frameConstants.sceneLightProbe.shTextureIndex];
+		Texture2D shTex = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.shTextureIndex];
 
 		[UNROLL]
 		for (int i = 0; i < SH_COEFFICIENTS; ++i)
@@ -214,8 +233,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	if (g_frameConstants.sceneLightProbe.envmapTextureIndex != -1 &&
 		g_frameConstants.envBrdfTextureIndex != -1)
 	{
-		TextureCube prefilteredEnvMap = g_bindlessCubeTextures[g_frameConstants.sceneLightProbe.envmapTextureIndex];
-		Texture2D envBrdfTex = g_bindless2DTextures[g_frameConstants.envBrdfTextureIndex];
+		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.envmapTextureIndex];
+		Texture2D envBrdfTex = ResourceDescriptorHeap[g_frameConstants.envBrdfTextureIndex];
 
 		float texWidth, texHeight, mipCount;
 		prefilteredEnvMap.GetDimensions(0, texWidth, texHeight, mipCount);

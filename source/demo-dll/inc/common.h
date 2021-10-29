@@ -24,8 +24,9 @@ inline void AssertIfFailed(HRESULT hr)
 #if defined _DEBUG
 	if (FAILED(hr))
 	{
-		std::string message = std::system_category().message(hr);
-		OutputDebugStringA(message.c_str());
+		std::stringstream message;
+		message << "ASSERTION FAILURE - " << std::system_category().message(hr) << std::endl;
+		OutputDebugStringA(message.str().c_str());
 		_CrtDbgBreak();
 	}
 #endif
