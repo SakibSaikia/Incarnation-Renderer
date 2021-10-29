@@ -28,9 +28,9 @@ namespace RenderJob
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"utils/texture-copy-raster.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-			d3dCmdList->SetGraphicsRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};

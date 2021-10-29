@@ -55,12 +55,12 @@ namespace RenderJob
 			{
 				auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 				cbDest->sceneRotation = scene->m_rootTransform;
-				cbDest->sceneMeshAccessorsIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Buffer, scene->m_packedMeshAccessors->m_srvIndex);
-				cbDest->sceneMeshBufferViewsIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Buffer, scene->m_packedMeshBufferViews->m_srvIndex);
-				cbDest->sceneMaterialBufferIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::Buffer, scene->m_packedMaterials->m_srvIndex);
+				cbDest->sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
+				cbDest->sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
+				cbDest->sceneMaterialBufferIndex = scene->m_packedMaterials->m_srvIndex;
 				cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
 				cbDest->sceneProbeData = scene->m_globalLightProbe;
-				cbDest->sceneBvhIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::AccelerationStructure, scene->m_tlas->m_srvIndex);
+				cbDest->sceneBvhIndex = scene->m_tlas->m_srvIndex;
 			});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -91,14 +91,14 @@ namespace RenderJob
 
 			D3DDescriptorHeap_t* descriptorHeaps[] =
 			{
-				RenderBackend12::GetBindlessShaderResourceHeap(),
-				RenderBackend12::GetBindlessSamplerHeap()
+				RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV),
+				RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER)
 			};
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
-			d3dCmdList->SetGraphicsRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::Texture2DBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::BufferBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::TextureCubeBegin));
-			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin));
+			d3dCmdList->SetGraphicsRootDescriptorTable(3, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
+			d3dCmdList->SetGraphicsRootDescriptorTable(4, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
+			d3dCmdList->SetGraphicsRootDescriptorTable(5, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
+			d3dCmdList->SetGraphicsRootDescriptorTable(6, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 			d3dCmdList->SetGraphicsRootDescriptorTable(7, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 0));
 
 			// PSO

@@ -129,27 +129,19 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 		d3dCmdList->SetPipelineState(pso);
 
 		// Shader resources
-		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetBindlessShaderResourceHeap() };
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
 		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
-		struct CbLayout
+		struct
 		{
 			uint32_t uavWidth;
 			uint32_t uavHeight;
 			uint32_t uavIndex;
 			uint32_t numSamples;
-		};
+		} rootConstants = { width, height, brdfUav->m_uavIndices[0], 1024 };
 
-		CbLayout computeCb =
-		{
-			.uavWidth = width,
-			.uavHeight = height,
-			.uavIndex = RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType::RWTexture2D, brdfUav->m_uavIndices[0]),
-			.numSamples = 1024
-		};
-
-		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &computeCb, 0);
-		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (uint32_t)BindlessDescriptorRange::RWTexture2DBegin));
+		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 		// Dispatch
 		size_t threadGroupCount = std::max<size_t>(std::ceil(width / 16), 1);

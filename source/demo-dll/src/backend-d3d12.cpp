@@ -1027,11 +1027,8 @@ public:
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
 		for (int i = (uint32_t)BindlessDescriptorRange::BufferBegin; i <= (uint32_t)BindlessDescriptorRange::BufferEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
-
 			m_indices[(uint32_t)BindlessResourceType::Buffer].push(i);
 		}
 
@@ -1039,11 +1036,8 @@ public:
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, srv);
-
 			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(i);
 		}
 
@@ -1051,11 +1045,8 @@ public:
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DMultisampleDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DMS);
 		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DMultisampleBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, srv);
-
 			m_indices[(uint32_t)BindlessResourceType::Texture2DMultisample].push(i);
 		}
 
@@ -1063,11 +1054,8 @@ public:
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DArrayDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
 		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DArrayBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, srv);
-
 			m_indices[(uint32_t)BindlessResourceType::Texture2DArray].push(i);
 		}
 
@@ -1075,11 +1063,8 @@ public:
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
 		for (int i = (uint32_t)BindlessDescriptorRange::TextureCubeBegin; i <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, srv);
-
 			m_indices[(uint32_t)BindlessResourceType::TextureCube].push(i);
 		}
 
@@ -1087,11 +1072,8 @@ public:
 		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
 		for (int i = (uint32_t)BindlessDescriptorRange::RWTexture2DBegin; i <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE uav;
-			uav.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, uav);
-
 			m_indices[(uint32_t)BindlessResourceType::RWTexture2D].push(i);
 		}
 
@@ -1099,11 +1081,8 @@ public:
 		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
 		for (int i = (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin; i <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE uav;
-			uav.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, uav);
-
 			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(i);
 		}
 
@@ -1111,11 +1090,8 @@ public:
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullASDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE);
 		for (int i = (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin; i <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd; ++i)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE srv;
-			srv.ptr = bindlessHeap->GetCPUDescriptorHandleForHeapStart().ptr +
-				i * GetDescriptorSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, srv);
-
 			m_indices[(uint32_t)BindlessResourceType::AccelerationStructure].push(i);
 		}
 	}
@@ -1488,11 +1464,6 @@ namespace
 	D3DCommandQueue_t* GetCopyQueue()
 	{
 		return RenderBackend12::s_copyQueue.get();
-	}
-
-	D3DDescriptorHeap_t* GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type)
-	{
-		return RenderBackend12::s_descriptorHeaps[type].get();
 	}
 
 	uint32_t GetDescriptorSize(const D3D12_DESCRIPTOR_HEAP_TYPE type)
@@ -2070,14 +2041,9 @@ void RenderBackend12::PresentDisplay()
 	s_frameFenceValues[s_currentBufferIndex] = currentFenceValue + 1;
 }
 
-D3DDescriptorHeap_t* RenderBackend12::GetBindlessShaderResourceHeap()
+D3DDescriptorHeap_t* RenderBackend12::GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type)
 {
-	return GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-}
-
-D3DDescriptorHeap_t* RenderBackend12::GetBindlessSamplerHeap()
-{
-	return GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+	return RenderBackend12::s_descriptorHeaps[type].get();
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex)
@@ -2096,50 +2062,6 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 		descriptorIndex * GetDescriptorSize(descriptorHeapType);
 
 	return descriptor;
-}
-
-uint32_t RenderBackend12::GetDescriptorTableOffset(BindlessDescriptorType descriptorType, uint32_t descriptorIndex)
-{
-	uint32_t offset = 0;
-
-	switch (descriptorType)
-	{
-	case BindlessDescriptorType::Buffer:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::BufferBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::BufferEnd);
-		return offset;
-	case BindlessDescriptorType::Texture2D:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DEnd);
-		return offset;
-	case BindlessDescriptorType::Texture2DMultisample:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DMultisampleBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd);
-		return offset;
-	case BindlessDescriptorType::Texture2DArray:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::Texture2DArrayBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd);
-		return offset;
-	case BindlessDescriptorType::TextureCube:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::TextureCubeBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd);
-		return offset;
-	case BindlessDescriptorType::RWTexture2D:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::RWTexture2DBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd);
-		return offset;
-	case BindlessDescriptorType::RWTexture2DArray:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd);
-		return offset;
-	case BindlessDescriptorType::AccelerationStructure:
-		offset = descriptorIndex - (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin;
-		DebugAssert(offset <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd);
-		return offset;
-	default:
-		DebugAssert("Not Implemented");
-		return offset;
-	}
 }
 
 std::unique_ptr<FTransientBuffer> RenderBackend12::CreateTransientBuffer(
