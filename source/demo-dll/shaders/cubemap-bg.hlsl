@@ -1,8 +1,8 @@
 #include "pbr.hlsli"
 #define rootsig \
+	"RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
-    "RootConstants(b0, num32BitConstants=18, visibility = SHADER_VISIBILITY_PIXEL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000), visibility = SHADER_VISIBILITY_PIXEL)"
+    "RootConstants(b0, num32BitConstants=18, visibility = SHADER_VISIBILITY_PIXEL),"
 
 SamplerState g_anisoSampler : register(s0);
 TextureCube g_bindlessCubeTextures[] : register(t0);
@@ -45,7 +45,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float4 worldPos = mul(input.pixelPos, g_invParallaxViewProjMatrix);
 	worldPos /= worldPos.w;
 
-	float3 luminance = g_bindlessCubeTextures[g_envmapTextureIndex].Sample(g_anisoSampler, worldPos.xyz).rgb;
+	TextureCube envmap = ResourceDescriptorHeap[g_envmapTextureIndex];
+	float3 luminance = envmap.Sample(g_anisoSampler, worldPos.xyz).rgb;
 
 	// Exposure correction. Computes the exposure normalization from the camera's EV100
 	float e = exposure(g_exposure);
