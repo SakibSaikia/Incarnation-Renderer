@@ -78,9 +78,11 @@ namespace RenderJob
 				d3dCmdList->IASetIndexBuffer(&ibDescriptor);
 			}
 
+			// Descriptor Heaps
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
+			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"imgui.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 			rootsig->SetName(L"imgui_rootsig");

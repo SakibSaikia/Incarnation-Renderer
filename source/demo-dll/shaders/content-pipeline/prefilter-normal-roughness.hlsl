@@ -7,10 +7,9 @@
 #endif
 
 #define rootsig \
+    "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
-    "RootConstants(b0, num32BitConstants=7, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
+    "RootConstants(b0, num32BitConstants=7, visibility = SHADER_VISIBILITY_ALL)"
 
 struct CbLayout
 {
@@ -24,18 +23,16 @@ struct CbLayout
 };
 
 ConstantBuffer<CbLayout> g_computeConstants : register(b0);
-Texture2D g_srvBindless2DTextures[] : register(t0);
-RWTexture2D<float4> g_uavBindless2DTextures[] : register(u0);
 SamplerState g_bilinearSampler : register(s0);
 
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    Texture2D srcNormalmap = g_srvBindless2DTextures[g_computeConstants.normalMapTextureIndex];
-    Texture2D srcMetallicRoughness = g_srvBindless2DTextures[g_computeConstants.metallicRoughnessTextureIndex];
-    RWTexture2D<float4> destNormalmap = g_uavBindless2DTextures[g_computeConstants.normalmapUavIndex];
-    RWTexture2D<float4> destMetallicRoughness = g_uavBindless2DTextures[g_computeConstants.metallicRoughnessUavIndex];
+    Texture2D srcNormalmap = ResourceDescriptorHeap[g_computeConstants.normalMapTextureIndex];
+    Texture2D srcMetallicRoughness = ResourceDescriptorHeap[g_computeConstants.metallicRoughnessTextureIndex];
+    RWTexture2D<float4> destNormalmap = ResourceDescriptorHeap[g_computeConstants.normalmapUavIndex];
+    RWTexture2D<float4> destMetallicRoughness = ResourceDescriptorHeap[g_computeConstants.metallicRoughnessUavIndex];
 
     // Swizzle metal/roughness to R/G channels because they will be BC5 compressed
     if (g_computeConstants.mipIndex == 0)

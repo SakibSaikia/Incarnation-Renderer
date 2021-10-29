@@ -9,10 +9,9 @@
 #endif
 
 #define rootsig \
+    "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
-    "RootConstants(b0, num32BitConstants=7, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
+    "RootConstants(b0, num32BitConstants=7, visibility = SHADER_VISIBILITY_ALL),"
 
 struct CbLayout
 {
@@ -26,8 +25,6 @@ struct CbLayout
 };
 
 ConstantBuffer<CbLayout> g_computeConstants : register(b0);
-TextureCube g_srvBindlessCubeTextures[] : register(t0);
-RWTexture2DArray<float4> g_uavBindless2DTextureArrays[] : register(u0);
 SamplerState g_trilinearSampler : register(s0);
 
 float3 GetEnvDir(uint face, float2 uv)
@@ -65,7 +62,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const uint NumSamples = g_computeConstants.sampleCount;
         const float Roughness = g_computeConstants.roughness;
         const float Resolution = float(g_computeConstants.cubemapSize);
-        TextureCube EnvMap = g_srvBindlessCubeTextures[g_computeConstants.envmapIndex];
+        TextureCube EnvMap = ResourceDescriptorHeap[g_computeConstants.envmapIndex];
 
         for (uint i = 0; i < NumSamples; i++)
         {
@@ -91,7 +88,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             }
         }
 
-        RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputUavIndex];
+        RWTexture2DArray<float4> dest = ResourceDescriptorHeap[g_computeConstants.outputUavIndex];
         dest[uint3(dispatchThreadId.x, dispatchThreadId.y, face)] = float4(PrefilteredColor / TotalWeight, 1.f);
     }
 }

@@ -1,10 +1,9 @@
 #define rootsig \
+	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_POINT, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP), " \
-    "RootConstants(b0, num32BitConstants=1, visibility = SHADER_VISIBILITY_PIXEL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL)"
+    "RootConstants(b0, num32BitConstants=1, visibility = SHADER_VISIBILITY_PIXEL)"
 
 SamplerState g_pointSampler : register(s0);
-Texture2D g_bindlessTextures[] : register(t0);
 
 cbuffer cb : register(b0)
 {
@@ -27,5 +26,6 @@ vs_to_ps vs_main(uint id : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	return g_bindlessTextures[textureIndex].Sample(g_pointSampler, input.uv);
+	Texture2D tex = ResourceDescriptorHeap[textureIndex];
+	return tex.Sample(g_pointSampler, input.uv);
 }

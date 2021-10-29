@@ -104,6 +104,10 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
 
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
 		// Root Signature
 		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
 			L"image-based-lighting/split-sum-approx/brdf-integration.hlsl", 
@@ -128,10 +132,6 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 		d3dCmdList->SetPipelineState(pso);
 
-		// Shader resources
-		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 		struct
 		{
 			uint32_t uavWidth;
@@ -141,7 +141,6 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 		} rootConstants = { width, height, brdfUav->m_uavIndices[0], 1024 };
 
 		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-		d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 		// Dispatch
 		size_t threadGroupCount = std::max<size_t>(std::ceil(width / 16), 1);

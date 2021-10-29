@@ -1287,6 +1287,10 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_normal_roughness", 0);
 
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
 		// Root Signature
 		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
 			L"content-pipeline/prefilter-normal-roughness.hlsl", 
@@ -1311,10 +1315,6 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 		d3dCmdList->SetPipelineState(pso);
 
-		// Shader resources
-		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 		DebugAssert(normalmapImage.width == metallicRoughnessImage.width && normalmapImage.height == metallicRoughnessImage.height, "Assuming texture dimensions are same for now");
 
 		// Prefilter
@@ -1337,8 +1337,6 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 			};
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
-			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 			// Dispatch
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(mipWidth / 16), 1);
@@ -1731,6 +1729,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "cubemap_gen", 0);
 
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
 				L"content-pipeline/cubemapgen.hlsl", 
@@ -1755,10 +1757,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Shader resources
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 			// Convert from sperical map to cube map
 			for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
 			{
@@ -1774,8 +1772,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				} rootConstants = { mipIndex, srcHdrTex->m_srvIndex, texCubeUav->m_uavIndices[mipIndex], (uint32_t)mipSize, 25000.f };
 
 				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-				d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
-				d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 				// Dispatch
 				size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
@@ -1793,6 +1789,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
+
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
@@ -1818,10 +1818,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Shader resources
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 			for (uint32_t mipIndex = 0; mipIndex < filteredEnvmapMips; ++mipIndex)
 			{
 				uint32_t mipSize = filteredEnvmapSize >> mipIndex;
@@ -1841,8 +1837,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 					} rootConstants = { mipSize, (uint32_t)cubemapSize, faceIndex, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices[mipIndex], 1024, mipIndex / (float)numMips };
 
 					d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-					d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
-					d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 					// Dispatch
 					size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
@@ -1869,6 +1863,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
 
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
 				L"image-based-lighting/spherical-harmonics/projection.hlsl", 
@@ -1893,10 +1891,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Shader resources
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 			struct
 			{
 				uint32_t inputHdriIndex;
@@ -1908,8 +1902,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_uavIndices[0], (uint32_t)metadata.width, (uint32_t)metadata.height, srcMipIndex, 25000.f };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
-			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(metadata.width / 16), 1);
 			size_t threadGroupCountY = std::max<size_t>(std::ceil(metadata.height / 16), 1);
@@ -1925,6 +1917,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_integration", 0);
+
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
@@ -1960,10 +1956,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Shader resources
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 			// Dispatch (Reduction)
 			width = metadata.width >> srcMipIndex, height = metadata.height >> srcMipIndex;
 			uavs[src]->m_resource->UavBarrier(cmdList);
@@ -1978,7 +1970,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				} rootConstants = { uavs[src]->m_uavIndices[0], uavs[dest]->m_uavIndices[0] };
 
 				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-				d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 
 				// Reduce by 16 x 16 on each iteration
 				size_t threadGroupCountX = std::max<size_t>(std::ceil(width / (threadGroupSizeX * threadGroupSizeZ)), 1);
@@ -1998,6 +1989,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
+
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
 			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
@@ -2027,10 +2022,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Shader resources
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
 			struct
 			{
 				uint32_t srcIndex;
@@ -2039,8 +2030,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			} rootConstants = { uavs[src]->m_uavIndices[0], shTexureUavAccum->m_uavIndices[0], 1.f / (float)((metadata.width >> srcMipIndex) * (metadata.height >> srcMipIndex)) };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-			d3dCmdList->SetComputeRootDescriptorTable(1, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
-			d3dCmdList->SetComputeRootDescriptorTable(2, RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 0));
 			d3dCmdList->Dispatch(1, 1, 1);
 		}
 

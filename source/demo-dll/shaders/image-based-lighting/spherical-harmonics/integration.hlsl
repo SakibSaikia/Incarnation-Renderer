@@ -1,8 +1,8 @@
 #include "image-based-lighting/spherical-harmonics/common.hlsli"
 
 #define rootsig \
-    "RootConstants(b0, num32BitConstants=2, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
+    "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
+    "RootConstants(b0, num32BitConstants=2, visibility = SHADER_VISIBILITY_ALL),"
 
 static const float PI = 3.14159265f;
 
@@ -13,7 +13,6 @@ struct CbLayout
 };
 
 ConstantBuffer<CbLayout> g_constants : register(b0);
-RWTexture2DArray<float4> g_uavBindless2DTextureArrays[] : register(u0);
 
 #define NUM_SLICES THREAD_GROUP_SIZE_Z
 groupshared SH9Color g_sum[NUM_SLICES];
@@ -25,8 +24,8 @@ void cs_main(
     uint3 groupThreadId : SV_GroupThreadID, 
     uint3 groupId : SV_GroupID)
 {
-    RWTexture2DArray<float4> src = g_uavBindless2DTextureArrays[g_constants.srcUavIndex];
-    RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_constants.destUavIndex];
+    RWTexture2DArray<float4> src = ResourceDescriptorHeap[g_constants.srcUavIndex];
+    RWTexture2DArray<float4> dest = ResourceDescriptorHeap[g_constants.destUavIndex];
 
     // Sum SH coefficients for all threads in the wave
     SH9Color sum;

@@ -79,7 +79,6 @@ struct MissCbLayout
     int envmapIndex;
 };
 
-RWTexture2D<float4> g_uavBindless2DTextures[] : register(u0);
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
 ConstantBuffer<HitgroupCbLayout> g_hitgroupConstants : register(b1);
 ConstantBuffer<MissCbLayout> g_missConstants : register(b2);

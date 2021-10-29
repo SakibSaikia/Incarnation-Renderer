@@ -7,10 +7,9 @@
 #endif
 
 #define rootsig \
+    "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_ALL, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
-    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), " \
-    "DescriptorTable(UAV(u0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_ALL), "
+    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL)"
 
 struct CbLayout
 {
@@ -22,8 +21,6 @@ struct CbLayout
 };
 
 ConstantBuffer<CbLayout> g_computeConstants : register(b0);
-Texture2D g_srvBindless2DTextures[] : register(t0);
-RWTexture2DArray<float4> g_uavBindless2DTextureArrays[] : register(u0);
 SamplerState g_bilinearSampler : register(s0);
 
 static const float PI = 3.14159265f;
@@ -33,8 +30,8 @@ static const float PI = 3.14159265f;
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y,1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    Texture2D src = g_srvBindless2DTextures[g_computeConstants.hdrSpehericalMapBindlessIndex];
-    RWTexture2DArray<float4> dest = g_uavBindless2DTextureArrays[g_computeConstants.outputCubemapBindlessIndex];
+    Texture2D src = ResourceDescriptorHeap[g_computeConstants.hdrSpehericalMapBindlessIndex];
+    RWTexture2DArray<float4> dest = ResourceDescriptorHeap[g_computeConstants.outputCubemapBindlessIndex];
 
     if (dispatchThreadId.x < g_computeConstants.cubemapSize && 
         dispatchThreadId.y < g_computeConstants.cubemapSize)
