@@ -3,7 +3,7 @@
 
 GlobalRootSignature k_globalRootsig =
 {
-    "CBV(b0, space = 0), " \
+    "CBV(b0), " \
     "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
     "DescriptorTable(SRV(t1, space = 1, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
     "DescriptorTable(SRV(t2, space = 2, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE)),"
@@ -64,9 +64,9 @@ struct GlobalCbLayout
     int sceneMeshBufferViewsIndex;
     int sceneMaterialBufferIndex;
     int sceneBvhIndex;
-    Vector3 cameraPosition;
+    float3 cameraPosition;
     int destUavIndex;
-    Matrix projectionToWorld;
+    float4x4 projectionToWorld;
 };
 
 struct HitgroupCbLayout

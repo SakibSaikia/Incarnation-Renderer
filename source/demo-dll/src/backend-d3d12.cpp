@@ -510,7 +510,7 @@ public:
 		// Reuse buffer
 		for (auto it = m_freeList.begin(); it != m_freeList.end(); ++it)
 		{
-			if ((*it)->m_d3dResource->GetDesc().Width >= sizeInBytes)
+			if ((*it)->m_d3dResource->GetDesc().Width == sizeInBytes)
 			{
 				m_useList.push_back(std::move(*it));
 				m_freeList.erase(it);

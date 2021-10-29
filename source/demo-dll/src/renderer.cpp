@@ -16,6 +16,7 @@
 #include "render-jobs/ui-pass.inl"
 #include "render-jobs/present.inl"
 #include "render-jobs/path-tracing.inl"
+#include "render-jobs/path-tracing-resolve.inl"
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
@@ -24,52 +25,53 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	SCOPED_CPU_EVENT("render", PIX_COLOR_DEFAULT);
 
+	std::vector<concurrency::task<void>> renderJobs;
+	static RenderJob::Sync jobSync;
+
+	// These resources need to be kept alive until all the render jobs have finished and joined
 	const uint32_t sampleCount = 4;
 	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Config::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
 	std::unique_ptr<FBindlessUav> raytraceOutput = RenderBackend12::CreateBindlessUavTexture(L"raytrace_output", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 
-	std::vector<concurrency::task<void>> renderJobs;
-	static RenderJob::Sync jobSync;
-
-	RenderJob::PathTracingDesc pathtraceDesc
+	if (Config::g_pathTrace)
 	{
-		.target = raytraceOutput.get(),
-		.resX = resX,
-		.resY = resY,
-		.scene = GetScene(),
-		.view = GetView()
-	};
+		RenderJob::PathTracingDesc pathtraceDesc = {};
+		pathtraceDesc.target = raytraceOutput.get();
+		pathtraceDesc.resX = resX;
+		pathtraceDesc.resY = resY;
+		pathtraceDesc.scene = GetScene();
+		pathtraceDesc.view = GetView();
+		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
-	renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
-
-	// Base pass
-	RenderJob::BasePassDesc baseDesc
+		RenderJob::PathtraceResolvePassDesc resolveDesc = {};
+		resolveDesc.uavSource = raytraceOutput.get();
+		resolveDesc.colorTarget = RenderBackend12::GetBackBuffer();
+		renderJobs.push_back(RenderJob::PathtraceResolve(jobSync, resolveDesc));
+	}
+	else
 	{
-		.colorTarget = colorBuffer.get(),
-		.depthStencilTarget = depthBuffer.get(),
-		.resX = resX,
-		.resY = resY,
-		.sampleCount = sampleCount,
-		.scene = GetScene(),
-		.view = GetView()
-	};
+		// Base pass
+		RenderJob::BasePassDesc baseDesc = {};
+		baseDesc.colorTarget = colorBuffer.get();
+		baseDesc.depthStencilTarget = depthBuffer.get();
+		baseDesc.resX = resX;
+		baseDesc.resY = resY;
+		baseDesc.sampleCount = sampleCount;
+		baseDesc.scene = GetScene();
+		baseDesc.view = GetView();
+		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
+		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
-	renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
-	renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
-
-	// Post Process
-	RenderJob::PostprocessPassDesc postDesc
-	{
-		.colorSource = colorBuffer.get(),
-		.colorTarget = RenderBackend12::GetBackBuffer(),
-		.resX = resX,
-		.resY = resY,
-		.view = GetView()
-	};
-
-	renderJobs.push_back(RenderJob::Postprocess(jobSync, postDesc));
-
+		// Post Process
+		RenderJob::PostprocessPassDesc postDesc = {};
+		postDesc.colorSource = colorBuffer.get();
+		postDesc.colorTarget = RenderBackend12::GetBackBuffer();
+		postDesc.resX = resX;
+		postDesc.resY = resY;
+		postDesc.view = GetView();
+		renderJobs.push_back(RenderJob::Postprocess(jobSync, postDesc));
+	}
 
 	// UI
 	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer() };

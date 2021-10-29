@@ -16,6 +16,7 @@ struct Config
 	static inline bool g_enableDirectLighting = true;
 	static inline bool g_enableDiffuseIBL = true;
 	static inline bool g_enableSpecularIBL = true;
+	static inline bool g_pathTrace = true;
 };
 
 inline void AssertIfFailed(HRESULT hr)
