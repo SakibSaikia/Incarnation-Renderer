@@ -1,8 +1,7 @@
 #define rootsig \
-    "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), " \
+    "RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED), " \
     "RootConstants(b0, num32BitConstants=16, visibility = SHADER_VISIBILITY_VERTEX)," \
     "RootConstants(b1, num32BitConstants=1, visibility = SHADER_VISIBILITY_PIXEL)," \
-    "DescriptorTable(SRV(t0, space = 0, numDescriptors = 1000, flags = DESCRIPTORS_VOLATILE), visibility = SHADER_VISIBILITY_PIXEL), " \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_LINEAR, maxAnisotropy = 0, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, addressW = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_TRANSPARENT_BLACK) "
 
 cbuffer vertexBuffer : register(b0) 
@@ -14,7 +13,6 @@ cbuffer pixelBuffer : register(b1)
     uint g_textureIndex;
 };
 SamplerState g_sampler0 : register(s0);
-Texture2D g_bindlessTextures[] : register(t0);
 
 struct VS_INPUT
 {
@@ -41,7 +39,7 @@ PS_INPUT vs_main(VS_INPUT input)
 
 float4 ps_main(PS_INPUT input) : SV_Target
 {
-    Texture2D texture0 = g_bindlessTextures[g_textureIndex];
+    Texture2D texture0 = ResourceDescriptorHeap[g_textureIndex];
     float4 out_col = input.col * texture0.Sample(g_sampler0, input.uv);
     return pow(out_col, 2.2f);
 }

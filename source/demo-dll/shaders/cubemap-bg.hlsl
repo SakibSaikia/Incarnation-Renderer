@@ -5,7 +5,6 @@
     "RootConstants(b0, num32BitConstants=18, visibility = SHADER_VISIBILITY_PIXEL),"
 
 SamplerState g_anisoSampler : register(s0);
-TextureCube g_bindlessCubeTextures[] : register(t0);
 
 cbuffer cb : register(b0)
 {
