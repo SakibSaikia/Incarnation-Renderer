@@ -16,7 +16,7 @@ struct Config
 	static inline bool g_enableDirectLighting = true;
 	static inline bool g_enableDiffuseIBL = true;
 	static inline bool g_enableSpecularIBL = true;
-	static inline bool g_pathTrace = true;
+	static inline bool g_pathTrace = false;
 };
 
 inline void AssertIfFailed(HRESULT hr)
@@ -46,6 +46,15 @@ inline void DebugAssert(bool success, const char* msg = nullptr)
 		_CrtDbgBreak();
 	}
 #endif
+}
+
+inline void AbortOnFailure(bool success, const char* msg, const HWND& windowHandle)
+{
+	if (!success)
+	{
+		MessageBoxA(windowHandle, msg, "Fatal Error", MB_OK);
+		ExitProcess(-1);
+	}
 }
 
 inline std::wstring GetFilepathW(const std::wstring& filename, bool includeCache = false)

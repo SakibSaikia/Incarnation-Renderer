@@ -56,7 +56,7 @@ namespace
 
 namespace
 {
-	winrt::com_ptr<DXGIAdapter_t> EnumerateAdapters(DXGIFactory_t* dxgiFactory)
+	winrt::com_ptr<DXGIAdapter_t> EnumerateAdapters(DXGIFactory_t* dxgiFactory, const HWND& windowHandle)
 	{
 		winrt::com_ptr<DXGIAdapter_t> bestAdapter;
 		size_t maxVram = 0;
@@ -79,6 +79,8 @@ namespace
 
 			adapter = nullptr;
 		}
+
+		AbortOnFailure(maxVram != 0, "No valid video adapters found", windowHandle);
 
 		DXGI_ADAPTER_DESC desc;
 		bestAdapter->GetDesc(&desc);
@@ -1417,7 +1419,7 @@ namespace RenderBackend12
 	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
 	winrt::com_ptr<D3DDevice_t> s_d3dDevice;
 
-	D3D12_FEATURE_DATA_D3D12_OPTIONS1 s_waveOpsInfo;
+	D3D12_FEATURE_DATA_D3D12_OPTIONS1 s_d3d12OptionsFlags1;
 
 	winrt::com_ptr<DXGISwapChain_t> s_swapChain;
 	std::unique_ptr<FRenderTexture> s_backBuffers[k_backBufferCount];
@@ -1520,7 +1522,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	AssertIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(s_dxgiFactory.put())));
 
 	// Adapter
-	winrt::com_ptr<DXGIAdapter_t> adapter = EnumerateAdapters(s_dxgiFactory.get());
+	winrt::com_ptr<DXGIAdapter_t> adapter = EnumerateAdapters(s_dxgiFactory.get(), windowHandle);
 
 	// Device
 	AssertIfFailed(D3D12CreateDevice(
@@ -1550,9 +1552,17 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 #endif
 
 	// Feature Support
-	s_waveOpsInfo = {};
-	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &s_waveOpsInfo, sizeof(s_waveOpsInfo)));
-	DebugAssert(s_waveOpsInfo.WaveOps == TRUE, "Wave Intrinsics not supported");
+	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS1, &s_d3d12OptionsFlags1, sizeof(s_d3d12OptionsFlags1)));
+	AbortOnFailure(s_d3d12OptionsFlags1.WaveOps == TRUE, "Wave Intrinsics not supported", windowHandle);
+
+	D3D12_FEATURE_DATA_D3D12_OPTIONS5 d3d12OptionsFlags5;
+	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &d3d12OptionsFlags5, sizeof(d3d12OptionsFlags5)));
+	AbortOnFailure(d3d12OptionsFlags5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1, "D3D12_RAYTRACING_TIER_1_1 is required for the app", windowHandle);
+
+	D3D12_FEATURE_DATA_SHADER_MODEL shaderModelFlags;
+	AssertIfFailed(s_d3dDevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModelFlags, sizeof(shaderModelFlags)));
+	AbortOnFailure(shaderModelFlags.HighestShaderModel >= D3D_SHADER_MODEL_6_6, "D3D_SHADER_MODEL_6_6 is required for the app", windowHandle);
+
 
 	// Cache descriptor sizes
 	for (int typeId = 0; typeId < D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES; ++typeId)
@@ -2670,6 +2680,6 @@ void RenderBackend12::EndCapture()
 
 uint32_t RenderBackend12::GetLaneCount()
 {
-	return s_waveOpsInfo.WaveLaneCountMin;
+	return s_d3d12OptionsFlags1.WaveLaneCountMin;
 }
 #pragma endregion
