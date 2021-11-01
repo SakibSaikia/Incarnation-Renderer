@@ -7,7 +7,7 @@ RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWo
     float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
     screenPos.y = -screenPos.y;
 
-    float4 world = mul(float4(screenPos, 0, 1), projectionToWorld);
+    float4 world = mul(float4(screenPos, 0.0001f, 1.f), projectionToWorld);
     world.xyz /= world.w;
 
     // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
