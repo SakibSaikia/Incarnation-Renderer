@@ -3,21 +3,16 @@
 
 GlobalRootSignature k_globalRootsig =
 {
-    "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
+    "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED )," \
     "CBV(b0), " \
-    "SRV(t0)"
+    "SRV(t0), " \
+    "StaticSampler(s0, space = 1, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP) "
 };
 
 
 LocalRootSignature k_hitGroupLocalRootsig =
 {
     "RootConstants(b1, num32BitConstants = 6)"
-};
-
-LocalRootSignature k_missShaderLocalRootsig =
-{
-    "RootConstants(b2, num32BitConstants = 1),"
-    "StaticSampler(s0, space = 1, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP)"
 };
 
 TriangleHitGroup k_hitGroup =
@@ -30,12 +25,6 @@ SubobjectToExportsAssociation  k_hitGroupLocalRootsigAssociation =
 {
     "k_hitGroupLocalRootsig",           // subobject name
     "k_hitGroup"                        // export association 
-};
-
-SubobjectToExportsAssociation  k_missShaderlocalRootsigAssociation =
-{
-    "k_missShaderLocalRootsig",         // subobject name
-    "msMain"                            // export association 
 };
 
 RaytracingShaderConfig  k_shaderConfig =
@@ -63,6 +52,7 @@ struct GlobalCbLayout
     float3 cameraPosition;
     int destUavIndex;
     float4x4 projectionToWorld;
+    int envmapTextureIndex;
 };
 
 struct HitgroupCbLayout
@@ -75,15 +65,9 @@ struct HitgroupCbLayout
     int materialIndex;
 };
 
-struct MissCbLayout
-{
-    int envmapIndex;
-};
-
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
 ConstantBuffer<HitgroupCbLayout> g_hitgroupConstants : register(b1);
-ConstantBuffer<MissCbLayout> g_missConstants : register(b2);
-SamplerState g_anisoSampler : register(s0, space1);
+SamplerState g_envmapSampler : register(s0, space1);
 RaytracingAccelerationStructure g_sceneBvh : register(t0);
 
 [shader("raygeneration")]
@@ -125,14 +109,14 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float3 L = normalize(float3(1, 1, -1));
     float NoL = saturate(dot(N, L));
 
-    payload.color = float4(NoL, NoL, NoL, 1.f);
+    payload.color = float4(NoL, NoL, NoL, 0.f);
 }
 
 [shader("miss")]
 void msMain(inout RayPayload payload)
 {
-    TextureCube envmap = ResourceDescriptorHeap[g_missConstants.envmapIndex];
-    payload.color = float4(envmap.SampleLevel(g_anisoSampler, WorldRayDirection(), 0).rgb, 1.f);
+    TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
+    payload.color = float4(envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb, 0.f);
 }
 
 

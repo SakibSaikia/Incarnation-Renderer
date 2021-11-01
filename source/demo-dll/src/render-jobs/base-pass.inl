@@ -4,6 +4,7 @@ namespace RenderJob
 	{
 		FRenderTexture* colorTarget;
 		FRenderTexture* depthStencilTarget;
+		DXGI_FORMAT format;
 		uint32_t resX;
 		uint32_t resY;
 		uint32_t sampleCount;
@@ -106,7 +107,7 @@ namespace RenderJob
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Config::g_backBufferFormat;
+			psoDesc.RTVFormats[0] = passDesc.format;
 			psoDesc.SampleDesc.Count = passDesc.sampleCount;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 

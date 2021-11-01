@@ -25,7 +25,7 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"cubemap-bg.hlsl", L"rootsig", L"rootsig_1_1" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"envmap.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			// PSO
@@ -36,7 +36,7 @@ namespace RenderJob
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = Config::g_backBufferFormat;
+			psoDesc.RTVFormats[0] = passDesc.format;
 			psoDesc.SampleDesc.Count = passDesc.sampleCount;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -45,8 +45,8 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"cubemap-bg.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"cubemap-bg.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"envmap.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"envmap.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

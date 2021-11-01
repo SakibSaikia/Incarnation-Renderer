@@ -33,10 +33,8 @@ namespace RenderJob
 				{L"msMain", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"k_globalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroupLocalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
-				{L"k_missShaderLocalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroup", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroupLocalRootsigAssociation", nullptr, D3D12_EXPORT_FLAG_NONE},
-				{L"k_missShaderlocalRootsigAssociation", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_shaderConfig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_pipelineConfig", nullptr, D3D12_EXPORT_FLAG_NONE} };
 
@@ -77,22 +75,14 @@ namespace RenderJob
 				});
 
 			// Miss shader table
-			struct MissShaderRootConstants
-			{
-				int envmapIndex;
-			} missConstants =
-			{
-				passDesc.scene->m_globalLightProbe.m_envmapTextureIndex
-			};
-			const size_t missShaderRecordSize = GetAlignedSize(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(MissShaderRootConstants));
+			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FTransientBuffer> missShaderTable = RenderBackend12::CreateTransientBuffer(
 				L"miss_sbt",
 				1 * missShaderRecordSize,
 				cmdList,
-				[shaderId = psoInfo->GetShaderIdentifier(L"msMain"), &missConstants](uint8_t* pDest)
+				[shaderId = psoInfo->GetShaderIdentifier(L"msMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &missConstants, sizeof(missConstants));
 				});
 
 			// Hit group shader table
@@ -156,6 +146,7 @@ namespace RenderJob
 				Vector3 cameraPosition;
 				int destUavIndex;
 				Matrix projectionToWorld;
+				int envmapTextureIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
@@ -172,6 +163,7 @@ namespace RenderJob
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->cameraPosition = passDesc.view->m_position;
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
+					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

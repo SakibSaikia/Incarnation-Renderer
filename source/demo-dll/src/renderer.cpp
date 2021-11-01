@@ -12,11 +12,11 @@
 #include "render-jobs/job-sync.h"
 #include "render-jobs/base-pass.inl"
 #include "render-jobs/environment-sky.inl"
-#include "render-jobs/post-process.inl"
+#include "render-jobs/msaa-resolve.inl"
 #include "render-jobs/ui-pass.inl"
 #include "render-jobs/present.inl"
 #include "render-jobs/path-tracing.inl"
-#include "render-jobs/path-tracing-resolve.inl"
+#include "render-jobs/tonemap.inl"
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
@@ -30,31 +30,35 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const uint32_t sampleCount = 4;
-	std::unique_ptr<FRenderTexture> colorBuffer = RenderBackend12::CreateRenderTexture(L"scene_color", Config::g_backBufferFormat, resX, resY, 1, 1, sampleCount);
-	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
-	std::unique_ptr<FBindlessUav> raytraceOutput = RenderBackend12::CreateBindlessUavTexture(L"raytrace_output", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
+	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
+	std::unique_ptr<FRenderTexture> hdrRasterSceneColor = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster_msaa", hdrFormat, resX, resY, 1, 1, sampleCount);
+	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
+	std::unique_ptr<FRenderTexture> hdrRasterSceneColorResolve = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster", hdrFormat, resX, resY, 1, 1, 1);
+	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", hdrFormat, resX, resY, 1, 1);
 
 	if (Config::g_pathTrace)
 	{
 		RenderJob::PathTracingDesc pathtraceDesc = {};
-		pathtraceDesc.target = raytraceOutput.get();
+		pathtraceDesc.target = hdrRaytraceSceneColor.get();
 		pathtraceDesc.resX = resX;
 		pathtraceDesc.resY = resY;
 		pathtraceDesc.scene = GetScene();
 		pathtraceDesc.view = GetView();
 		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
-		RenderJob::PathtraceResolvePassDesc resolveDesc = {};
-		resolveDesc.uavSource = raytraceOutput.get();
-		resolveDesc.colorTarget = RenderBackend12::GetBackBuffer();
-		renderJobs.push_back(RenderJob::PathtraceResolve(jobSync, resolveDesc));
+		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+		tonemapDesc.source = hdrRaytraceSceneColor.get();
+		tonemapDesc.target = RenderBackend12::GetBackBuffer();
+		tonemapDesc.format = Config::g_backBufferFormat;
+		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 	}
 	else
 	{
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
-		baseDesc.colorTarget = colorBuffer.get();
+		baseDesc.colorTarget = hdrRasterSceneColor.get();
 		baseDesc.depthStencilTarget = depthBuffer.get();
+		baseDesc.format = hdrFormat;
 		baseDesc.resX = resX;
 		baseDesc.resY = resY;
 		baseDesc.sampleCount = sampleCount;
@@ -63,18 +67,30 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
 		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
-		// Post Process
-		RenderJob::PostprocessPassDesc postDesc = {};
-		postDesc.colorSource = colorBuffer.get();
-		postDesc.colorTarget = RenderBackend12::GetBackBuffer();
-		postDesc.resX = resX;
-		postDesc.resY = resY;
-		postDesc.view = GetView();
-		renderJobs.push_back(RenderJob::Postprocess(jobSync, postDesc));
+		// NOTE: The following is not technically correct. Tonemapping should be performed 
+		// before or during the resolve so that we are filtering the correct signal response
+		// i.e the color and not the radiance. Refer the following for more information:
+		// https://therealmjp.github.io/posts/msaa-overview/#fnref:3
+
+		// MSAA Resolve
+		RenderJob::MSAAResolveDesc resolveDesc = {};
+		resolveDesc.colorSource = hdrRasterSceneColor.get();
+		resolveDesc.colorTarget = hdrRasterSceneColorResolve.get();
+		resolveDesc.format = hdrFormat;
+		resolveDesc.resX = resX;
+		resolveDesc.resY = resY;
+		renderJobs.push_back(RenderJob::MSAAResolve(jobSync, resolveDesc));
+
+		// Tonemap
+		RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
+		tonemapDesc.source = hdrRasterSceneColorResolve.get();
+		tonemapDesc.target = RenderBackend12::GetBackBuffer();
+		tonemapDesc.format = Config::g_backBufferFormat;
+		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 	}
 
 	// UI
-	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer() };
+	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), Config::g_backBufferFormat };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{

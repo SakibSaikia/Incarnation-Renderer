@@ -1,15 +1,15 @@
 namespace RenderJob
 {
-	struct PostprocessPassDesc
+	struct MSAAResolveDesc
 	{
 		FRenderTexture* colorSource;
 		FRenderTexture* colorTarget;
 		uint32_t resX;
 		uint32_t resY;
-		const FView* view;
+		DXGI_FORMAT format;
 	};
 
-	concurrency::task<void> Postprocess(RenderJob::Sync& jobSync, const PostprocessPassDesc& passDesc)
+	concurrency::task<void> MSAAResolve(RenderJob::Sync& jobSync, const MSAAResolveDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t colorSourceTransitionToken = passDesc.colorSource->m_resource->GetTransitionToken();
@@ -17,14 +17,14 @@ namespace RenderJob
 
 		return concurrency::create_task([=]
 		{
-			SCOPED_CPU_EVENT("record_postprocess", PIX_COLOR_DEFAULT);
+			SCOPED_CPU_EVENT("record_msaa_resolve", PIX_COLOR_DEFAULT);
 
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"postprocess_job");
+			cmdList->SetName(L"msaa_resolve_job");
 
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "post_process", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "msaa_resolve", 0);
 
 			// MSAA resolve
 			passDesc.colorSource->m_resource->Transition(cmdList, colorSourceTransitionToken, 0, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
@@ -34,7 +34,7 @@ namespace RenderJob
 				0,
 				passDesc.colorSource->m_resource->m_d3dResource,
 				0,
-				Config::g_backBufferFormat);
+				passDesc.format);
 
 			return cmdList;
 

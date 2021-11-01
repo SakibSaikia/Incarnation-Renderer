@@ -1,13 +1,16 @@
+#include "pbr.hlsli"
+
 #define rootsig \
 	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_POINT, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP), " \
-    "RootConstants(b0, num32BitConstants=1, visibility = SHADER_VISIBILITY_PIXEL)"
+    "RootConstants(b0, num32BitConstants=2, visibility = SHADER_VISIBILITY_PIXEL)"
 
 SamplerState g_pointSampler : register(s0);
 
 cbuffer cb : register(b0)
 {
-	int textureIndex;
+	int g_hdrInputTextureIndex;
+	float g_exposure;
 }
 
 struct vs_to_ps
@@ -26,6 +29,15 @@ vs_to_ps vs_main(uint id : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	Texture2D tex = ResourceDescriptorHeap[textureIndex];
-	return tex.Sample(g_pointSampler, input.uv);
+	Texture2D hdrTex = ResourceDescriptorHeap[g_hdrInputTextureIndex];
+	float3 luminance = hdrTex.Sample(g_pointSampler, input.uv).rgb;
+
+	// Exposure correction. Computes the exposure normalization from the camera's EV100
+	float e = exposure(g_exposure);
+	luminance *= e;
+
+	// Tonemapping
+	float3 ldrColor = Reinhard(luminance);
+
+	return float4(ldrColor, 1.f);
 }

@@ -247,12 +247,5 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	}
 #endif
 
-	// Exposure correction. Computes the exposure normalization from the camera's EV100
-	float e = exposure(g_viewConstants.exposure);
-	luminance *= e;
-
-	// Tonemapping
-	float3 ldrColor = Reinhard(luminance) + emissive;
-
-	return float4(ldrColor, 1.f);
+	return float4(luminance, 0.f);
 }
