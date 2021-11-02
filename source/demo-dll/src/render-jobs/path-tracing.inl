@@ -23,8 +23,12 @@ namespace RenderJob
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "path_tracing", PIX_COLOR_DEFAULT);
 
+			std::wstringstream s;
+			s << L"RAY_TRACING=1" <<
+				L" LIGHTING_ONLY=" << (Config::g_lightingOnlyView ? L"1" : L"0");
+
 			// Compile the lib
-			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", L"RAY_TRACING" , L"lib_6_6"});
+			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", s.str() , L"lib_6_6"});
 
 			// Define lib exports
 			D3D12_EXPORT_DESC exports[] = {
