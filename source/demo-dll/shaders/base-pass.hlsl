@@ -211,7 +211,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 #endif
 
 	// Diffuse IBL
-#ifdef DIFFUSE_IBL
+#if DIFFUSE_IBL
 	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
 	{
 		SH9Color shRadiance;
