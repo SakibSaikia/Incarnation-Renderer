@@ -92,6 +92,7 @@ namespace RenderJob
 			// Hit group shader table
 			struct HitGroupRootConstants
 			{
+				Matrix localToWorld;
 				int indexAccessor;
 				int positionAccessor;
 				int uvAccessor;
@@ -115,6 +116,7 @@ namespace RenderJob
 						for (const FMeshPrimitive& primitive : mesh.m_primitives)
 						{
 							HitGroupRootConstants args = {};
+							args.localToWorld = passDesc.scene->m_entities.m_transformList[meshIndex];
 							args.indexAccessor = primitive.m_indexAccessor;
 							args.positionAccessor = primitive.m_positionAccessor;
 							args.uvAccessor = primitive.m_uvAccessor;
@@ -153,6 +155,7 @@ namespace RenderJob
 				Vector3 cameraPosition;
 				int destUavIndex;
 				Matrix projectionToWorld;
+				Matrix sceneRotation;
 				int envmapTextureIndex;
 			};
 
@@ -170,6 +173,7 @@ namespace RenderJob
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->cameraPosition = passDesc.view->m_position;
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
+					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 				});
 

@@ -52,11 +52,13 @@ struct GlobalCbLayout
     float3 cameraPosition;
     int destUavIndex;
     float4x4 projectionToWorld;
+    float4x4 sceneRotation;
     int envmapTextureIndex;
 };
 
 struct HitgroupCbLayout
 {
+    float4x4 localToWorld;
     int indexAccessor;
     int positionAccessor;
     int uvAccessor;
@@ -88,6 +90,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     const int globalMeshAccessorsIndex = g_globalConstants.sceneMeshAccessorsIndex;
     const int globalMeshBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
     const int globalMaterialBufferIndex = g_globalConstants.sceneMaterialBufferIndex;
+    float4x4 localToWorld = mul(g_hitgroupConstants.localToWorld, g_globalConstants.sceneRotation);
 
     float3 hitPosition = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
@@ -113,9 +116,13 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     };
 
     float4 packedT = HitAttribute(vertexTangents, attr.barycentrics);
-    float3 N = normalize(HitAttribute(vertexNormals, attr.barycentrics));
+    float3 N = normalize(HitAttribute(vertexNormals, attr.barycentrics)); 
     float3 T = normalize(packedT.xyz);
     float3 B = cross(N, T) * packedT.w;
+
+    N = mul(float4(N, 0.f), localToWorld).xyz;
+    T = mul(float4(T, 0.f), localToWorld).xyz;
+    B = mul(float4(B, 0.f), localToWorld).xyz;
     float3x3 TBN = float3x3(T, B, N);
 
     // UVs
