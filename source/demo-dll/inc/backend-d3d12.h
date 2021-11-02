@@ -44,6 +44,7 @@ enum class BindlessResourceType
 	Texture2DMultisample,
 	Texture2DArray,
 	TextureCube,
+	Texture3D,
 	RWTexture2D,
 	RWTexture2DArray,
 	AccelerationStructure,
