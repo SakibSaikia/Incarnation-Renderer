@@ -1,4 +1,4 @@
-#include "pbr.hlsli"
+#include "lighting/pbr.hlsli"
 
 #define rootsig \
 	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \

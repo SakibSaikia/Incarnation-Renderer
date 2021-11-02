@@ -1,6 +1,5 @@
-#include "pbr.hlsli"
+#include "lighting/common.hlsli"
 #include "image-based-lighting/spherical-harmonics/common.hlsli"
-#include "mesh-material.h"
 
 #define rootsig \
 	"RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
@@ -97,73 +96,19 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	FMaterial mat = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
+	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
+	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv);
 
-	// Alpha clip
-	if (mat.m_baseColorTextureIndex != -1)
-	{
-		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-		SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
-		float alpha = baseColorTex.Sample(baseColorSampler, input.uv).a;
-		clip(alpha - 0.5);
-	}
+#if LIGHTING_ONLY
+	p.basecolor = 0.5.xxx;
+#endif
 
 	// Tangent space transform
 	float3 T = normalize(input.tangent.xyz);
 	float3 B = normalize(input.bitangent.xyz);
 	float3 N = normalize(input.normal.xyz);
 	float3x3 TBN = float3x3(T, B, N);
-
-	float3 emissive = mat.m_emissiveFactor;
-	if (mat.m_emissiveTextureIndex != -1)
-	{
-		Texture2D emissiveTex = ResourceDescriptorHeap[mat.m_emissiveTextureIndex];
-		SamplerState emissiveSampler = SamplerDescriptorHeap[mat.m_emissiveSamplerIndex];
-		emissive *= emissiveTex.Sample(emissiveSampler, input.uv).rgb;
-	}
-
-#if LIGHTING_ONLY
-	float3 baseColor = 0.5.xxx;
-#else
-	float3 baseColor = mat.m_baseColorFactor;
-	if (mat.m_baseColorTextureIndex != -1)
-	{
-		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-		SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
-		baseColor *= baseColorTex.Sample(baseColorSampler, input.uv).rgb;
-	}
-#endif
-
-	if (mat.m_normalTextureIndex != -1)
-	{
-		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
-		SamplerState normalmapSampler = SamplerDescriptorHeap[mat.m_normalSamplerIndex];
-		float2 normalXY = normalmapTex.Sample(normalmapSampler, input.uv).rg;
-		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
-		N = normalize(mul(float3(normalXY, normalZ), TBN));
-	}
-
-	// Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
-	// use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
-	float2 metallicRoughnessMap = 1.f.xx;
-	if (mat.m_metallicRoughnessTextureIndex != -1)
-	{
-		Texture2D metallicRoughnessTex = ResourceDescriptorHeap[mat.m_metallicRoughnessTextureIndex];
-		SamplerState metallicRoughnessSampler = SamplerDescriptorHeap[mat.m_metallicRoughnessSamplerIndex];
-		metallicRoughnessMap = metallicRoughnessTex.Sample(metallicRoughnessSampler, input.uv).rg;
-	}
-
-	float ao = 1.f;
-	if (mat.m_aoTextureIndex != -1)
-	{
-		Texture2D aoTex = ResourceDescriptorHeap[mat.m_aoTextureIndex];
-		SamplerState aoSampler = SamplerDescriptorHeap[mat.m_aoSamplerIndex];
-		ao = aoTex.Sample(aoSampler, input.uv).r;
-	}
-
-	float aoStrength = mat.m_aoStrength;
-	float metallic = mat.m_metallicFactor * metallicRoughnessMap.x;
-	float perceptualRoughness = mat.m_roughnessFactor * metallicRoughnessMap.y;
+	N = normalize(mul(p.normalmap, TBN));
 
 	float3 L = normalize(float3(1, 1, -1));
 	float3 H = normalize(N + L);
@@ -175,9 +120,9 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float LoH = saturate(dot(L, H));
 
 	// Remapping
-	float3 F0 = metallic * baseColor + (1.f - metallic) * 0.04;
-	float3 albedo = (1.f - metallic) * baseColor;
-	float roughness = perceptualRoughness * perceptualRoughness;
+	float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
+	float3 albedo = (1.f - p.metallic) * p.basecolor;
+	float roughness = p.roughness * p.roughness;
 
 	float D = D_GGX(NoH, roughness);
 	float3 F = F_Schlick(LoH, F0);
@@ -224,7 +169,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		}
 
 		float3 shDiffuse = (1.f - F) * Fd * ShIrradiance(N, shRadiance);
-		luminance += lerp(shDiffuse, ao * shDiffuse, aoStrength);
+		luminance += lerp(shDiffuse, p.ao * shDiffuse, p.aoblend);
 	}
 #endif
 
@@ -243,7 +188,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
 		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
 		float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
-		luminance += lerp(specularIBL, ao * specularIBL, aoStrength);
+		luminance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
 	}
 #endif
 

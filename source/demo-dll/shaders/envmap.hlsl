@@ -1,4 +1,4 @@
-#include "pbr.hlsli"
+#include "lighting/pbr.hlsli"
 #define rootsig \
 	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, maxAnisotropy = 8, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \

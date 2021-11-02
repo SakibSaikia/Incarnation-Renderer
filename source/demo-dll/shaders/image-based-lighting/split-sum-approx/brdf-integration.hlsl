@@ -2,7 +2,7 @@
 // https://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_notes_v2.pdf
 // https://learnopengl.com/PBR/IBL/Specular-IBL
 
-#include "pbr.hlsli"
+#include "lighting/pbr.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1

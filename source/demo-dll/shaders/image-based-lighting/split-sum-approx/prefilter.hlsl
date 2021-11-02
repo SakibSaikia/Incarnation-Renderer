@@ -1,4 +1,4 @@
-#include "pbr.hlsli"
+#include "lighting/pbr.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1

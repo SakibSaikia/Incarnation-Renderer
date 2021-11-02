@@ -1,6 +1,5 @@
 #include "raytracing/common.hlsli"
-#include "mesh-material.h"
-#include "pbr.hlsli"
+#include "lighting/common.hlsli"
 
 GlobalRootSignature k_globalRootsig =
 {
@@ -130,50 +129,14 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float2 uv = HitAttribute(vertexUVs, attr.barycentrics);
 
     // Material 
-    FMaterial mat = MeshMaterial::GetMaterial(g_hitgroupConstants.materialIndex, globalMaterialBufferIndex);
+    FMaterial material = MeshMaterial::GetMaterial(g_hitgroupConstants.materialIndex, globalMaterialBufferIndex);
+    FMaterialProperties p = EvaluateMaterialProperties(material, uv);
 
 #if LIGHTING_ONLY
-    float3 baseColor = 0.5.xxx;
-#else
-    float3 baseColor = mat.m_baseColorFactor;
-    if (mat.m_baseColorTextureIndex != -1)
-    {
-        Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-        SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
-        baseColor *= baseColorTex.SampleLevel(baseColorSampler, uv, 0).rgb;
-    }
+    p.basecolor = 0.5.xxx;
 #endif
 
-    if (mat.m_normalTextureIndex != -1)
-    {
-        Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
-        SamplerState normalmapSampler = SamplerDescriptorHeap[mat.m_normalSamplerIndex];
-        float2 normalXY = normalmapTex.SampleLevel(normalmapSampler, uv, 0).rg;
-        float normalZ = sqrt(1.f - dot(normalXY, normalXY));
-        N = normalize(mul(float3(normalXY, normalZ), TBN));
-    }
-
-    // Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
-    // use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
-    float2 metallicRoughnessMap = 1.f.xx;
-    if (mat.m_metallicRoughnessTextureIndex != -1)
-    {
-        Texture2D metallicRoughnessTex = ResourceDescriptorHeap[mat.m_metallicRoughnessTextureIndex];
-        SamplerState metallicRoughnessSampler = SamplerDescriptorHeap[mat.m_metallicRoughnessSamplerIndex];
-        metallicRoughnessMap = metallicRoughnessTex.SampleLevel(metallicRoughnessSampler, uv, 0).rg;
-    }
-
-    float ao = 1.f;
-    if (mat.m_aoTextureIndex != -1)
-    {
-        Texture2D aoTex = ResourceDescriptorHeap[mat.m_aoTextureIndex];
-        SamplerState aoSampler = SamplerDescriptorHeap[mat.m_aoSamplerIndex];
-        ao = aoTex.Sample(aoSampler, uv).r;
-    }
-
-    float aoStrength = mat.m_aoStrength;
-    float metallic = mat.m_metallicFactor * metallicRoughnessMap.x;
-    float perceptualRoughness = mat.m_roughnessFactor * metallicRoughnessMap.y;
+    N = normalize(mul(p.normalmap, TBN));
 
     float3 L = normalize(float3(1, 1, -1));
     float3 H = normalize(N + L);
@@ -185,9 +148,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float LoH = saturate(dot(L, H));
 
     // Remapping
-    float3 F0 = metallic * baseColor + (1.f - metallic) * 0.04;
-    float3 albedo = (1.f - metallic) * baseColor;
-    float roughness = perceptualRoughness * perceptualRoughness;
+    float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
+    float3 albedo = (1.f - p.metallic) * p.basecolor;
+    float roughness = p.roughness * p.roughness;
 
     float D = D_GGX(NoH, roughness);
     float3 F = F_Schlick(LoH, F0);

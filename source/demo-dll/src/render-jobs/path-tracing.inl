@@ -24,7 +24,7 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "path_tracing", PIX_COLOR_DEFAULT);
 
 			// Compile the lib
-			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", L"" , L"lib_6_6"});
+			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", L"RAY_TRACING" , L"lib_6_6"});
 
 			// Define lib exports
 			D3D12_EXPORT_DESC exports[] = {
