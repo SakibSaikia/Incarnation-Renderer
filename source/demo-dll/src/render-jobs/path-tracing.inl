@@ -94,6 +94,7 @@ namespace RenderJob
 				int normalAccessor;
 				int tangentAccessor;
 				int materialIndex;
+				int indicesPerTriangle;
 			};
 
 			const size_t hitGroupShaderRecordSize = GetAlignedSize(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootConstants));
@@ -116,6 +117,8 @@ namespace RenderJob
 							args.normalAccessor = primitive.m_normalAccessor;
 							args.tangentAccessor = primitive.m_tangentAccessor;
 							args.materialIndex = primitive.m_materialIndex;
+							args.indicesPerTriangle = 3;
+							DebugAssert(primitive.m_topology == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, "Expecting triange list");
 
 							memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 							memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &args, sizeof(args));

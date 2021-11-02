@@ -63,6 +63,7 @@ struct HitgroupCbLayout
     int normalAccessor;
     int tangentAccessor;
     int materialIndex;
+    int indicesPerTriangle;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -91,8 +92,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float3 hitPosition = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
     // Get the base index of the hit triangle
-    const uint indicesPerTriangle = 3;
-    uint baseIndex = PrimitiveIndex() * indicesPerTriangle;
+    uint baseIndex = PrimitiveIndex() * g_hitgroupConstants.indicesPerTriangle;
 
     // Load up 3 indices for the triangle
     const uint3 indices = MeshMaterial::GetUint3(baseIndex, g_hitgroupConstants.indexAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex);
