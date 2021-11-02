@@ -22,7 +22,21 @@ RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWo
 }
 
 // Retrieve attribute at a hit position interpolated from the hit's barycentrics.
+float2 HitAttribute(float2 vertexAttribute[3], float2 barycentrics)
+{
+    return vertexAttribute[0] +
+        barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+}
+
 float3 HitAttribute(float3 vertexAttribute[3], float2 barycentrics)
+{
+    return vertexAttribute[0] +
+        barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+}
+
+float4 HitAttribute(float4 vertexAttribute[3], float2 barycentrics)
 {
     return vertexAttribute[0] +
         barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +

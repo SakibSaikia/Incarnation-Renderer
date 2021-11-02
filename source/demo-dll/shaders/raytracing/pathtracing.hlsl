@@ -1,9 +1,10 @@
 #include "raytracing/common.hlsli"
 #include "mesh-material.h"
+#include "pbr.hlsli"
 
 GlobalRootSignature k_globalRootsig =
 {
-    "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED )," \
+    "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
     "CBV(b0), " \
     "SRV(t0), " \
     "StaticSampler(s0, space = 1, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP) "
@@ -85,7 +86,8 @@ void rgsMain()
 void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
     const int globalMeshAccessorsIndex = g_globalConstants.sceneMeshAccessorsIndex;
-    const int globalMehsBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
+    const int globalMeshBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
+    const int globalMaterialBufferIndex = g_globalConstants.sceneMaterialBufferIndex;
 
     float3 hitPosition = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
@@ -94,22 +96,116 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     uint baseIndex = PrimitiveIndex() * indicesPerTriangle;
 
     // Load up 3 indices for the triangle
-    const uint3 indices = MeshMaterial::GetUint(baseIndex, g_hitgroupConstants.indexAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex);
+    const uint3 indices = MeshMaterial::GetUint3(baseIndex, g_hitgroupConstants.indexAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex);
 
-    // Retrieve corresponding vertex normals for the triangle vertices
+    // Tangent bases
     float3 vertexNormals[3] = 
     {
-        MeshMaterial::GetFloat3(indices.x, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex),
-        MeshMaterial::GetFloat3(indices.y, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex),
-        MeshMaterial::GetFloat3(indices.z, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMehsBufferViewsIndex)
+        MeshMaterial::GetFloat3(indices.x, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat3(indices.y, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat3(indices.z, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
     };
 
-    // Compute the triangle's normal
-    float3 N = HitAttribute(vertexNormals, attr.barycentrics);
-    float3 L = normalize(float3(1, 1, -1));
-    float NoL = saturate(dot(N, L));
+    float4 vertexTangents[3] =
+    {
+        MeshMaterial::GetFloat4(indices.x, g_hitgroupConstants.tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat4(indices.y, g_hitgroupConstants.tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat4(indices.z, g_hitgroupConstants.tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
+    };
 
-    payload.color = float4(NoL, NoL, NoL, 0.f);
+    float4 packedT = HitAttribute(vertexTangents, attr.barycentrics);
+    float3 N = normalize(HitAttribute(vertexNormals, attr.barycentrics));
+    float3 T = normalize(packedT.xyz);
+    float3 B = cross(N, T) * packedT.w;
+    float3x3 TBN = float3x3(T, B, N);
+
+    // UVs
+    float2 vertexUVs[3] =
+    {
+        MeshMaterial::GetFloat2(indices.x, g_hitgroupConstants.uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat2(indices.y, g_hitgroupConstants.uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat2(indices.z, g_hitgroupConstants.uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
+    };
+
+    float2 uv = HitAttribute(vertexUVs, attr.barycentrics);
+
+    // Material 
+    FMaterial mat = MeshMaterial::GetMaterial(g_hitgroupConstants.materialIndex, globalMaterialBufferIndex);
+
+#if LIGHTING_ONLY
+    float3 baseColor = 0.5.xxx;
+#else
+    float3 baseColor = mat.m_baseColorFactor;
+    if (mat.m_baseColorTextureIndex != -1)
+    {
+        Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
+        SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
+        baseColor *= baseColorTex.SampleLevel(baseColorSampler, uv, 0).rgb;
+    }
+#endif
+
+    if (mat.m_normalTextureIndex != -1)
+    {
+        Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
+        SamplerState normalmapSampler = SamplerDescriptorHeap[mat.m_normalSamplerIndex];
+        float2 normalXY = normalmapTex.SampleLevel(normalmapSampler, uv, 0).rg;
+        float normalZ = sqrt(1.f - dot(normalXY, normalXY));
+        N = normalize(mul(float3(normalXY, normalZ), TBN));
+    }
+
+    // Note that GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
+    // use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
+    float2 metallicRoughnessMap = 1.f.xx;
+    if (mat.m_metallicRoughnessTextureIndex != -1)
+    {
+        Texture2D metallicRoughnessTex = ResourceDescriptorHeap[mat.m_metallicRoughnessTextureIndex];
+        SamplerState metallicRoughnessSampler = SamplerDescriptorHeap[mat.m_metallicRoughnessSamplerIndex];
+        metallicRoughnessMap = metallicRoughnessTex.SampleLevel(metallicRoughnessSampler, uv, 0).rg;
+    }
+
+    float ao = 1.f;
+    if (mat.m_aoTextureIndex != -1)
+    {
+        Texture2D aoTex = ResourceDescriptorHeap[mat.m_aoTextureIndex];
+        SamplerState aoSampler = SamplerDescriptorHeap[mat.m_aoSamplerIndex];
+        ao = aoTex.Sample(aoSampler, uv).r;
+    }
+
+    float aoStrength = mat.m_aoStrength;
+    float metallic = mat.m_metallicFactor * metallicRoughnessMap.x;
+    float perceptualRoughness = mat.m_roughnessFactor * metallicRoughnessMap.y;
+
+    float3 L = normalize(float3(1, 1, -1));
+    float3 H = normalize(N + L);
+    float3 V = normalize(g_globalConstants.cameraPosition - hitPosition);
+
+    float NoV = saturate(dot(N, V));
+    float NoL = saturate(dot(N, L));
+    float NoH = saturate(dot(N, H));
+    float LoH = saturate(dot(L, H));
+
+    // Remapping
+    float3 F0 = metallic * baseColor + (1.f - metallic) * 0.04;
+    float3 albedo = (1.f - metallic) * baseColor;
+    float roughness = perceptualRoughness * perceptualRoughness;
+
+    float D = D_GGX(NoH, roughness);
+    float3 F = F_Schlick(LoH, F0);
+    float G = G_Smith_Direct(NoV, NoL, roughness);
+
+    // Specular BRDF
+    float3 Fr = (D * F * G) / (4.f * NoV * NoL);
+
+    // diffuse BRDF
+    float3 Fd = albedo * Fd_Lambert();
+    // Apply direct lighting
+    const float lightIntensity = 100000.f;
+    float illuminance = lightIntensity * NoL;
+    float3 luminance = 0.f;
+
+    luminance += (Fr + (1.f - F) * Fd) * illuminance;
+
+    payload.color = float4(luminance, 0.f);
 }
 
 [shader("miss")]
