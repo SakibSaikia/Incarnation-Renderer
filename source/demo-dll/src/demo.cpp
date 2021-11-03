@@ -1485,7 +1485,7 @@ void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Mat
 		newCamera.m_name = s.str();
 
 		const tinygltf::PerspectiveCamera& cam = model.cameras[cameraIndex].perspective;
-		newCamera.m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(cam.yfov, cam.aspectRatio, cam.znear);
+		newCamera.m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(cam.yfov, cam.aspectRatio, 1.f);
 	}
 	else
 	{
