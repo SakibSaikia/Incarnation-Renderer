@@ -17,6 +17,7 @@
 #include "render-jobs/present.inl"
 #include "render-jobs/path-tracing.inl"
 #include "render-jobs/tonemap.inl"
+#include "render-jobs/update-tlas.inl"
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
@@ -38,6 +39,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	if (Config::g_pathTrace)
 	{
+		renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
+
 		RenderJob::PathTracingDesc pathtraceDesc = {};
 		pathtraceDesc.target = hdrRaytraceSceneColor.get();
 		pathtraceDesc.resX = resX;
