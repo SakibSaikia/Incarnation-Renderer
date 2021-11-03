@@ -3,17 +3,172 @@
         "generator" : "Khronos glTF Blender I/O v1.6.16",
         "version" : "2.0"
     },
+    "extensionsUsed" : [
+        "KHR_lights_punctual"
+    ],
+    "extensionsRequired" : [
+        "KHR_lights_punctual"
+    ],
+    "extensions" : {
+        "KHR_lights_punctual" : {
+            "lights" : [
+                {
+                    "color" : [
+                        1,
+                        0.569847047328949,
+                        0.3009999990463257
+                    ],
+                    "intensity" : 50,
+                    "type" : "directional",
+                    "name" : "Light.001"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.013"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.004"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.003"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.002"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.012"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.011"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.010"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.009"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.008"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.007"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.006"
+                },
+                {
+                    "color" : [
+                        1,
+                        0.3921605944633484,
+                        0.12199997901916504
+                    ],
+                    "intensity" : 50,
+                    "type" : "point",
+                    "name" : "Light.005"
+                }
+            ]
+        }
+    },
     "scene" : 0,
     "scenes" : [
         {
             "name" : "Scene",
             "nodes" : [
-                531
+                545
             ]
         }
     ],
     "nodes" : [
         {
+            "camera" : 0,
+            "name" : "Camera.001_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                0
+            ],
             "name" : "Camera.001",
             "rotation" : [
                 0.0009409693884663284,
@@ -28,6 +183,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 0
+                }
+            },
+            "name" : "directionalLight1_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                2
+            ],
             "name" : "directionalLight1",
             "rotation" : [
                 -0.29527637362480164,
@@ -47,6 +219,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 1
+                }
+            },
+            "name" : "pointLight1_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                4
+            ],
             "name" : "pointLight1",
             "rotation" : [
                 -0.7071067094802856,
@@ -61,6 +250,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 2
+                }
+            },
+            "name" : "pointLight10_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                6
+            ],
             "name" : "pointLight10",
             "rotation" : [
                 -0.7071067094802856,
@@ -75,6 +281,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 3
+                }
+            },
+            "name" : "pointLight11_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                8
+            ],
             "name" : "pointLight11",
             "rotation" : [
                 -0.7071067094802856,
@@ -89,6 +312,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 4
+                }
+            },
+            "name" : "pointLight12_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                10
+            ],
             "name" : "pointLight12",
             "rotation" : [
                 -0.7071067094802856,
@@ -103,6 +343,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 5
+                }
+            },
+            "name" : "pointLight2_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                12
+            ],
             "name" : "pointLight2",
             "rotation" : [
                 -0.7071067094802856,
@@ -117,6 +374,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 6
+                }
+            },
+            "name" : "pointLight3_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                14
+            ],
             "name" : "pointLight3",
             "rotation" : [
                 -0.7071067094802856,
@@ -131,6 +405,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 7
+                }
+            },
+            "name" : "pointLight4_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                16
+            ],
             "name" : "pointLight4",
             "rotation" : [
                 -0.7071067094802856,
@@ -145,6 +436,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 8
+                }
+            },
+            "name" : "pointLight5_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                18
+            ],
             "name" : "pointLight5",
             "rotation" : [
                 -0.7071067094802856,
@@ -159,6 +467,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 9
+                }
+            },
+            "name" : "pointLight6_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                20
+            ],
             "name" : "pointLight6",
             "rotation" : [
                 -0.7071067094802856,
@@ -173,6 +498,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 10
+                }
+            },
+            "name" : "pointLight7_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                22
+            ],
             "name" : "pointLight7",
             "rotation" : [
                 -0.7071067094802856,
@@ -187,6 +529,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 11
+                }
+            },
+            "name" : "pointLight8_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                24
+            ],
             "name" : "pointLight8",
             "rotation" : [
                 -0.7071067094802856,
@@ -201,6 +560,23 @@
             ]
         },
         {
+            "extensions" : {
+                "KHR_lights_punctual" : {
+                    "light" : 12
+                }
+            },
+            "name" : "pointLight9_Orientation",
+            "rotation" : [
+                -0.7071067690849304,
+                0,
+                0,
+                0.7071067690849304
+            ]
+        },
+        {
+            "children" : [
+                26
+            ],
             "name" : "pointLight9",
             "rotation" : [
                 -0.7071067094802856,
@@ -215,2102 +591,3639 @@
             ]
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 0,
             "name" : "S_BuildingSetA_Tree_02_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 1,
             "name" : "S_BuildingSetA_Tree_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 2,
             "name" : "S_BuildingSetA_Tree_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 3,
             "name" : "SM_Arch_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 4,
             "name" : "SM_Arch_100"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 5,
             "name" : "SM_Arch_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 6,
             "name" : "SM_Arch_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 7,
             "name" : "SM_Arch_130"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 8,
             "name" : "SM_Arch_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 9,
             "name" : "SM_Arch_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 10,
             "name" : "SM_Arch_158"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 11,
             "name" : "SM_Arch_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 12,
             "name" : "SM_Arch_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 13,
             "name" : "SM_Arch_173"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 14,
             "name" : "SM_Arch_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 15,
             "name" : "SM_Arch_182"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 16,
             "name" : "SM_Arch_183"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 17,
             "name" : "SM_Arch_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 18,
             "name" : "SM_Arch_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 19,
             "name" : "SM_Arch_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 20,
             "name" : "SM_Arch_24"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 21,
             "name" : "SM_Arch_2_Bend_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 22,
             "name" : "SM_Arch_2_Bend_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 23,
             "name" : "SM_Arch_2_Bend_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 24,
             "name" : "SM_Arch_2_Bend_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 25,
             "name" : "SM_Arch_2_Bend_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 26,
             "name" : "SM_Arch_2_Bend_155"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 27,
             "name" : "SM_Arch_2_Bend_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 28,
             "name" : "SM_Arch_2_Bend_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 29,
             "name" : "SM_Arch_2_Bend_22"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 30,
             "name" : "SM_Arch_2_Bend_23"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 31,
             "name" : "SM_Arch_2_Bend_24"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 32,
             "name" : "SM_Arch_2_Bend_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 33,
             "name" : "SM_Arch_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 34,
             "name" : "SM_Arch_34"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 35,
             "name" : "SM_Arch_35"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 36,
             "name" : "SM_Arch_38"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 37,
             "name" : "SM_Arch_39"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 38,
             "name" : "SM_Arch_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 39,
             "name" : "SM_Arch_40"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 40,
             "name" : "SM_Arch_49"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 41,
             "name" : "SM_Arch_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 42,
             "name" : "SM_Arch_50"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 43,
             "name" : "SM_Arch_51"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 44,
             "name" : "SM_Arch_59"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 45,
             "name" : "SM_Arch_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 46,
             "name" : "SM_Arch_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 47,
             "name" : "SM_Arch_91"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 48,
             "name" : "SM_Arch_93"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 49,
             "name" : "SM_BottomTrim_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 50,
             "name" : "SM_BottomTrim_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 51,
             "name" : "SM_BottomTrim_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 52,
             "name" : "SM_BottomTrim_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 53,
             "name" : "SM_BottomTrim_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 54,
             "name" : "SM_BottomTrim_330"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 55,
             "name" : "SM_BottomTrim_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 56,
             "name" : "SM_BottomTrim_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 57,
             "name" : "SM_BottomTrim_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 58,
             "name" : "SM_BottomTrim_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 59,
             "name" : "SM_BottomTrim_Sqr_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 60,
             "name" : "SM_BottomTrim_Sqr_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 61,
             "name" : "SM_BottomTrim_Sqr_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 62,
             "name" : "SM_BottomTrim_Sqr_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 63,
             "name" : "SM_BottomTrim_Sqr_346"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 64,
             "name" : "SM_BottomTrim_Sqr_352"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 65,
             "name" : "SM_BottomTrim_Sqr_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 66,
             "name" : "SM_BottomTrim_Sqr_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 67,
             "name" : "SM_BottomTrim_Sqr_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 68,
             "name" : "SM_BottomTrim_Sqr_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 69,
             "name" : "SM_BottomTrim_Sqr_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 70,
             "name" : "SM_BrickWall_127"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 71,
             "name" : "SM_BrickWall_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 72,
             "name" : "SM_BrickWall_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 73,
             "name" : "SM_BrickWall_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 74,
             "name" : "SM_BrickWall_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 75,
             "name" : "SM_BrickWall_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 76,
             "name" : "SM_BrickWall_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 77,
             "name" : "SM_BrickWall_19"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 78,
             "name" : "SM_BrickWall_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 79,
             "name" : "SM_BrickWall_23"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 80,
             "name" : "SM_BrickWall_233"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 81,
             "name" : "SM_BrickWall_238"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 82,
             "name" : "SM_BrickWall_239"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 83,
             "name" : "SM_BrickWall_243"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 84,
             "name" : "SM_BrickWall_247"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 85,
             "name" : "SM_BrickWall_25"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 86,
             "name" : "SM_BrickWall_26"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 87,
             "name" : "SM_BrickWall_297"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 88,
             "name" : "SM_BrickWall_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 89,
             "name" : "SM_BrickWall_326"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 90,
             "name" : "SM_BrickWall_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 91,
             "name" : "SM_BrickWall_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 92,
             "name" : "SM_BrickWall_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 93,
             "name" : "SM_BrickWall_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 94,
             "name" : "SM_Cave_Rock_Large02_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 95,
             "name" : "SM_Cave_Rock_Large10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 96,
             "name" : "SM_Cave_Rock_Large11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 97,
             "name" : "SM_Cave_Rock_Large12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 98,
             "name" : "SM_Cave_Rock_Large13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 99,
             "name" : "SM_Cave_Rock_Large14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 100,
             "name" : "SM_Cave_Rock_Large3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 101,
             "name" : "SM_Cave_Rock_Large4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 102,
             "name" : "SM_Cave_Rock_Large5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 103,
             "name" : "SM_Cave_Rock_Large6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 104,
             "name" : "SM_Cave_Rock_Large7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 105,
             "name" : "SM_Cave_Rock_Large8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 106,
             "name" : "SM_Cave_Rock_Large9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 107,
             "name" : "SM_Dome_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 108,
             "name" : "SM_FirePit_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 109,
             "name" : "SM_FirePit_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 110,
             "name" : "SM_FirePit_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 111,
             "name" : "SM_FirePit_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 112,
             "name" : "SM_FirePit_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 113,
             "name" : "SM_FirePit_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 114,
             "name" : "SM_FirePit_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 115,
             "name" : "SM_FirePit_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 116,
             "name" : "SM_FirePit_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 117,
             "name" : "SM_FirePit_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 118,
             "name" : "SM_FirePit_23"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 119,
             "name" : "SM_FirePit_26"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 120,
             "name" : "SM_FirePit_27"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 121,
             "name" : "SM_FirePit_28"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 122,
             "name" : "SM_FirePit_29"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 123,
             "name" : "SM_FirePit_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 124,
             "name" : "SM_FirePit_31"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 125,
             "name" : "SM_FirePit_41"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 126,
             "name" : "SM_FirePit_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 127,
             "name" : "SM_FirePit_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 128,
             "name" : "SM_FirePit_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 129,
             "name" : "SM_Floor_Lower_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 130,
             "name" : "SM_Floor_Lower_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 131,
             "name" : "SM_Floor_Round_40"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 132,
             "name" : "SM_Floor_StairTop_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 133,
             "name" : "SM_Floor_StairTop_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 134,
             "name" : "SM_Floor_StairTop_43"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 135,
             "name" : "SM_Gable_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 136,
             "name" : "SM_Gable_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 137,
             "name" : "SM_Gable_37"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 138,
             "name" : "SM_Gable_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 139,
             "name" : "SM_Gable_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 140,
             "name" : "SM_Gable_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 141,
             "name" : "SM_PanelArch4_77"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 142,
             "name" : "SM_PanelArch5_188"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 143,
             "name" : "SM_PanelArch6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 144,
             "name" : "SM_PanelArch_107"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 145,
             "name" : "SM_PanelArch_247"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 146,
             "name" : "SM_PanelArch_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 147,
             "name" : "SM_PanelArch_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 148,
             "name" : "SM_Pillar_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 149,
             "name" : "SM_Pillar_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 150,
             "name" : "SM_Pillar_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 151,
             "name" : "SM_Pillar_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 152,
             "name" : "SM_Pillar_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 153,
             "name" : "SM_Pillar_156"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 154,
             "name" : "SM_Pillar_157"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 155,
             "name" : "SM_Pillar_24"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 156,
             "name" : "SM_Pillar_25"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 157,
             "name" : "SM_Pillar_266"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 158,
             "name" : "SM_Pillar_27"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 159,
             "name" : "SM_Pillar_28"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 160,
             "name" : "SM_Pillar_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 161,
             "name" : "SM_Pillar_30"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 162,
             "name" : "SM_Pillar_31"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 163,
             "name" : "SM_Pillar_36"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 164,
             "name" : "SM_Pillar_38"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 165,
             "name" : "SM_Pillar_39"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 166,
             "name" : "SM_Pillar_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 167,
             "name" : "SM_Pillar_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 168,
             "name" : "SM_Pillar_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 169,
             "name" : "SM_Pillar_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 170,
             "name" : "SM_Pillar_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 171,
             "name" : "SM_Pillar_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 172,
             "name" : "SM_Railing_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 173,
             "name" : "SM_Railing_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 174,
             "name" : "SM_Railing_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 175,
             "name" : "SM_Railing_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 176,
             "name" : "SM_Railing_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 177,
             "name" : "SM_Railing_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 178,
             "name" : "SM_Railing_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 179,
             "name" : "SM_Railing_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 180,
             "name" : "SM_Railing_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 181,
             "name" : "SM_Railing_19"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 182,
             "name" : "SM_Railing_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 183,
             "name" : "SM_Railing_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 184,
             "name" : "SM_Railing_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 185,
             "name" : "SM_Railing_22"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 186,
             "name" : "SM_Railing_25"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 187,
             "name" : "SM_Railing_26"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 188,
             "name" : "SM_Railing_29"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 189,
             "name" : "SM_Railing_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 190,
             "name" : "SM_Railing_30"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 191,
             "name" : "SM_Railing_39"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 192,
             "name" : "SM_Railing_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 193,
             "name" : "SM_Railing_41"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 194,
             "name" : "SM_Railing_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 195,
             "name" : "SM_Railing_54"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 196,
             "name" : "SM_Railing_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 197,
             "name" : "SM_Railing_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 198,
             "name" : "SM_RailingPillar_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 199,
             "name" : "SM_RailingPillar_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 200,
             "name" : "SM_RailingPillar_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 201,
             "name" : "SM_RailingPillar_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 202,
             "name" : "SM_RailingPillar_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 203,
             "name" : "SM_RailingPillar_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 204,
             "name" : "SM_RailingPillar_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 205,
             "name" : "SM_RailingPillar_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 206,
             "name" : "SM_RailingPillar_31"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 207,
             "name" : "SM_RailingPillar_32"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 208,
             "name" : "SM_RailingPillar_35"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 209,
             "name" : "SM_RailingPillar_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 210,
             "name" : "SM_RailingPillar_44"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 211,
             "name" : "SM_RailingPillar_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 212,
             "name" : "SM_RailingPillar_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 213,
             "name" : "SM_RailingPillar_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 214,
             "name" : "SM_RailingPillar_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 215,
             "name" : "SM_RailingPillar_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 216,
             "name" : "SM_RockTerrain_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 217,
             "name" : "SM_RockTerrain_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 218,
             "name" : "SM_RockTerrain_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 219,
             "name" : "SM_Shield_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 220,
             "name" : "SM_Shield_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 221,
             "name" : "SM_Shield_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 222,
             "name" : "SM_Shield_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 223,
             "name" : "SM_Shield_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 224,
             "name" : "SM_Shield_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 225,
             "name" : "SM_Shield_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 226,
             "name" : "SM_Shield_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 227,
             "name" : "SM_Shield_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 228,
             "name" : "SM_Stairs_270"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 229,
             "name" : "SM_Stairs_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 230,
             "name" : "SM_Stairs_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 231,
             "name" : "SM_Stairs_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 232,
             "name" : "SM_Stairs_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 233,
             "name" : "SM_Stairs_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 234,
             "name" : "SM_Statue_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 235,
             "name" : "SM_Statue_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 236,
             "name" : "SM_Statue_304"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 237,
             "name" : "SM_Statue_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 238,
             "name" : "SM_Statue_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 239,
             "name" : "SM_Statue_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 240,
             "name" : "SM_Trim_1504"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 241,
             "name" : "SM_Trim_1505"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 242,
             "name" : "SM_Trim_1506"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 243,
             "name" : "SM_Trim_1507"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 244,
             "name" : "SM_Trim_1508"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 245,
             "name" : "SM_Trim_1509"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 246,
             "name" : "SM_Trim_1510"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 247,
             "name" : "SM_Trim_1511"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 248,
             "name" : "SM_Trim_1512"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 249,
             "name" : "SM_Trim_1513"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 250,
             "name" : "SM_Trim_1514"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 251,
             "name" : "SM_Trim_323"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 252,
             "name" : "SM_Trim_371"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 253,
             "name" : "SM_Trim_377"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 254,
             "name" : "SM_Trim_75"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 255,
             "name" : "SM_TrimWall_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 256,
             "name" : "SM_TrimWall_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 257,
             "name" : "SM_TrimWall_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 258,
             "name" : "SM_TrimWall_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 259,
             "name" : "SM_TrimWall_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 260,
             "name" : "SM_TrimWall_19"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 261,
             "name" : "SM_TrimWall_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 262,
             "name" : "SM_TrimWall_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 263,
             "name" : "SM_TrimWall_246"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 264,
             "name" : "SM_TrimWall_249"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 265,
             "name" : "SM_TrimWall_25"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 266,
             "name" : "SM_TrimWall_251"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 267,
             "name" : "SM_TrimWall_258"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 268,
             "name" : "SM_TrimWall_259"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 269,
             "name" : "SM_TrimWall_26"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 270,
             "name" : "SM_TrimWall_27"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 271,
             "name" : "SM_TrimWall_28"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 272,
             "name" : "SM_TrimWall_29"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 273,
             "name" : "SM_TrimWall_30"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 274,
             "name" : "SM_TrimWall_31"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 275,
             "name" : "SM_TrimWall_319"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 276,
             "name" : "SM_TrimWall_32"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 277,
             "name" : "SM_TrimWall_33"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 278,
             "name" : "SM_TrimWall_34"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 279,
             "name" : "SM_TrimWall_35"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 280,
             "name" : "SM_TrimWall_36"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 281,
             "name" : "SM_TrimWall_37"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 282,
             "name" : "SM_TrimWall_38"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 283,
             "name" : "SM_TrimWall_39"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 284,
             "name" : "SM_TrimWall_40"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 285,
             "name" : "SM_TrimWall_41"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 286,
             "name" : "SM_TrimWall_42"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 287,
             "name" : "SM_TrimWall_43"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 288,
             "name" : "SM_TrimWall_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 289,
             "name" : "SM_TrimWall_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 290,
             "name" : "SM_TrimWall_71"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 291,
             "name" : "SM_TrimWall_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 292,
             "name" : "SM_TrimWall_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 293,
             "name" : "SM_TrimWall_Door_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 294,
             "name" : "SM_TrimWall_Door_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 295,
             "name" : "SM_TrimWall_Door_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 296,
             "name" : "SM_TrimWall_Door_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 297,
             "name" : "SM_TrimWall_Door_307"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 298,
             "name" : "SM_TrimWall_Door_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 299,
             "name" : "SM_TrimWall_Door_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 300,
             "name" : "SM_TrimWall_Door_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 301,
             "name" : "SM_TrimWall_Door_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 302,
             "name" : "SM_TrimWall_Door_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 303,
             "name" : "SM_TrimWall_Door_9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 304,
             "name" : "SM_TrimWall_Pillar_2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 305,
             "name" : "SM_TrimWall_Pillar_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 306,
             "name" : "SM_TrimWall_Pillar_3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 307,
             "name" : "SM_TrimWall_Pillar_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 308,
             "name" : "SM_TrimWall_U_10"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 309,
             "name" : "SM_TrimWall_U_102"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 310,
             "name" : "SM_TrimWall_U_11"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 311,
             "name" : "SM_TrimWall_U_112"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 312,
             "name" : "SM_TrimWall_U_115"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 313,
             "name" : "SM_TrimWall_U_12"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 314,
             "name" : "SM_TrimWall_U_120"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 315,
             "name" : "SM_TrimWall_U_121"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 316,
             "name" : "SM_TrimWall_U_122"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 317,
             "name" : "SM_TrimWall_U_123"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 318,
             "name" : "SM_TrimWall_U_125"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 319,
             "name" : "SM_TrimWall_U_126"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 320,
             "name" : "SM_TrimWall_U_127"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 321,
             "name" : "SM_TrimWall_U_128"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 322,
             "name" : "SM_TrimWall_U_129"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 323,
             "name" : "SM_TrimWall_U_13"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 324,
             "name" : "SM_TrimWall_U_130"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 325,
             "name" : "SM_TrimWall_U_132"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 326,
             "name" : "SM_TrimWall_U_134"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 327,
             "name" : "SM_TrimWall_U_135"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 328,
             "name" : "SM_TrimWall_U_136"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 329,
             "name" : "SM_TrimWall_U_137"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 330,
             "name" : "SM_TrimWall_U_138"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 331,
             "name" : "SM_TrimWall_U_139"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 332,
             "name" : "SM_TrimWall_U_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 333,
             "name" : "SM_TrimWall_U_140"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 334,
             "name" : "SM_TrimWall_U_141"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 335,
             "name" : "SM_TrimWall_U_143"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 336,
             "name" : "SM_TrimWall_U_144"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 337,
             "name" : "SM_TrimWall_U_145"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 338,
             "name" : "SM_TrimWall_U_146"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 339,
             "name" : "SM_TrimWall_U_147"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 340,
             "name" : "SM_TrimWall_U_148"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 341,
             "name" : "SM_TrimWall_U_149"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 342,
             "name" : "SM_TrimWall_U_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 343,
             "name" : "SM_TrimWall_U_150"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 344,
             "name" : "SM_TrimWall_U_151"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 345,
             "name" : "SM_TrimWall_U_152"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 346,
             "name" : "SM_TrimWall_U_153"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 347,
             "name" : "SM_TrimWall_U_154"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 348,
             "name" : "SM_TrimWall_U_155"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 349,
             "name" : "SM_TrimWall_U_158"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 350,
             "name" : "SM_TrimWall_U_159"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 351,
             "name" : "SM_TrimWall_U_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 352,
             "name" : "SM_TrimWall_U_160"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 353,
             "name" : "SM_TrimWall_U_161"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 354,
             "name" : "SM_TrimWall_U_162"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 355,
             "name" : "SM_TrimWall_U_163"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 356,
             "name" : "SM_TrimWall_U_167"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 357,
             "name" : "SM_TrimWall_U_168"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 358,
             "name" : "SM_TrimWall_U_169"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 359,
             "name" : "SM_TrimWall_U_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 360,
             "name" : "SM_TrimWall_U_170"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 361,
             "name" : "SM_TrimWall_U_171"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 362,
             "name" : "SM_TrimWall_U_172"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 363,
             "name" : "SM_TrimWall_U_173"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 364,
             "name" : "SM_TrimWall_U_174"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 365,
             "name" : "SM_TrimWall_U_175"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 366,
             "name" : "SM_TrimWall_U_176"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 367,
             "name" : "SM_TrimWall_U_177"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 368,
             "name" : "SM_TrimWall_U_178"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 369,
             "name" : "SM_TrimWall_U_179"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 370,
             "name" : "SM_TrimWall_U_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 371,
             "name" : "SM_TrimWall_U_180"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 372,
             "name" : "SM_TrimWall_U_181"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 373,
             "name" : "SM_TrimWall_U_182"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 374,
             "name" : "SM_TrimWall_U_183"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 375,
             "name" : "SM_TrimWall_U_184"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 376,
             "name" : "SM_TrimWall_U_185"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 377,
             "name" : "SM_TrimWall_U_186"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 378,
             "name" : "SM_TrimWall_U_187"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 379,
             "name" : "SM_TrimWall_U_19"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 380,
             "name" : "SM_TrimWall_U_190"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 381,
             "name" : "SM_TrimWall_U_191"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 382,
             "name" : "SM_TrimWall_U_192"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 383,
             "name" : "SM_TrimWall_U_193"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 384,
             "name" : "SM_TrimWall_U_194"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 385,
             "name" : "SM_TrimWall_U_195"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 386,
             "name" : "SM_TrimWall_U_196"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 387,
             "name" : "SM_TrimWall_U_197"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 388,
             "name" : "SM_TrimWall_U_198"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 389,
             "name" : "SM_TrimWall_U_199"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 390,
             "name" : "SM_TrimWall_U_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 391,
             "name" : "SM_TrimWall_U_201"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 392,
             "name" : "SM_TrimWall_U_202"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 393,
             "name" : "SM_TrimWall_U_203"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 394,
             "name" : "SM_TrimWall_U_204"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 395,
             "name" : "SM_TrimWall_U_205"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 396,
             "name" : "SM_TrimWall_U_206"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 397,
             "name" : "SM_TrimWall_U_207"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 398,
             "name" : "SM_TrimWall_U_208"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 399,
             "name" : "SM_TrimWall_U_209"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 400,
             "name" : "SM_TrimWall_U_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 401,
             "name" : "SM_TrimWall_U_210"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 402,
             "name" : "SM_TrimWall_U_212"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 403,
             "name" : "SM_TrimWall_U_214"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 404,
             "name" : "SM_TrimWall_U_215"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 405,
             "name" : "SM_TrimWall_U_217"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 406,
             "name" : "SM_TrimWall_U_22"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 407,
             "name" : "SM_TrimWall_U_220"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 408,
             "name" : "SM_TrimWall_U_221"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 409,
             "name" : "SM_TrimWall_U_222"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 410,
             "name" : "SM_TrimWall_U_224"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 411,
             "name" : "SM_TrimWall_U_225"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 412,
             "name" : "SM_TrimWall_U_226"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 413,
             "name" : "SM_TrimWall_U_227"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 414,
             "name" : "SM_TrimWall_U_228"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 415,
             "name" : "SM_TrimWall_U_229"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 416,
             "name" : "SM_TrimWall_U_23"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 417,
             "name" : "SM_TrimWall_U_230"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 418,
             "name" : "SM_TrimWall_U_231"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 419,
             "name" : "SM_TrimWall_U_232"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 420,
             "name" : "SM_TrimWall_U_233"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 421,
             "name" : "SM_TrimWall_U_234"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 422,
             "name" : "SM_TrimWall_U_235"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 423,
             "name" : "SM_TrimWall_U_236"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 424,
             "name" : "SM_TrimWall_U_237"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 425,
             "name" : "SM_TrimWall_U_238"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 426,
             "name" : "SM_TrimWall_U_239"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 427,
             "name" : "SM_TrimWall_U_24"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 428,
             "name" : "SM_TrimWall_U_240"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 429,
             "name" : "SM_TrimWall_U_241"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 430,
             "name" : "SM_TrimWall_U_242"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 431,
             "name" : "SM_TrimWall_U_243"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 432,
             "name" : "SM_TrimWall_U_244"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 433,
             "name" : "SM_TrimWall_U_245"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 434,
             "name" : "SM_TrimWall_U_246"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 435,
             "name" : "SM_TrimWall_U_247"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 436,
             "name" : "SM_TrimWall_U_248"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 437,
             "name" : "SM_TrimWall_U_25"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 438,
             "name" : "SM_TrimWall_U_26"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 439,
             "name" : "SM_TrimWall_U_27"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 440,
             "name" : "SM_TrimWall_U_272"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 441,
             "name" : "SM_TrimWall_U_28"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 442,
             "name" : "SM_TrimWall_U_29"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 443,
             "name" : "SM_TrimWall_U_290"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 444,
             "name" : "SM_TrimWall_U_291"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 445,
             "name" : "SM_TrimWall_U_292"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 446,
             "name" : "SM_TrimWall_U_293"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 447,
             "name" : "SM_TrimWall_U_299"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 448,
             "name" : "SM_TrimWall_U_30"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 449,
             "name" : "SM_TrimWall_U_31"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 450,
             "name" : "SM_TrimWall_U_32"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 451,
             "name" : "SM_TrimWall_U_33"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 452,
             "name" : "SM_TrimWall_U_34"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 453,
             "name" : "SM_TrimWall_U_340"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 454,
             "name" : "SM_TrimWall_U_35"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 455,
             "name" : "SM_TrimWall_U_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 456,
             "name" : "SM_TrimWall_U_49"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 457,
             "name" : "SM_TrimWall_U_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 458,
             "name" : "SM_TrimWall_U_56"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 459,
             "name" : "SM_TrimWall_U_58"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 460,
             "name" : "SM_TrimWall_U_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 461,
             "name" : "SM_TrimWall_U_61"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 462,
             "name" : "SM_TrimWall_U_63"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 463,
             "name" : "SM_TrimWall_U_64"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 464,
             "name" : "SM_TrimWall_U_66"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 465,
             "name" : "SM_TrimWall_U_68"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 466,
             "name" : "SM_TrimWall_U_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 467,
             "name" : "SM_TrimWall_U_80"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 468,
             "name" : "SM_TrimWall_U_81"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 469,
             "name" : "SM_TrimWall_U_82"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 470,
             "name" : "SM_TrimWall_U_90"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 471,
             "name" : "SM_TrimWall_U_91"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 472,
             "name" : "SM_TrimWall_U_96"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 473,
             "name" : "SM_TrimWall_U_97"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 474,
             "name" : "SM_Window_14"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 475,
             "name" : "SM_Window_15"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 476,
             "name" : "SM_Window_16"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 477,
             "name" : "SM_Window_17"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 478,
             "name" : "SM_Window_18"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 479,
             "name" : "SM_Window_19"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 480,
             "name" : "SM_Window_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 481,
             "name" : "SM_Window_21"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 482,
             "name" : "SM_Window_22"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 483,
             "name" : "SM_Window_23"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 484,
             "name" : "SM_Window_24"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 485,
             "name" : "SM_Window_25"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 486,
             "name" : "SM_Window_275"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 487,
             "name" : "SM_Window_31"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 488,
             "name" : "SM_Window_32"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 489,
             "name" : "SM_Window_33"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 490,
             "name" : "SM_Window_34"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 491,
             "name" : "SM_Window_35"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 492,
             "name" : "SM_Window_36"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 493,
             "name" : "SM_Window_37"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 494,
             "name" : "SM_Window_68"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 495,
             "name" : "SM_WindowWall_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 496,
             "name" : "SM_WindowWall_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 497,
             "name" : "SM_WindowWall_56"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 498,
             "name" : "SM_WindowWall_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 499,
             "name" : "SM_WindowWall_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 500,
             "name" : "SM_WindowWall_Bend_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 501,
             "name" : "SM_WindowWall_Bend_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 502,
             "name" : "SM_WindowWall_Bend_7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 503,
             "name" : "SM_WindowWall_Bend_8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 504,
             "name" : "Soul_FG01_20"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 505,
             "name" : "Soul_FG2"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 506,
             "name" : "Soul_FG3"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 507,
             "name" : "Soul_FG4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 508,
             "name" : "Soul_FG5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 509,
             "name" : "Soul_FG6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 510,
             "name" : "Soul_FG7"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 511,
             "name" : "Soul_FG8"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 512,
             "name" : "Soul_FG9"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 513,
             "name" : "Soul_Tree_4"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 514,
             "name" : "Soul_Tree_5"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 515,
             "name" : "Soul_Tree_6"
         },
         {
+            "extras" : {
+                "currentUVSet" : "TextureUV"
+            },
             "mesh" : 516,
             "name" : "Soul_Tree_7"
         },
         {
             "children" : [
-                0,
                 1,
-                2,
                 3,
-                4,
                 5,
-                6,
                 7,
-                8,
                 9,
-                10,
                 11,
-                12,
                 13,
-                14,
                 15,
-                16,
                 17,
-                18,
                 19,
-                20,
                 21,
-                22,
                 23,
-                24,
                 25,
-                26,
                 27,
                 28,
                 29,
@@ -2814,7 +4727,21 @@
                 527,
                 528,
                 529,
-                530
+                530,
+                531,
+                532,
+                533,
+                534,
+                535,
+                536,
+                537,
+                538,
+                539,
+                540,
+                541,
+                542,
+                543,
+                544
             ],
             "name" : "group1",
             "rotation" : [
@@ -2830,27 +4757,39 @@
             ]
         }
     ],
+    "cameras" : [
+        {
+            "name" : "Camera.001",
+            "perspective" : {
+                "aspectRatio" : 1.7777777777777777,
+                "yfov" : 0.5928292609173692,
+                "zfar" : 1000,
+                "znear" : 0.0010000000474974513
+            },
+            "type" : "perspective"
+        }
+    ],
     "animations" : [
         {
             "channels" : [
                 {
                     "sampler" : 0,
                     "target" : {
-                        "node" : 0,
+                        "node" : 1,
                         "path" : "translation"
                     }
                 },
                 {
                     "sampler" : 1,
                     "target" : {
-                        "node" : 0,
+                        "node" : 1,
                         "path" : "rotation"
                     }
                 },
                 {
                     "sampler" : 2,
                     "target" : {
-                        "node" : 0,
+                        "node" : 1,
                         "path" : "scale"
                     }
                 }
