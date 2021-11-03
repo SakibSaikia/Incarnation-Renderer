@@ -9,7 +9,6 @@
 #include <sstream>
 #include <mesh-utils.h>
 #include <concurrent_unordered_map.h>
-#include <spookyhash_api.h>
 #include <ppltasks.h>
 #include <ppl.h>
 
@@ -888,9 +887,8 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		{
 			const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
 
-			// The bottom level acceleration structures are indexed via the index accessor
 			// Create a new BLAS if one doesn't already exist for the indexed geometry
-			auto search = m_blasList.find(primitive.m_indexAccessor);
+			auto search = m_blasList.find(primitive);
 			if (search == m_blasList.cend())
 			{
 				tinygltf::Accessor posAccessor = model.accessors[primitive.m_positionAccessor];
@@ -956,8 +954,8 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 
 				// BLAS buffer
 				std::wstringstream s;
-				s << L"blas_buffer_" << primitive.m_indexAccessor;
-				m_blasList[primitive.m_indexAccessor] = RenderBackend12::CreateBindlessBuffer(
+				s << L"blas_buffer_" << std::hash<FMeshPrimitive>{}(primitive);
+				m_blasList[primitive] = RenderBackend12::CreateBindlessBuffer(
 					s.str(),
 					BindlessResourceType::AccelerationStructure,
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes),
@@ -967,9 +965,9 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 				buildDesc.Inputs = blasInputsDesc;
 				buildDesc.ScratchAccelerationStructureData = blasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				buildDesc.DestAccelerationStructureData = m_blasList[primitive.m_indexAccessor]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				buildDesc.DestAccelerationStructureData = m_blasList[primitive]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 				cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-				m_blasList[primitive.m_indexAccessor]->m_resource->UavBarrier(cmdList);
+				m_blasList[primitive]->m_resource->UavBarrier(cmdList);
 			}
 
 			// Create D3D12_RAYTRACING_INSTANCE_DESC for each primitive
@@ -979,7 +977,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				instance.InstanceContributionToHitGroupIndex = 0;
 				instance.InstanceMask = 1;
 				instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-				instance.AccelerationStructure = m_blasList[primitive.m_indexAccessor]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				instance.AccelerationStructure = m_blasList[primitive]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
 				// Transpose and convert to 3x4 matrix
 				const Matrix& localToWorld = m_entities.m_transformList[meshIndex];

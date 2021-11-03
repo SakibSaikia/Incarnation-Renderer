@@ -22,7 +22,7 @@ namespace RenderJob
 				for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
 				{
 					const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
-					const auto& search = scene->m_blasList.find(primitive.m_indexAccessor);
+					const auto& search = scene->m_blasList.find(primitive);
 					DebugAssert(search != scene->m_blasList.end());
 
 					D3D12_RAYTRACING_INSTANCE_DESC instance = {};
