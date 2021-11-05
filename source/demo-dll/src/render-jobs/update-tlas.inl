@@ -15,6 +15,7 @@ namespace RenderJob
 
 			std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
 			instanceDescs.reserve(scene->m_entities.m_meshList.size());
+			int instanceIndex = 0;
 
 			for (int meshIndex = 0; meshIndex < scene->m_entities.m_meshList.size(); ++meshIndex)
 			{
@@ -27,7 +28,7 @@ namespace RenderJob
 
 					D3D12_RAYTRACING_INSTANCE_DESC instance = {};
 					instance.InstanceID = 0;
-					instance.InstanceContributionToHitGroupIndex = 0;
+					instance.InstanceContributionToHitGroupIndex = instanceIndex++;
 					instance.InstanceMask = 1;
 					instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 					instance.AccelerationStructure = search->second->m_resource->m_d3dResource->GetGPUVirtualAddress();

@@ -879,6 +879,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
 	instanceDescs.reserve(m_entities.m_meshList.size());
+	int instanceIndex = 0;
 
 	for (int meshIndex = 0; meshIndex < m_entities.m_meshList.size(); ++meshIndex)
 	{
@@ -974,7 +975,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 			{
 				D3D12_RAYTRACING_INSTANCE_DESC instance = {};
 				instance.InstanceID = 0;
-				instance.InstanceContributionToHitGroupIndex = 0;
+				instance.InstanceContributionToHitGroupIndex = instanceIndex++;
 				instance.InstanceMask = 1;
 				instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 				instance.AccelerationStructure = m_blasList[primitive]->m_resource->m_d3dResource->GetGPUVirtualAddress();

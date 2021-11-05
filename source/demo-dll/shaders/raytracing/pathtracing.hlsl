@@ -12,7 +12,7 @@ GlobalRootSignature k_globalRootsig =
 
 LocalRootSignature k_hitGroupLocalRootsig =
 {
-    "RootConstants(b1, num32BitConstants = 6)"
+    "RootConstants(b1, num32BitConstants = 23)"
 };
 
 TriangleHitGroup k_hitGroup =
