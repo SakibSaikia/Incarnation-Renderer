@@ -6,7 +6,7 @@
 struct Config
 {
 	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	static inline std::wstring g_modelFilename = L"DamagedHelmet.gltf";
+	static inline std::wstring g_modelFilename = L"Sponza.gltf";
 	static inline std::wstring g_environmentFilename = L"lilienstein_2k.hdr";
 	static inline bool g_useContentCache = true;
 	static inline float g_fov = 0.25f * DirectX::XM_PI;

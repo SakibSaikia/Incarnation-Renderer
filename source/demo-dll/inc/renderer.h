@@ -26,35 +26,7 @@ struct FMeshPrimitive
 	size_t m_indexCount;
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	int m_materialIndex;
-
-	bool operator==(const FMeshPrimitive& other) const
-	{
-		return std::memcmp(this, &other, sizeof(FMeshPrimitive)) == 0;
-	}
 };
-
-template<>
-struct std::hash<FMeshPrimitive>
-{
-	std::size_t operator()(const FMeshPrimitive& key) const
-	{
-		uint64_t seed1{}, seed2{};
-		spookyhash_context context;
-		spookyhash_context_init(&context, seed1, seed2);
-		spookyhash_update(&context, &key.m_indexAccessor, sizeof(key.m_indexAccessor));
-		spookyhash_update(&context, &key.m_indexCount, sizeof(key.m_indexCount));
-		spookyhash_update(&context, &key.m_materialIndex, sizeof(key.m_materialIndex));
-		spookyhash_update(&context, &key.m_normalAccessor, sizeof(key.m_normalAccessor));
-		spookyhash_update(&context, &key.m_positionAccessor, sizeof(key.m_positionAccessor));
-		spookyhash_update(&context, &key.m_tangentAccessor, sizeof(key.m_tangentAccessor));
-		spookyhash_update(&context, &key.m_uvAccessor, sizeof(key.m_uvAccessor));
-		spookyhash_update(&context, &key.m_topology, sizeof(key.m_topology));
-		spookyhash_final(&context, &seed1, &seed2);
-
-		return seed1 ^ (seed2 << 1);
-	}
-};
-
 
 // Corresponds to GLTF Mesh
 struct FMesh
@@ -131,7 +103,9 @@ struct FScene
 	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
-	std::unordered_map<FMeshPrimitive, std::unique_ptr<FBindlessShaderResource>> m_blasList;
+	std::unique_ptr<FBindlessShaderResource> m_packedPrimitives;
+	std::unique_ptr<FBindlessShaderResource> m_packedPrimitiveCounts;
+	std::unordered_map<std::wstring, std::unique_ptr<FBindlessShaderResource>> m_blasList;
 	std::unique_ptr<FBindlessShaderResource> m_tlas;
 	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
 	DirectX::BoundingBox m_sceneBounds; // world space
@@ -147,6 +121,7 @@ private:
 	void LoadMeshBufferViews(const tinygltf::Model& model);
 	void LoadMeshAccessors(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
+	void CreateGpuPrimitiveBuffers();
 	void LoadMaterials(const tinygltf::Model& model);
 	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN, const DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN);

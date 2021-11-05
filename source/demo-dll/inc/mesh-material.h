@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef __cplusplus
 	#define uint32_t	uint
 	#define Vector3		float3
@@ -23,6 +25,18 @@ struct FMeshAccessor
 	int m_bufferViewIndex;
 	uint32_t m_byteOffset;
 	uint32_t m_byteStride;
+};
+
+struct FGpuPrimitive
+{
+	Matrix m_localToWorld;
+	int m_indexAccessor;
+	int m_positionAccessor;
+	int m_uvAccessor;
+	int m_normalAccessor;
+	int m_tangentAccessor;
+	int m_materialIndex;
+	int m_indicesPerTriangle;
 };
 
 struct FMaterial
@@ -221,6 +235,21 @@ namespace MeshMaterial
 	{
 		ByteAddressBuffer materialBuffer = ResourceDescriptorHeap[materialBufferIndex];
 		return materialBuffer.Load<FMaterial>(materialIndex * sizeof(FMaterial));
+	}
+
+	FGpuPrimitive GetPrimitive(uint instanceIndex, uint geometryIndex, int primitivesBufferIndex, int primitiveCountsBufferIndex)
+	{
+		// Figure out how many primitives to skip to get to the instance specified
+		ByteAddressBuffer primitiveCountsBuffer = ResourceDescriptorHeap[primitiveCountsBufferIndex];
+		int primitiveOffset = 0;
+		for (int i = 0; i < instanceIndex; ++i)
+		{
+			primitiveOffset += primitiveCountsBuffer.Load(i * sizeof(uint));
+		}
+
+		// Use above offset along with the geometry index *within* the instance to get to the right primitive
+		ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[primitivesBufferIndex];
+		return primitivesBuffer.Load<FGpuPrimitive>((primitiveOffset + geometryIndex) * sizeof(FGpuPrimitive));
 	}
 }
 #endif // __HLSL

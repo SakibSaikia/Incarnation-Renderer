@@ -8,6 +8,7 @@
 #include <common.h>
 #include <sstream>
 #include <mesh-utils.h>
+#include <mesh-material.h>
 #include <concurrent_unordered_map.h>
 #include <ppltasks.h>
 #include <ppl.h>
@@ -646,6 +647,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// Raytracing Acceleration Structures
 	CreateAccelerationStructures(model);
+	CreateGpuPrimitiveBuffers();
 
 	// Wait for all loading jobs to finish
 	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
@@ -874,24 +876,90 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
+void FScene::CreateGpuPrimitiveBuffers()
+{
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+	// Packed buffer that contains an array of FGpuPrimitive(s)
+	{
+		std::vector<FGpuPrimitive> primitives;
+		for (int meshIndex = 0; meshIndex < m_entities.m_meshList.size(); ++meshIndex)
+		{
+			const FMesh& mesh = m_entities.m_meshList[meshIndex];
+			for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
+			{
+				const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
+				FGpuPrimitive newPrimitive = {};
+				newPrimitive.m_localToWorld = m_entities.m_transformList[meshIndex];
+				newPrimitive.m_indexAccessor = primitive.m_indexAccessor;
+				newPrimitive.m_positionAccessor = primitive.m_positionAccessor;
+				newPrimitive.m_uvAccessor = primitive.m_uvAccessor;
+				newPrimitive.m_normalAccessor = primitive.m_normalAccessor;
+				newPrimitive.m_tangentAccessor = primitive.m_tangentAccessor;
+				newPrimitive.m_materialIndex = primitive.m_materialIndex;
+				newPrimitive.m_indicesPerTriangle = 3;
+				primitives.push_back(newPrimitive);
+			}
+		}
+
+		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
+		FResourceUploadContext uploader{ bufferSize };
+
+		m_packedPrimitives = RenderBackend12::CreateBindlessBuffer(
+			L"scene_primitives",
+			BindlessResourceType::Buffer,
+			bufferSize,
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			(const uint8_t*)primitives.data(),
+			&uploader);
+
+		uploader.SubmitUploads(cmdList);
+	}
+
+	// Buffer that contains primitive count for each mesh. This is used to calculate an offset to read from the above buffer
+	{
+		std::vector<uint32_t> primitiveCounts;
+		for (const auto& mesh : m_entities.m_meshList)
+		{
+			primitiveCounts.push_back(mesh.m_primitives.size());
+		}
+
+		const size_t bufferSize = primitiveCounts.size() * sizeof(uint32_t);
+		FResourceUploadContext uploader{ bufferSize };
+
+		m_packedPrimitiveCounts = RenderBackend12::CreateBindlessBuffer(
+			L"scene_primitive_counts",
+			BindlessResourceType::Buffer,
+			bufferSize,
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			(const uint8_t*)primitiveCounts.data(),
+			&uploader);
+
+		uploader.SubmitUploads(cmdList);
+	}
+
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+}
+
 void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-	instanceDescs.reserve(m_entities.m_meshList.size());
-	int instanceIndex = 0;
 
+	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
 	for (int meshIndex = 0; meshIndex < m_entities.m_meshList.size(); ++meshIndex)
 	{
 		const FMesh& mesh = m_entities.m_meshList[meshIndex];
-		for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
+		auto search = m_blasList.find(mesh.m_name);
+		if (search == m_blasList.cend())
 		{
-			const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
+			std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> primitiveDescs;
+			primitiveDescs.reserve(mesh.m_primitives.size());
 
-			// Create a new BLAS if one doesn't already exist for the indexed geometry
-			auto search = m_blasList.find(primitive);
-			if (search == m_blasList.cend())
+			// Create D3D12_RAYTRACING_GEOMETRY_DESC for each primitive in the mesh
+			for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
 			{
+				const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
+
 				tinygltf::Accessor posAccessor = model.accessors[primitive.m_positionAccessor];
 				tinygltf::Accessor indexAccessor = model.accessors[primitive.m_indexAccessor];
 				tinygltf::BufferView posView = model.bufferViews[posAccessor.bufferView];
@@ -925,114 +993,113 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 					break;
 				}
 
-				D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
-				geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-				geometryDesc.Triangles.VertexBuffer.StartAddress = m_meshBuffers[posView.buffer]->m_resource->m_d3dResource->GetGPUVirtualAddress() + posAccessor.byteOffset + posView.byteOffset;
-				geometryDesc.Triangles.VertexBuffer.StrideInBytes = posAccessor.ByteStride(posView);
-				geometryDesc.Triangles.VertexCount = posAccessor.count;
-				geometryDesc.Triangles.VertexFormat = vertexFormat;
-				geometryDesc.Triangles.IndexBuffer = m_meshBuffers[indexView.buffer]->m_resource->m_d3dResource->GetGPUVirtualAddress() + indexAccessor.byteOffset + indexView.byteOffset;
-				geometryDesc.Triangles.IndexFormat = indexFormat;
-				geometryDesc.Triangles.IndexCount = indexAccessor.count;
-				geometryDesc.Triangles.Transform3x4 = 0;
-				geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+				D3D12_RAYTRACING_GEOMETRY_DESC geometry = {};
+				geometry.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+				geometry.Triangles.VertexBuffer.StartAddress = m_meshBuffers[posView.buffer]->m_resource->m_d3dResource->GetGPUVirtualAddress() + posAccessor.byteOffset + posView.byteOffset;
+				geometry.Triangles.VertexBuffer.StrideInBytes = posAccessor.ByteStride(posView);
+				geometry.Triangles.VertexCount = posAccessor.count;
+				geometry.Triangles.VertexFormat = vertexFormat;
+				geometry.Triangles.IndexBuffer = m_meshBuffers[indexView.buffer]->m_resource->m_d3dResource->GetGPUVirtualAddress() + indexAccessor.byteOffset + indexView.byteOffset;
+				geometry.Triangles.IndexFormat = indexFormat;
+				geometry.Triangles.IndexCount = indexAccessor.count;
+				geometry.Triangles.Transform3x4 = 0;
+				geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+				primitiveDescs.push_back(geometry);
+			}
 
+			// Build BLAS
+			{
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blasInputsDesc = {};
 				blasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
 				blasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-				blasInputsDesc.pGeometryDescs = &geometryDesc;
-				blasInputsDesc.NumDescs = 1;
+				blasInputsDesc.pGeometryDescs = primitiveDescs.data();
+				blasInputsDesc.NumDescs = primitiveDescs.size();
 				blasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
 				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO blasPreBuildInfo = {};
 				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&blasInputsDesc, &blasPreBuildInfo);
 
-				// BLAS scratch buffer
 				auto blasScratch = RenderBackend12::CreateBindlessUavBuffer(
 					L"blas_scratch",
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes),
 					false);
 
-				// BLAS buffer
 				std::wstringstream s;
-				s << L"blas_buffer_" << std::hash<FMeshPrimitive>{}(primitive);
-				m_blasList[primitive] = RenderBackend12::CreateBindlessBuffer(
+				s << mesh.m_name << L"_blas";
+				m_blasList[mesh.m_name] = RenderBackend12::CreateBindlessBuffer(
 					s.str(),
 					BindlessResourceType::AccelerationStructure,
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes),
 					D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
 
-				// Build BLAS
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 				buildDesc.Inputs = blasInputsDesc;
 				buildDesc.ScratchAccelerationStructureData = blasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				buildDesc.DestAccelerationStructureData = m_blasList[primitive]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				buildDesc.DestAccelerationStructureData = m_blasList[mesh.m_name]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 				cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-				m_blasList[primitive]->m_resource->UavBarrier(cmdList);
-			}
-
-			// Create D3D12_RAYTRACING_INSTANCE_DESC for each primitive
-			{
-				D3D12_RAYTRACING_INSTANCE_DESC instance = {};
-				instance.InstanceID = 0;
-				instance.InstanceContributionToHitGroupIndex = instanceIndex++;
-				instance.InstanceMask = 1;
-				instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-				instance.AccelerationStructure = m_blasList[primitive]->m_resource->m_d3dResource->GetGPUVirtualAddress();
-
-				// Transpose and convert to 3x4 matrix
-				const Matrix& localToWorld = m_entities.m_transformList[meshIndex];
-				decltype(instance.Transform)& dest = instance.Transform;
-				dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
-				dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
-				dest[0][2] = localToWorld._31;	dest[1][2] = localToWorld._32;	dest[2][2] = localToWorld._33;
-				dest[0][3] = localToWorld._41;	dest[1][3] = localToWorld._42;	dest[2][3] = localToWorld._43;
-
-				instanceDescs.push_back(instance);
+				m_blasList[mesh.m_name]->m_resource->UavBarrier(cmdList);
 			}
 		}
+
+		// Create D3D12_RAYTRACING_INSTANCE_DESC for each mesh
+		D3D12_RAYTRACING_INSTANCE_DESC instance = {};
+		instance.InstanceID = 0;
+		instance.InstanceContributionToHitGroupIndex = 0;
+		instance.InstanceMask = 1;
+		instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+		instance.AccelerationStructure = m_blasList[mesh.m_name]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+
+		// Transpose and convert to 3x4 matrix
+		const Matrix& localToWorld = m_entities.m_transformList[meshIndex];
+		decltype(instance.Transform)& dest = instance.Transform;
+		dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
+		dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
+		dest[0][2] = localToWorld._31;	dest[1][2] = localToWorld._32;	dest[2][2] = localToWorld._33;
+		dest[0][3] = localToWorld._41;	dest[1][3] = localToWorld._42;	dest[2][3] = localToWorld._43;
+
+		instanceDescs.push_back(instance);
 	}
 
-	const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-	auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
-		L"instance_descs_buffer",
-		instanceDescBufferSize,
-		cmdList,
-		[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
-		{
-			memcpy(pDest, pData, instanceDescBufferSize);
-		});
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
-	tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-	tlasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	tlasInputsDesc.InstanceDescs = instanceDescBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
-	tlasInputsDesc.NumDescs = instanceDescs.size();
-	tlasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
-	RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
-
-	// TLAS scratch buffer
-	auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
-		L"tlas_scratch",
-		GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes),
-		false);
-
-	// TLAS buffer
-	m_tlas = RenderBackend12::CreateBindlessBuffer(
-		L"tlas_buffer",
-		BindlessResourceType::AccelerationStructure,
-		GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes),
-		D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
-
 	// Build TLAS
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-	buildDesc.Inputs = tlasInputsDesc;
-	buildDesc.ScratchAccelerationStructureData = tlasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-	buildDesc.DestAccelerationStructureData = m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress();
-	cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-	m_tlas->m_resource->UavBarrier(cmdList);
+	{
+		const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
+		auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
+			L"instance_descs_buffer",
+			instanceDescBufferSize,
+			cmdList,
+			[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
+			{
+				memcpy(pDest, pData, instanceDescBufferSize);
+			});
+
+		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
+		tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+		tlasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+		tlasInputsDesc.InstanceDescs = instanceDescBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
+		tlasInputsDesc.NumDescs = instanceDescs.size();
+		tlasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
+		RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
+
+		auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
+			L"tlas_scratch",
+			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes),
+			false);
+
+		m_tlas = RenderBackend12::CreateBindlessBuffer(
+			L"tlas_buffer",
+			BindlessResourceType::AccelerationStructure,
+			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes),
+			D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+
+		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+		buildDesc.Inputs = tlasInputsDesc;
+		buildDesc.ScratchAccelerationStructureData = tlasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
+		buildDesc.DestAccelerationStructureData = m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress();
+		cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+		m_tlas->m_resource->UavBarrier(cmdList);
+	}
 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }

@@ -36,9 +36,7 @@ namespace RenderJob
 				{L"chsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"msMain", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"k_globalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
-				{L"k_hitGroupLocalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroup", nullptr, D3D12_EXPORT_FLAG_NONE},
-				{L"k_hitGroupLocalRootsigAssociation", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_shaderConfig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_pipelineConfig", nullptr, D3D12_EXPORT_FLAG_NONE} };
 
@@ -89,48 +87,15 @@ namespace RenderJob
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 				});
 
-			// Hit group shader table
-			struct HitGroupRootConstants
-			{
-				Matrix localToWorld;
-				int indexAccessor;
-				int positionAccessor;
-				int uvAccessor;
-				int normalAccessor;
-				int tangentAccessor;
-				int materialIndex;
-				int indicesPerTriangle;
-			};
-
-			const size_t hitGroupShaderRecordSize = GetAlignedSize(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootConstants));
-			const size_t numHitGroups = passDesc.scene->m_entities.GetScenePrimitiveCount();
+			// Hit shader table
+			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FTransientBuffer> hitGroupShaderTable = RenderBackend12::CreateTransientBuffer(
 				L"hit_sbt",
-				numHitGroups * hitGroupShaderRecordSize,
+				1 * hitGroupShaderRecordSize,
 				cmdList,
-				[&, shaderId = psoInfo->GetShaderIdentifier(L"k_hitGroup")](uint8_t* pDest)
-				{	
-					for (int meshIndex = 0; meshIndex < passDesc.scene->m_entities.m_meshList.size(); ++meshIndex)
-					{
-						const FMesh& mesh = passDesc.scene->m_entities.m_meshList[meshIndex];
-						for (const FMeshPrimitive& primitive : mesh.m_primitives)
-						{
-							HitGroupRootConstants args = {};
-							args.localToWorld = passDesc.scene->m_entities.m_transformList[meshIndex];
-							args.indexAccessor = primitive.m_indexAccessor;
-							args.positionAccessor = primitive.m_positionAccessor;
-							args.uvAccessor = primitive.m_uvAccessor;
-							args.normalAccessor = primitive.m_normalAccessor;
-							args.tangentAccessor = primitive.m_tangentAccessor;
-							args.materialIndex = primitive.m_materialIndex;
-							args.indicesPerTriangle = 3;
-							DebugAssert(primitive.m_topology == D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST, "Expecting triange list");
-
-							memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-							memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &args, sizeof(args));
-							pDest += hitGroupShaderRecordSize;
-						}
-					}
+				[shaderId = psoInfo->GetShaderIdentifier(L"k_hitGroup")](uint8_t* pDest)
+				{
+					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 				});
 
 			// Descriptor heaps
@@ -157,6 +122,9 @@ namespace RenderJob
 				Matrix projectionToWorld;
 				Matrix sceneRotation;
 				int envmapTextureIndex;
+				int scenePrimitivesIndex;
+				int scenePrimitiveCountsIndex;
+
 			};
 
 			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
@@ -175,6 +143,8 @@ namespace RenderJob
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
+					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
+					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -186,7 +156,7 @@ namespace RenderJob
 			// Dispatch rays
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
 			dispatchDesc.HitGroupTable.StartAddress = hitGroupShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			dispatchDesc.HitGroupTable.SizeInBytes = numHitGroups * hitGroupShaderRecordSize;
+			dispatchDesc.HitGroupTable.SizeInBytes = 1 * hitGroupShaderRecordSize;
 			dispatchDesc.HitGroupTable.StrideInBytes = hitGroupShaderRecordSize;
 			dispatchDesc.MissShaderTable.StartAddress = missShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
 			dispatchDesc.MissShaderTable.SizeInBytes = 1 * missShaderRecordSize;

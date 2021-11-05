@@ -9,22 +9,10 @@ GlobalRootSignature k_globalRootsig =
     "StaticSampler(s0, space = 1, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP) "
 };
 
-
-LocalRootSignature k_hitGroupLocalRootsig =
-{
-    "RootConstants(b1, num32BitConstants = 23)"
-};
-
 TriangleHitGroup k_hitGroup =
 {
     "",                                 // AnyHit Shader
     "chsMain",                          // ClosestHit Shader
-};
-
-SubobjectToExportsAssociation  k_hitGroupLocalRootsigAssociation =
-{
-    "k_hitGroupLocalRootsig",           // subobject name
-    "k_hitGroup"                        // export association 
 };
 
 RaytracingShaderConfig  k_shaderConfig =
@@ -54,22 +42,11 @@ struct GlobalCbLayout
     float4x4 projectionToWorld;
     float4x4 sceneRotation;
     int envmapTextureIndex;
-};
-
-struct HitgroupCbLayout
-{
-    float4x4 localToWorld;
-    int indexAccessor;
-    int positionAccessor;
-    int uvAccessor;
-    int normalAccessor;
-    int tangentAccessor;
-    int materialIndex;
-    int indicesPerTriangle;
+    int scenePrimitivesIndex;
+    int scenePrimitiveCountsIndex;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
-ConstantBuffer<HitgroupCbLayout> g_hitgroupConstants : register(b1);
 SamplerState g_envmapSampler : register(s0, space1);
 RaytracingAccelerationStructure g_sceneBvh : register(t0);
 
@@ -80,7 +57,9 @@ void rgsMain()
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
     RayPayload payload = { float4(0, 0, 0, 0) };
-    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+
+    // MultiplierForGeometryContributionToHitGroupIndex is explicitly set to 0 because we are using GeometryIndex() to directly index primitive data instead of using hit group records.
+    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
     destUav[DispatchRaysIndex().xy] = payload.color;
 }
 
@@ -90,29 +69,32 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     const int globalMeshAccessorsIndex = g_globalConstants.sceneMeshAccessorsIndex;
     const int globalMeshBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
     const int globalMaterialBufferIndex = g_globalConstants.sceneMaterialBufferIndex;
-    float4x4 localToWorld = mul(g_hitgroupConstants.localToWorld, g_globalConstants.sceneRotation);
+
+    const FGpuPrimitive primitive = MeshMaterial::GetPrimitive(InstanceIndex(), GeometryIndex(), g_globalConstants.scenePrimitivesIndex, g_globalConstants.scenePrimitiveCountsIndex);
+
+    float4x4 localToWorld = mul(primitive.m_localToWorld, g_globalConstants.sceneRotation);
 
     float3 hitPosition = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
     // Get the base index of the hit triangle
-    uint baseIndex = PrimitiveIndex() * g_hitgroupConstants.indicesPerTriangle;
+    uint baseIndex = PrimitiveIndex() * primitive.m_indicesPerTriangle;
 
     // Load up 3 indices for the triangle
-    const uint3 indices = MeshMaterial::GetUint3(baseIndex, g_hitgroupConstants.indexAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex);
+    const uint3 indices = MeshMaterial::GetUint3(baseIndex, primitive.m_indexAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex);
 
     // Tangent bases
     float3 vertexNormals[3] = 
     {
-        MeshMaterial::GetFloat3(indices.x, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
-        MeshMaterial::GetFloat3(indices.y, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
-        MeshMaterial::GetFloat3(indices.z, g_hitgroupConstants.normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
+        MeshMaterial::GetFloat3(indices.x, primitive.m_normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat3(indices.y, primitive.m_normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat3(indices.z, primitive.m_normalAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
     };
 
     float4 vertexTangents[3] =
     {
-        MeshMaterial::GetFloat4(indices.x, g_hitgroupConstants.tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
-        MeshMaterial::GetFloat4(indices.y, g_hitgroupConstants.tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
-        MeshMaterial::GetFloat4(indices.z, g_hitgroupConstants.tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
+        MeshMaterial::GetFloat4(indices.x, primitive.m_tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat4(indices.y, primitive.m_tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat4(indices.z, primitive.m_tangentAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
     };
 
     float4 packedT = HitAttribute(vertexTangents, attr.barycentrics);
@@ -128,15 +110,15 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     // UVs
     float2 vertexUVs[3] =
     {
-        MeshMaterial::GetFloat2(indices.x, g_hitgroupConstants.uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
-        MeshMaterial::GetFloat2(indices.y, g_hitgroupConstants.uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
-        MeshMaterial::GetFloat2(indices.z, g_hitgroupConstants.uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
+        MeshMaterial::GetFloat2(indices.x, primitive.m_uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat2(indices.y, primitive.m_uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat2(indices.z, primitive.m_uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
     };
 
     float2 uv = HitAttribute(vertexUVs, attr.barycentrics);
 
     // Material 
-    FMaterial material = MeshMaterial::GetMaterial(g_hitgroupConstants.materialIndex, globalMaterialBufferIndex);
+    FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, globalMaterialBufferIndex);
     FMaterialProperties p = EvaluateMaterialProperties(material, uv);
 
 #if LIGHTING_ONLY
