@@ -15,6 +15,14 @@ TriangleHitGroup k_hitGroup =
     "chsMain",                          // ClosestHit Shader
 };
 
+TriangleHitGroup k_shadowHitGroup =
+{
+    "",
+    "ahsShadow",                        // AnyHit Shader
+    //"",                                 // ClosestHit Shader
+};
+
+
 RaytracingShaderConfig  k_shaderConfig =
 {
     16,                                 // max payload size
@@ -23,12 +31,17 @@ RaytracingShaderConfig  k_shaderConfig =
 
 RaytracingPipelineConfig k_pipelineConfig =
 {
-    1                                   // max trace recursion depth
+    2                                   // max trace recursion depth
 };
 
 struct RayPayload
 {
     float4 color;
+};
+
+struct ShadowRayPayload
+{
+    bool hit;
 };
 
 struct GlobalCbLayout
@@ -136,28 +149,40 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float NoH = saturate(dot(N, H));
     float LoH = saturate(dot(L, H));
 
-    // Remapping
-    float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
-    float3 albedo = (1.f - p.metallic) * p.basecolor;
-    float roughness = p.roughness * p.roughness;
+    RayDesc shadowRay;
+    shadowRay.Origin = hitPosition;
+    shadowRay.Direction = L;
+    shadowRay.TMin = 0.001;
+    shadowRay.TMax = 10000.0;
+    ShadowRayPayload shadowPayload = { false };
+    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_FORCE_OPAQUE, ~0, 1, 0, 1, shadowRay, shadowPayload);
+    if (!shadowPayload.hit)
+    {
+        // Remapping
+        float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
+        float3 albedo = (1.f - p.metallic) * p.basecolor;
+        float roughness = p.roughness * p.roughness;
 
-    float D = D_GGX(NoH, roughness);
-    float3 F = F_Schlick(LoH, F0);
-    float G = G_Smith_Direct(NoV, NoL, roughness);
+        // Specular BRDF
+        float D = D_GGX(NoH, roughness);
+        float3 F = F_Schlick(LoH, F0);
+        float G = G_Smith_Direct(NoV, NoL, roughness);
+        float3 Fr = (D * F * G) / (4.f * NoV * NoL);
 
-    // Specular BRDF
-    float3 Fr = (D * F * G) / (4.f * NoV * NoL);
+        // Diffuse BRDF
+        float3 Fd = albedo * Fd_Lambert();
 
-    // diffuse BRDF
-    float3 Fd = albedo * Fd_Lambert();
-    // Apply direct lighting
-    const float lightIntensity = 100000.f;
-    float illuminance = lightIntensity * NoL;
-    float3 luminance = 0.f;
+        // Direct lighting
+        const float lightIntensity = 100000.f;
+        float irradiance = lightIntensity * NoL;
+        float3 outRadiance = (Fr + (1.f - F) * Fd) * irradiance;
 
-    luminance += (Fr + (1.f - F) * Fd) * illuminance;
-
-    payload.color = float4(luminance, 0.f);
+        payload.color = float4(outRadiance, 0.f);
+    }
+    else
+    {
+        payload.color = float4(0.f, 0.f, 0.f, 0.f);
+    }
 }
 
 [shader("miss")]
@@ -165,6 +190,19 @@ void msMain(inout RayPayload payload)
 {
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
     payload.color = float4(envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb, 0.f);
+}
+
+[shader("closesthit")]
+void ahsShadow(inout ShadowRayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    payload.hit = true;
+    //AcceptHitAndEndSearch();
+}
+
+[shader("miss")]
+void msShadow(inout ShadowRayPayload payload)
+{
+    payload.hit = false;
 }
 
 

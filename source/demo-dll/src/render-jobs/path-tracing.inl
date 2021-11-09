@@ -35,8 +35,11 @@ namespace RenderJob
 				{L"rgsMain", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"chsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"msMain", nullptr, D3D12_EXPORT_FLAG_NONE },
+				{L"ahsShadow",nullptr, D3D12_EXPORT_FLAG_NONE },
+				{L"msShadow", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"k_globalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_hitGroup", nullptr, D3D12_EXPORT_FLAG_NONE},
+				{L"k_shadowHitGroup", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_shaderConfig", nullptr, D3D12_EXPORT_FLAG_NONE},
 				{L"k_pipelineConfig", nullptr, D3D12_EXPORT_FLAG_NONE} };
 
@@ -80,22 +83,24 @@ namespace RenderJob
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FTransientBuffer> missShaderTable = RenderBackend12::CreateTransientBuffer(
 				L"miss_sbt",
-				1 * missShaderRecordSize,
+				2 * missShaderRecordSize,
 				cmdList,
-				[shaderId = psoInfo->GetShaderIdentifier(L"msMain")](uint8_t* pDest)
+				[&psoInfo](uint8_t* pDest)
 				{
-					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msMain"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msShadow"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 				});
 
 			// Hit shader table
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FTransientBuffer> hitGroupShaderTable = RenderBackend12::CreateTransientBuffer(
 				L"hit_sbt",
-				1 * hitGroupShaderRecordSize,
+				2 * hitGroupShaderRecordSize,
 				cmdList,
-				[shaderId = psoInfo->GetShaderIdentifier(L"k_hitGroup")](uint8_t* pDest)
+				[&psoInfo](uint8_t* pDest)
 				{
-					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"k_shadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 				});
 
 			// Descriptor heaps
@@ -156,10 +161,10 @@ namespace RenderJob
 			// Dispatch rays
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
 			dispatchDesc.HitGroupTable.StartAddress = hitGroupShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			dispatchDesc.HitGroupTable.SizeInBytes = 1 * hitGroupShaderRecordSize;
+			dispatchDesc.HitGroupTable.SizeInBytes = 2 * hitGroupShaderRecordSize;
 			dispatchDesc.HitGroupTable.StrideInBytes = hitGroupShaderRecordSize;
 			dispatchDesc.MissShaderTable.StartAddress = missShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			dispatchDesc.MissShaderTable.SizeInBytes = 1 * missShaderRecordSize;
+			dispatchDesc.MissShaderTable.SizeInBytes = 2 * missShaderRecordSize;
 			dispatchDesc.MissShaderTable.StrideInBytes = missShaderRecordSize;
 			dispatchDesc.RayGenerationShaderRecord.StartAddress = raygenShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();
 			dispatchDesc.RayGenerationShaderRecord.SizeInBytes = 1 * raygenShaderRecordSize;
