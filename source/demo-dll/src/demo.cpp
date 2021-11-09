@@ -1003,7 +1003,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				geometry.Triangles.IndexFormat = indexFormat;
 				geometry.Triangles.IndexCount = indexAccessor.count;
 				geometry.Triangles.Transform3x4 = 0;
-				geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+				geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
 				primitiveDescs.push_back(geometry);
 			}
 

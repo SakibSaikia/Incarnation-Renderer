@@ -17,9 +17,8 @@ TriangleHitGroup k_hitGroup =
 
 TriangleHitGroup k_shadowHitGroup =
 {
-    "",
     "ahsShadow",                        // AnyHit Shader
-    //"",                                 // ClosestHit Shader
+    "",                                 // ClosestHit Shader
 };
 
 
@@ -155,7 +154,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     shadowRay.TMin = 0.001;
     shadowRay.TMax = 10000.0;
     ShadowRayPayload shadowPayload = { false };
-    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_FORCE_OPAQUE, ~0, 1, 0, 1, shadowRay, shadowPayload);
+    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, ~0, 1, 0, 1, shadowRay, shadowPayload);
     if (!shadowPayload.hit)
     {
         // Remapping
@@ -192,11 +191,11 @@ void msMain(inout RayPayload payload)
     payload.color = float4(envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb, 0.f);
 }
 
-[shader("closesthit")]
+[shader("anyhit")]
 void ahsShadow(inout ShadowRayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
     payload.hit = true;
-    //AcceptHitAndEndSearch();
+    AcceptHitAndEndSearch();
 }
 
 [shader("miss")]
