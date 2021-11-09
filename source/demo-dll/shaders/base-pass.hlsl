@@ -141,7 +141,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	ray.TMax = 1000.f;
 
 	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
-	RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
+	RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES> q;
 	q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
 	
 	float shadow;
@@ -153,8 +153,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	else
 	{
 		// This means that further evaluation is needed. For now, set shadow status to true (0.f) for non-opaque
-		// triangles, which is all the geometry right now. In future, split opaque and non-opaque geo and evaluate
-		// alpha map for non-opaque geo before setting shadow status
+		// triangles. In future, evaluate alpha map for non-opaque geo before setting shadow status
 		shadow = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
 	}
 

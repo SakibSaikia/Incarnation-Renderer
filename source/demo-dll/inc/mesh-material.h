@@ -10,6 +10,16 @@
 	using namespace DirectX::SimpleMath;
 #endif
 
+namespace AlphaMode
+{
+	enum Type
+	{
+		Opaque,
+		Masked,
+		Blend
+	};
+}
+
 
 // Corresponds to GLTF BufferView
 struct FMeshBufferView
@@ -58,6 +68,8 @@ struct FMaterial
 	int m_metallicRoughnessSamplerIndex;
 	int m_normalSamplerIndex;
 	int m_aoSamplerIndex;
+
+	int m_alphaMode;
 };
 
 #ifndef __cplusplus

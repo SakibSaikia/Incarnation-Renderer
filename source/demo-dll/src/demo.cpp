@@ -1003,7 +1003,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				geometry.Triangles.IndexFormat = indexFormat;
 				geometry.Triangles.IndexCount = indexAccessor.count;
 				geometry.Triangles.Transform3x4 = 0;
-				geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+				geometry.Flags = m_materialList[primitive.m_materialIndex].m_alphaMode == AlphaMode::Opaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
 				primitiveDescs.push_back(geometry);
 			}
 
@@ -1109,14 +1109,16 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 	SCOPED_CPU_EVENT("load_materials", PIX_COLOR_DEFAULT);
 
 	// Load material and initialize CPU-side copy
-	std::vector<FMaterial> materials(model.materials.size());
+	m_materialList.resize(model.materials.size());
+	
 	//concurrency::parallel_for(0, (int)model.materials.size(), [&](int i)
 	for(int i = 0; i < model.materials.size(); ++i)
 	{
-		materials[i] = LoadMaterial(model, i);
+		m_materialList[i] = LoadMaterial(model, i);
 	}//);
 
-	const size_t bufferSize = materials.size() * sizeof(FMaterial);
+
+	const size_t bufferSize = m_materialList.size() * sizeof(FMaterial);
 	FResourceUploadContext uploader{ bufferSize };
 
 	m_packedMaterials = RenderBackend12::CreateBindlessBuffer(
@@ -1124,7 +1126,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 		BindlessResourceType::Buffer,
 		bufferSize,
 		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-		(const uint8_t*)materials.data(),
+		(const uint8_t*)m_materialList.data(),
 		&uploader);
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -1155,6 +1157,12 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 	mat.m_metallicRoughnessSamplerIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].sampler]) : -1;
 	mat.m_normalSamplerIndex = material.normalTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.normalTexture.index].sampler]) : -1;
 	mat.m_aoSamplerIndex = material.occlusionTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.occlusionTexture.index].sampler]) : -1;
+
+	mat.m_alphaMode = AlphaMode::Opaque;
+	if (material.alphaMode == "MASK") 
+		mat.m_alphaMode = AlphaMode::Masked;
+	else if (material.alphaMode == "BLEND") 
+		mat.m_alphaMode = AlphaMode::Blend;
 
 	// If a normalmap and roughness map are specified, prefilter to reduce specular aliasing
 	if (material.normalTexture.index != -1 && material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
@@ -1572,6 +1580,7 @@ void FScene::Clear()
 	m_entities.Clear();
 	m_meshBuffers.clear();
 	m_blasList.clear();
+	m_materialList.clear();
 
 	m_packedMeshBufferViews.reset(nullptr);
 	m_packedMeshAccessors.reset(nullptr);

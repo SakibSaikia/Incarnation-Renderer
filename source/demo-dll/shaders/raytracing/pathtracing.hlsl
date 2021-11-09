@@ -153,8 +153,8 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     shadowRay.Direction = L;
     shadowRay.TMin = 0.001;
     shadowRay.TMax = 10000.0;
-    ShadowRayPayload shadowPayload = { false };
-    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, ~0, 1, 0, 1, shadowRay, shadowPayload);
+    ShadowRayPayload shadowPayload = { true };
+    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 1, 0, 1, shadowRay, shadowPayload);
     if (!shadowPayload.hit)
     {
         // Remapping
@@ -194,6 +194,7 @@ void msMain(inout RayPayload payload)
 [shader("anyhit")]
 void ahsShadow(inout ShadowRayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+    // TODO: Evaluate alpha mask before registering hit
     payload.hit = true;
     AcceptHitAndEndSearch();
 }

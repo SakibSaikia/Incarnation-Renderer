@@ -108,6 +108,7 @@ struct FScene
 	std::unordered_map<std::wstring, std::unique_ptr<FBindlessShaderResource>> m_blasList;
 	std::unique_ptr<FBindlessShaderResource> m_tlas;
 	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
+	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Image based lighting
