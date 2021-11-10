@@ -110,60 +110,31 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3x3 TBN = float3x3(T, B, N);
 	N = normalize(mul(p.normalmap, TBN));
 
-	float3 L = normalize(float3(1, 1, -1));
-	float3 H = normalize(N + L);
 	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
+	float3 H = normalize(N + V);
 
 	float NoV = saturate(dot(N, V));
-	float NoL = saturate(dot(N, L));
 	float NoH = saturate(dot(N, H));
-	float LoH = saturate(dot(L, H));
-
-	// Remapping
+	float VoH = saturate(dot(V, H));
 	float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
 	float3 albedo = (1.f - p.metallic) * p.basecolor;
-	float roughness = p.roughness * p.roughness;
+	float roughness = p.roughness;
 
 	float D = D_GGX(NoH, roughness);
-	float3 F = F_Schlick(LoH, F0);
-	float G = G_Smith_Direct(NoV, NoL, roughness);
-
-	// Specular BRDF
-	float3 Fr = (D * F * G) / (4.f * NoV * NoL);
-
-	// diffuse BRDF
-	float3 Fd = albedo * Fd_Lambert();
-
-	RayDesc ray;
-	ray.Origin = input.worldPos.xyz;
-	ray.Direction = L;
-	ray.TMin = 0.1f;
-	ray.TMax = 1000.f;
-
-	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
-	RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES> q;
-	q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
+	float3 F = F_Schlick(VoH, F0);
 	
-	float shadow;
-	if (!q.Proceed())
-	{
-		// If Proceed() returns false, it means that traversal is complete. Check status and update shadow.
-		shadow = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
-	}
-	else
-	{
-		// This means that further evaluation is needed. For now, set shadow status to true (0.f) for non-opaque
-		// triangles. In future, evaluate alpha map for non-opaque geo before setting shadow status
-		shadow = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
-	}
-
-	// Apply direct lighting
-	const float lightIntensity = 100000.f;
-	float illuminance = lightIntensity * NoL;
-	float3 luminance = 0.f;
+	float3 radiance = 0.f;
 	
 #if DIRECT_LIGHTING
-	luminance += (Fr + (1.f - F) * Fd) * illuminance * shadow;
+	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
+
+	FLight sun;
+	sun.type = Light::Directional;
+	sun.positionOrDirection = normalize(float3(1, 1, -1));
+	sun.intensity = 100000.f;
+	sun.shadowcasting = true;
+
+	radiance += GetDirectRadiance(sun, input.worldPos.xyz, albedo, roughness, N, D, F, NoV, NoH, VoH, sceneBvh);
 #endif
 
 	// Diffuse IBL
@@ -179,8 +150,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
 		}
 
-		float3 shDiffuse = (1.f - F) * Fd * ShIrradiance(N, shRadiance);
-		luminance += lerp(shDiffuse, p.ao * shDiffuse, p.aoblend);
+		float3 shDiffuse = (1.f - F) * albedo * Fd_Lambert() * ShIrradiance(N, shRadiance);
+		radiance += lerp(shDiffuse, p.ao * shDiffuse, p.aoblend);
 	}
 #endif
 
@@ -199,9 +170,9 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
 		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
 		float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
-		luminance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
+		radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
 	}
 #endif
 
-	return float4(luminance, 0.f);
+	return float4(radiance, 0.f);
 }

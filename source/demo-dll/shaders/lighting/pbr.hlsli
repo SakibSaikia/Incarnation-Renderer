@@ -43,8 +43,8 @@ float G_Smith_Direct(float NoV, float NoL, float roughness)
 {
     float a2 = roughness * roughness;
     float k = (a2 + 1) * (a2 + 1) / 8.f;
-    float masking = G_SchlickGGX(NoL, k);
-    float shadowing = G_SchlickGGX(NoV, k);
+    float masking = G_SchlickGGX(NoV, k);
+    float shadowing = G_SchlickGGX(NoL, k);
     return masking * shadowing;
 }
 

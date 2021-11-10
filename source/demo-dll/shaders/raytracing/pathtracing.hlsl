@@ -139,49 +139,28 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     N = normalize(mul(p.normalmap, TBN));
 
-    float3 L = normalize(float3(1, 1, -1));
-    float3 H = normalize(N + L);
     float3 V = normalize(g_globalConstants.cameraPosition - hitPosition);
+    float3 H = normalize(N + V);
 
     float NoV = saturate(dot(N, V));
-    float NoL = saturate(dot(N, L));
     float NoH = saturate(dot(N, H));
-    float LoH = saturate(dot(L, H));
+    float VoH = saturate(dot(V, H));
+    float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
+    float3 albedo = (1.f - p.metallic) * p.basecolor;
+    float roughness = p.roughness;
 
-    RayDesc shadowRay;
-    shadowRay.Origin = hitPosition;
-    shadowRay.Direction = L;
-    shadowRay.TMin = 0.001;
-    shadowRay.TMax = 10000.0;
-    ShadowRayPayload shadowPayload = { true };
-    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 1, 0, 1, shadowRay, shadowPayload);
-    if (!shadowPayload.hit)
-    {
-        // Remapping
-        float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
-        float3 albedo = (1.f - p.metallic) * p.basecolor;
-        float roughness = p.roughness * p.roughness;
+    float D = D_GGX(NoH, roughness);
+    float3 F = F_Schlick(VoH, F0);
 
-        // Specular BRDF
-        float D = D_GGX(NoH, roughness);
-        float3 F = F_Schlick(LoH, F0);
-        float G = G_Smith_Direct(NoV, NoL, roughness);
-        float3 Fr = (D * F * G) / (4.f * NoV * NoL);
+#if DIRECT_LIGHTING
+    FLight sun;
+    sun.type = Light::Directional;
+    sun.positionOrDirection = normalize(float3(1, 1, -1));
+    sun.intensity = 100000.f;
+    sun.shadowcasting = true;
 
-        // Diffuse BRDF
-        float3 Fd = albedo * Fd_Lambert();
-
-        // Direct lighting
-        const float lightIntensity = 100000.f;
-        float irradiance = lightIntensity * NoL;
-        float3 outRadiance = (Fr + (1.f - F) * Fd) * irradiance;
-
-        payload.color = float4(outRadiance, 0.f);
-    }
-    else
-    {
-        payload.color = float4(0.f, 0.f, 0.f, 0.f);
-    }
+    payload.color.xyz += GetDirectRadiance(sun, hitPosition, albedo, roughness, N, D, F, NoV, NoH, VoH, g_sceneBvh);
+#endif
 }
 
 [shader("miss")]
