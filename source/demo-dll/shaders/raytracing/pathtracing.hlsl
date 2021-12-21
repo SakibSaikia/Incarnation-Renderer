@@ -1,6 +1,8 @@
 #include "raytracing/common.hlsli"
 #include "lighting/common.hlsli"
 
+#define MAX_RECURSION_DEPTH 8
+
 GlobalRootSignature k_globalRootsig =
 {
     "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
@@ -24,18 +26,20 @@ TriangleHitGroup k_shadowHitGroup =
 
 RaytracingShaderConfig  k_shaderConfig =
 {
-    16,                                 // max payload size
+    24,                                 // max payload size
     8                                   // max attribute size
 };
 
 RaytracingPipelineConfig k_pipelineConfig =
 {
-    2                                   // max trace recursion depth
+    MAX_RECURSION_DEPTH                 // max trace recursion depth
 };
 
 struct RayPayload
 {
     float4 color;
+    int pathLength;
+    float attenuation;
 };
 
 struct ShadowRayPayload
@@ -68,7 +72,10 @@ void rgsMain()
     RWTexture2D<float4> destUav = ResourceDescriptorHeap[g_globalConstants.destUavIndex];
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
-    RayPayload payload = { float4(0, 0, 0, 0) };
+    RayPayload payload;
+    payload.color = float4(0, 0, 0, 0);
+    payload.pathLength = 0;
+    payload.attenuation = 1.f;
 
     // MultiplierForGeometryContributionToHitGroupIndex is explicitly set to 0 because we are using GeometryIndex() to directly index primitive data instead of using hit group records.
     TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
@@ -131,13 +138,13 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     // Material 
     FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, globalMaterialBufferIndex);
-    FMaterialProperties p = EvaluateMaterialProperties(material, uv);
+    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv);
 
 #if LIGHTING_ONLY
-    p.basecolor = 0.5.xxx;
+    matInfo.basecolor = 0.5.xxx;
 #endif
 
-    N = normalize(mul(p.normalmap, TBN));
+    N = normalize(mul(matInfo.normalmap, TBN));
 
     float3 V = normalize(g_globalConstants.cameraPosition - hitPosition);
     float3 H = normalize(N + V);
@@ -145,9 +152,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float NoV = saturate(dot(N, V));
     float NoH = saturate(dot(N, H));
     float VoH = saturate(dot(V, H));
-    float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
-    float3 albedo = (1.f - p.metallic) * p.basecolor;
-    float roughness = p.roughness;
+    float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
+    float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+    float roughness = matInfo.roughness;
 
     float D = D_GGX(NoH, roughness);
     float3 F = F_Schlick(VoH, F0);
@@ -159,7 +166,19 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     sun.intensity = 100000.f;
     sun.shadowcasting = true;
 
-    payload.color.xyz += GetDirectRadiance(sun, hitPosition, albedo, roughness, N, D, F, NoV, NoH, VoH, g_sceneBvh);
+    payload.pathLength += 1;
+    payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, albedo, roughness, N, D, F, NoV, NoH, VoH, g_sceneBvh);
+
+    if (payload.pathLength < MAX_RECURSION_DEPTH)
+    {
+        // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
+        float2 pixelCoords = DispatchRaysIndex().xy / (float2)DispatchRaysDimensions().xy;
+        float outAttenuation = 1.f;
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(pixelCoords, hitPosition, N, outAttenuation);
+        payload.attenuation *= outAttenuation;
+
+        TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
+    }
 #endif
 }
 
@@ -167,7 +186,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 void msMain(inout RayPayload payload)
 {
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
-    payload.color = float4(envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb, 0.f);
+    payload.color = payload.attenuation * float4(envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb, 0.f);
 }
 
 [shader("anyhit")]

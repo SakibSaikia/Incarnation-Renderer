@@ -1,4 +1,7 @@
+#ifndef __RAYTRACING_COMMON_HLSLI_
+#define __RAYTRACING_COMMON_HLSLI_
 
+#include "sampling.hlsli"
 
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
 RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWorld)
@@ -19,6 +22,28 @@ RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWo
     ray.TMax = 10000.0;
 
     return ray;
+}
+
+RayDesc GenerateIndirectRadianceRay(float2 pixelCoords, float3 hitPosition, float3 normal, out float outAttenuation)
+{
+    //float3 F0 = material.metallic * material.basecolor + (1.f - material.metallic) * 0.04;
+    RayDesc ray;
+    ray.Origin = hitPosition;
+    ray.Direction = normalize(reflect(WorldRayDirection(), normal));
+    ray.TMin = 0.001;
+    ray.TMax = 10000.0;
+    outAttenuation = 0.3f;
+    return ray;
+
+
+    /*if (material.metallic > 0.5)
+    {
+        float3 F0 = material.metallic * material.basecolor + (1.f - material.metallic) * 0.04;
+    }
+    else
+    {
+
+    }*/
 }
 
 // Retrieve attribute at a hit position interpolated from the hit's barycentrics.
@@ -42,3 +67,5 @@ float4 HitAttribute(float4 vertexAttribute[3], float2 barycentrics)
         barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
         barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
 }
+
+#endif
