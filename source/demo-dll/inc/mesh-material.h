@@ -29,7 +29,7 @@ struct FMeshBufferView
 	uint32_t m_byteLength;
 };
 
-// Correstponds to GLTF Accessor
+// Corresponds to GLTF Accessor
 struct FMeshAccessor
 {
 	int m_bufferViewIndex;
