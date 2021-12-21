@@ -1,3 +1,6 @@
+#ifndef __LIGHTING_COMMON_HLSLI_
+#define __LIGHTING_COMMON_HLSLI_
+
 #include "pbr.hlsli"
 #include "mesh-material.h"
 
@@ -109,7 +112,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 float3 GetDirectRadiance(FLight light, float3 worldPos, float3 albedo, float roughness, float3 N, float D, float3 F, float NoV, float NoH, float VoH, RaytracingAccelerationStructure sceneBvh)
 {
 	const float3 L = light.positionOrDirection;
-	float shadowMask = 1.f;
+	float lightVisibility = 1.f;
 	float3 radiance = 0.f;
 
 	if (light.shadowcasting)
@@ -125,18 +128,18 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, float3 albedo, float rou
 
 		if (!q.Proceed())
 		{
-			// If Proceed() returns false, it means that traversal is complete. Check status and update shadow.
-			shadowMask = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
+			// If Proceed() returns false, it means that traversal is complete. Check status and update light visibility.
+			lightVisibility = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
 		}
 		else
 		{
-			// This means that further evaluation is needed. For now, set shadow status to true (0.f) for non-opaque
-			// triangles. In future, evaluate alpha map for non-opaque geo before setting shadow status
-			shadowMask = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
+			// This means that further evaluation is needed. For now, set light visibility to 0.f for non-opaque
+			// triangles. In future, evaluate alpha map for non-opaque geo before setting visibility.
+			lightVisibility = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
 		}
 	}
 
-	if (shadowMask > 0.f)
+	if (lightVisibility > 0.f)
 	{
 		float NoL = saturate(dot(N, L));
 		float G = G_Smith_Direct(NoV, NoL, roughness);
@@ -146,8 +149,10 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, float3 albedo, float rou
 		float3 Fr = (D * F * G) / (4.f * NoV * NoL);
 
 		float irradiance = light.intensity * NoL;
-		radiance += (Fr + (1.f - F) * Fd) * irradiance * shadowMask;
+		radiance += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
 	}
 
 	return radiance;
 }
+
+#endif

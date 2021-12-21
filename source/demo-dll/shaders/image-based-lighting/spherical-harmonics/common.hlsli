@@ -1,3 +1,6 @@
+#ifndef __SH_COMMON_HLSLI_
+#define __SH_COMMON_HLSLI_
+
 // Adapted from https://www.gamedev.net/forums/topic/671562-spherical-harmonics-cubemap/
 
 #define SH_BANDS 3
@@ -139,3 +142,5 @@ float3 ShIrradiance(float3 normal, SH9Color radiance)
 
 	return irradiance;
 }
+
+#endif 

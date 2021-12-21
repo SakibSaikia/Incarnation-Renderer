@@ -1,4 +1,9 @@
-﻿// Adapted from google.github.io/filament/Filament.html
+﻿#ifndef __PBR_HLSLI_
+#define __PBR_HLSLI_
+
+#include "sampling.hlsli"
+
+// Adapted from google.github.io/filament/Filament.html
 
 #define PI 3.14159265f
 
@@ -73,20 +78,6 @@ float Fd_Burley(float NoV, float NoL, float LoH, float roughness)
     return lightScatter * viewScatter * (1.0 / PI);
 }
 
-// Hammersley Low Discrepancy Sequence used for biased Monte Carlo Estimation
-// (Quasi-Monte Carlo Integration)
-// https://google.github.io/filament/Filament.html#annex/hammersleysequence
-float2 Hammersley(uint i, float numSamples)
-{
-    uint bits = i;
-    bits = (bits << 16u) | (bits >> 16u);
-    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
-    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
-    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
-    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-    return float2(float(i) / numSamples, float(bits) / exp2(32));
-}
-
 // Real Shading in Unreal Engine 4 coursenotes by Brian Karis, Epic Games
 float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
 {
@@ -146,3 +137,5 @@ float3 Reinhard(float3 x)
     float a = 2.f;
     return x / (x + a.xxx);
 }
+
+#endif
