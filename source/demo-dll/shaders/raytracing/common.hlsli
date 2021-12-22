@@ -34,11 +34,7 @@ RayDesc GenerateIndirectRadianceRay(
     float3x3 tangentToWorld,
     out float3 outAttenuation)
 {
-    RayDesc defaultRay;
-    defaultRay.Origin = hitPosition;
-    defaultRay.Direction = normalize(reflect(WorldRayDirection(), normal));
-    defaultRay.TMin = 0.001;
-    defaultRay.TMax = 10000.0;
+    RayDesc defaultRay = (RayDesc)0;
     outAttenuation = 0.f;
 
     if (metalness > randomNoise) // Metal

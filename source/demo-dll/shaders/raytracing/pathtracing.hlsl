@@ -183,7 +183,10 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, albedo, tangentToWorld, outAttenuation);
         payload.attenuation *= outAttenuation;
 
-        TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
+        if (any(payload.attenuation) > 0.001)
+        {
+            TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
+        }
     }
 #endif
 }
