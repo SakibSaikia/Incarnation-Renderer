@@ -24,7 +24,7 @@ RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWo
     return ray;
 }
 
-RayDesc GenerateIndirectRadianceRay(float2 pixelCoords, float3 hitPosition, float3 normal, out float outAttenuation)
+RayDesc GenerateIndirectRadianceRay(float randomNoise, float3 hitPosition, float3 normal, out float outAttenuation)
 {
     //float3 F0 = material.metallic * material.basecolor + (1.f - material.metallic) * 0.04;
     RayDesc ray;
@@ -32,7 +32,7 @@ RayDesc GenerateIndirectRadianceRay(float2 pixelCoords, float3 hitPosition, floa
     ray.Direction = normalize(reflect(WorldRayDirection(), normal));
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
-    outAttenuation = 0.3f;
+    outAttenuation = randomNoise > 0.5 ? 1.f : 0.1f;
     return ray;
 
 

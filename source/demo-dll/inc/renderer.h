@@ -157,5 +157,7 @@ namespace Demo
 	const FScene* GetScene();
 	const FView* GetView();
 	uint32_t GetEnvBrdfSrvIndex();
+	uint32_t GetWhiteNoiseSrvIndex();
 	std::unique_ptr<FBindlessShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height);
+	std::unique_ptr<FBindlessShaderResource> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth);
 }

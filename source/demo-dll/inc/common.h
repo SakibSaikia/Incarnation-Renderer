@@ -17,6 +17,8 @@ struct Config
 	static inline bool g_enableDiffuseIBL = true;
 	static inline bool g_enableSpecularIBL = true;
 	static inline bool g_pathTrace = true;
+	static inline uint32_t g_whiteNoiseTextureSize = 256;
+	static inline uint32_t g_whiteNoiseArrayCount = 8;
 };
 
 inline void AssertIfFailed(HRESULT hr)

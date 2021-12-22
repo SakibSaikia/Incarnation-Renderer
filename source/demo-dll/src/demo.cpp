@@ -178,6 +178,7 @@ namespace Demo
 	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
+	std::unique_ptr<FBindlessShaderResource> s_whiteNoise;
 	bool s_pauseRendering = false;
 
 	std::vector<std::wstring> s_modelList;
@@ -201,6 +202,11 @@ namespace Demo
 	uint32_t GetEnvBrdfSrvIndex()
 	{
 		return s_envBRDF->m_srvIndex;
+	}
+
+	uint32_t GetWhiteNoiseSrvIndex()
+	{
+		return s_whiteNoise->m_srvIndex;
 	}
 
 	void UpdateUI(float deltaTime);
@@ -232,6 +238,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	ok = ok && ShaderCompiler::Initialize();
 
 	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
+	s_whiteNoise = GenerateWhiteNoiseTextures(Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseArrayCount);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();

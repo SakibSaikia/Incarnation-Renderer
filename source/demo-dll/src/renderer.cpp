@@ -7,6 +7,7 @@
 #include <sstream>
 #include <imgui.h>
 #include <dxcapi.h>
+#include <random>
 
 // Render Jobs
 #include "render-jobs/job-sync.h"
@@ -39,6 +40,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	if (Config::g_pathTrace)
 	{
+		static int cycledArrayIndex = 0;
+
 		renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
 
 		RenderJob::PathTracingDesc pathtraceDesc = {};
@@ -47,6 +50,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		pathtraceDesc.resY = resY;
 		pathtraceDesc.scene = GetScene();
 		pathtraceDesc.view = GetView();
+		pathtraceDesc.whiteNoiseArrayIndex = (cycledArrayIndex + 1) % Config::g_whiteNoiseArrayCount;
+		pathtraceDesc.whiteNoiseTextureSize = Config::g_whiteNoiseTextureSize;
 		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
@@ -175,4 +180,37 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateEnvBrdfTexture(const uint
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	return std::move(brdfTex);
+}
+
+std::unique_ptr<FBindlessShaderResource> Demo::GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
+{
+	const uint32_t numSamples = width * height * depth;
+	std::vector<uint8_t> noiseSamples(numSamples);
+	std::default_random_engine generator;
+	std::uniform_int_distribution<uint32_t> distribution(0, 255);
+	for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+	{
+		noiseSamples[sampleIndex] = (uint8_t)distribution(generator);
+	}
+
+	std::vector<DirectX::Image> noiseImages(depth);
+	for (int arrayIndex = 0, sampleOffset = 0; arrayIndex < depth; ++arrayIndex)
+	{
+		DirectX::Image& img = noiseImages[arrayIndex];
+		img.width = width;
+		img.height = height;
+		img.format = DXGI_FORMAT_R8_UNORM;
+		img.rowPitch = 1 * img.width;
+		img.slicePitch = img.rowPitch * img.height;
+		img.pixels = (uint8_t*)noiseSamples.data() + sampleOffset;
+		sampleOffset += img.slicePitch;
+	}
+
+	FResourceUploadContext uploader{ numSamples };
+	auto noiseTexArray = RenderBackend12::CreateBindlessTexture(L"white_noise_array", BindlessResourceType::Texture2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	return std::move(noiseTexArray);
 }

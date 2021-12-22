@@ -60,6 +60,9 @@ struct GlobalCbLayout
     int envmapTextureIndex;
     int scenePrimitivesIndex;
     int scenePrimitiveCountsIndex;
+    int whiteNoiseTextureIndex;
+    int whiteNoiseArrayIndex;
+    int whiteNoiseTextureSize;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -171,10 +174,13 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     if (payload.pathLength < MAX_RECURSION_DEPTH)
     {
+        Texture2DArray whiteNoiseTex = ResourceDescriptorHeap[g_globalConstants.whiteNoiseTextureIndex];
+        int2 texelIndex = DispatchRaysIndex().xy % g_globalConstants.whiteNoiseTextureSize;
+        float randomNoise = whiteNoiseTex.Load(int4(texelIndex.x, texelIndex.y, g_globalConstants.whiteNoiseArrayIndex, 0)).r;
+
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
-        float2 pixelCoords = DispatchRaysIndex().xy / (float2)DispatchRaysDimensions().xy;
         float outAttenuation = 1.f;
-        RayDesc secondaryRay = GenerateIndirectRadianceRay(pixelCoords, hitPosition, N, outAttenuation);
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, outAttenuation);
         payload.attenuation *= outAttenuation;
 
         TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
