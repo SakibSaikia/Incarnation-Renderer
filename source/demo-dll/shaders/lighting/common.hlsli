@@ -24,6 +24,7 @@ struct FMaterialProperties
 {
 	float3 emissive;
 	float3 basecolor;
+	bool bHasNormalmap;
 	float3 normalmap;
 	float metallic;
 	float roughness;
@@ -73,7 +74,8 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	}
 
 	// Normalmap
-	if (mat.m_normalTextureIndex != -1)
+	output.bHasNormalmap = mat.m_normalTextureIndex != -1;
+	if (output.bHasNormalmap)
 	{
 		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
 		SamplerState normalmapSampler = SamplerDescriptorHeap[mat.m_normalSamplerIndex];

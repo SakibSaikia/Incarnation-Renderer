@@ -147,7 +147,10 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     matInfo.basecolor = 0.5.xxx;
 #endif
 
-    N = normalize(mul(matInfo.normalmap, tangentToWorld));
+    if (matInfo.bHasNormalmap)
+    {
+        N = normalize(mul(matInfo.normalmap, tangentToWorld));
+    }
 
     float3 V = normalize(g_globalConstants.cameraPosition - hitPosition);
     float3 H = normalize(N + V);

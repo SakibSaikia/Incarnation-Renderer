@@ -107,8 +107,12 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 T = normalize(input.tangent.xyz);
 	float3 B = normalize(input.bitangent.xyz);
 	float3 N = normalize(input.normal.xyz);
-	float3x3 TBN = float3x3(T, B, N);
-	N = normalize(mul(p.normalmap, TBN));
+	float3x3 tangentToWorld = float3x3(T, B, N);
+
+	if (p.bHasNormalmap)
+	{
+		N = normalize(mul(p.normalmap, tangentToWorld));
+	}
 
 	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
 	float3 H = normalize(N + V);
