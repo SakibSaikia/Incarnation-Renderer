@@ -127,7 +127,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     N = mul(float4(N, 0.f), localToWorld).xyz;
     T = mul(float4(T, 0.f), localToWorld).xyz;
     B = mul(float4(B, 0.f), localToWorld).xyz;
-    float3x3 TBN = float3x3(T, B, N);
+    float3x3 tangentToWorld = float3x3(T, B, N);
 
     // UVs
     float2 vertexUVs[3] =
@@ -147,7 +147,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     matInfo.basecolor = 0.5.xxx;
 #endif
 
-    N = normalize(mul(matInfo.normalmap, TBN));
+    N = normalize(mul(matInfo.normalmap, tangentToWorld));
 
     float3 V = normalize(g_globalConstants.cameraPosition - hitPosition);
     float3 H = normalize(N + V);
@@ -180,7 +180,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
         float3 outAttenuation;
-        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, outAttenuation);
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, albedo, tangentToWorld, outAttenuation);
         payload.attenuation *= outAttenuation;
 
         TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);

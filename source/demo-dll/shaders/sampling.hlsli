@@ -56,4 +56,11 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
     return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
+float3 SampleDirectionHemisphere(float u1, float u2)
+{
+    float r = sqrt(max(0.0f, 1.0f - u1 * u1));
+    float phi = 2.f * PI * u2;
+    return float3(r * cos(phi), r * sin(phi), u1);
+}
+
 #endif
