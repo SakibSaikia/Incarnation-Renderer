@@ -13,6 +13,11 @@ namespace ShaderCompiler
 
 	FILETIME GetLastModifiedTime(const std::wstring& filename);
 
+	HRESULT Preprocess(
+		const std::wstring& filename,
+		const std::wstring& arguments,
+		IDxcBlob** preprocessBlob);
+
 	HRESULT CompileShader(
 		const std::wstring& filename,
 		const std::wstring& entrypoint,

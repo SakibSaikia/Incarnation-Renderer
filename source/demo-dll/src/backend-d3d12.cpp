@@ -242,7 +242,7 @@ struct std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>
 };
 
 template<>
-struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC >
+struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>
 {
 	std::size_t operator()(const D3D12_COMPUTE_PIPELINE_STATE_DESC& key) const
 	{
@@ -259,7 +259,7 @@ struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC >
 };
 
 template<>
-struct std::hash<D3D12_STATE_OBJECT_DESC >
+struct std::hash<D3D12_STATE_OBJECT_DESC>
 {
 	std::size_t operator()(const D3D12_STATE_OBJECT_DESC& key) const
 	{
@@ -321,6 +321,16 @@ struct std::hash<FRootsigDesc>
 		spookyhash_final(&context, &seed1, &seed2);
 
 		return seed1 ^ (seed2 << 1);
+	}
+};
+
+template<>
+struct std::hash<IDxcBlob*>
+{
+	std::size_t operator()(IDxcBlob* key) const
+	{
+		uint64_t seed{};
+		return spookyhash_64(key->GetBufferPointer(), key->GetBufferSize(), seed);
 	}
 };
 
@@ -1381,9 +1391,9 @@ FRenderTexture::~FRenderTexture()
 	}
 }
 
-struct FTimestampedBlob
+struct FHashedBlob
 {
-	FILETIME m_timestamp;
+	size_t m_hash;
 	winrt::com_ptr<IDxcBlob> m_blob;
 };
 #pragma endregion
@@ -1425,8 +1435,8 @@ namespace RenderBackend12
 	FSharedResourcePool s_sharedResourcePool;
 	FBindlessIndexPool s_bindlessPool;
 
-	concurrency::concurrent_unordered_map<FShaderDesc, FTimestampedBlob> s_shaderCache;
-	concurrency::concurrent_unordered_map<FRootsigDesc, FTimestampedBlob> s_rootsigCache;
+	concurrency::concurrent_unordered_map<FShaderDesc, FHashedBlob> s_shaderCache;
+	concurrency::concurrent_unordered_map<FRootsigDesc, FHashedBlob> s_rootsigCache;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
@@ -1795,7 +1805,13 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 	}
 	else
 	{
-		FTimestampedBlob& shaderBlob = s_shaderCache[shaderDesc];
+		winrt::com_ptr<IDxcBlob> preprocessedBlob;
+		AssertIfFailed(ShaderCompiler::Preprocess(
+			shaderDesc.m_relativepath,
+			shaderDesc.m_defines,
+			preprocessedBlob.put()));
+
+		FHashedBlob& shaderBlob = s_shaderCache[shaderDesc];
 		AssertIfFailed(ShaderCompiler::CompileShader(
 			shaderDesc.m_relativepath,
 			shaderDesc.m_entrypoint,
@@ -1803,7 +1819,7 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 			shaderDesc.m_profile,
 			shaderBlob.m_blob.put()));
 
-		shaderBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_relativepath);
+		shaderBlob.m_hash = std::hash<IDxcBlob*>{}(preprocessedBlob.get());
 		return shaderBlob.m_blob.get();
 	}
 }
@@ -1817,14 +1833,20 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 	}
 	else
 	{
-		FTimestampedBlob& rsBlob = s_rootsigCache[rootsigDesc];
+		winrt::com_ptr<IDxcBlob> preprocessedBlob;
+		AssertIfFailed(ShaderCompiler::Preprocess(
+			rootsigDesc.m_relativepath,
+			{},
+			preprocessedBlob.put()));
+
+		FHashedBlob& rsBlob = s_rootsigCache[rootsigDesc];
 		AssertIfFailed(ShaderCompiler::CompileRootsignature(
 			rootsigDesc.m_relativepath,
 			rootsigDesc.m_entrypoint,
 			rootsigDesc.m_profile,
 			rsBlob.m_blob.put()));
 
-		rsBlob.m_timestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_relativepath);
+		rsBlob.m_hash = std::hash<IDxcBlob*>{}(preprocessedBlob.get());
 		return rsBlob.m_blob.get();
 	}
 }
@@ -1833,9 +1855,15 @@ void RenderBackend12::RecompileModifiedShaders()
 {
 	for (auto& [shaderDesc, blob] : s_shaderCache)
 	{
-		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(shaderDesc.m_relativepath);
+		winrt::com_ptr<IDxcBlob> preprocessedBlob;
+		ShaderCompiler::Preprocess(
+			shaderDesc.m_relativepath,
+			shaderDesc.m_defines,
+			preprocessedBlob.put());
+		size_t currentHash = std::hash<IDxcBlob*>{}(preprocessedBlob.get());
+
 		winrt::com_ptr<IDxcBlob> newBlob;
-		if (blob.m_timestamp != currentTimestamp)
+		if (blob.m_hash != currentHash)
 		{
 			if (SUCCEEDED(ShaderCompiler::CompileShader(
 					shaderDesc.m_relativepath,
@@ -1844,7 +1872,7 @@ void RenderBackend12::RecompileModifiedShaders()
 					shaderDesc.m_profile,
 					newBlob.put())))
 			{
-				blob.m_timestamp = currentTimestamp;
+				blob.m_hash = currentHash;
 				blob.m_blob = newBlob;
 			}
 		}
@@ -1852,9 +1880,15 @@ void RenderBackend12::RecompileModifiedShaders()
 
 	for (auto& [rootsigDesc, blob] : s_rootsigCache)
 	{
-		FILETIME currentTimestamp = ShaderCompiler::GetLastModifiedTime(rootsigDesc.m_relativepath);
+		winrt::com_ptr<IDxcBlob> preprocessedBlob;
+		ShaderCompiler::Preprocess(
+			rootsigDesc.m_relativepath,
+			{},
+			preprocessedBlob.put());
+		size_t currentHash = std::hash<IDxcBlob*>{}(preprocessedBlob.get());
+
 		winrt::com_ptr<IDxcBlob> newBlob;
-		if (blob.m_timestamp != currentTimestamp)
+		if (blob.m_hash != currentHash)
 		{
 			if (SUCCEEDED(ShaderCompiler::CompileRootsignature(
 				rootsigDesc.m_relativepath,
@@ -1862,7 +1896,7 @@ void RenderBackend12::RecompileModifiedShaders()
 				rootsigDesc.m_profile,
 				newBlob.put())))
 			{
-				blob.m_timestamp = currentTimestamp;
+				blob.m_hash = currentHash;
 				blob.m_blob = newBlob;
 			}
 		}
