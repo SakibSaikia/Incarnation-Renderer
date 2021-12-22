@@ -183,7 +183,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
         float3 outAttenuation;
-        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, albedo, tangentToWorld, outAttenuation);
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, roughness, albedo, tangentToWorld, outAttenuation);
         payload.attenuation *= outAttenuation;
 
         if (any(payload.attenuation) > 0.001)

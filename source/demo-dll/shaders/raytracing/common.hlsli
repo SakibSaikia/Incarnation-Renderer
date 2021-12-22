@@ -29,7 +29,8 @@ RayDesc GenerateIndirectRadianceRay(
     float3 hitPosition, 
     float3 normal, 
     float3 reflectance, 
-    float metalness, 
+    float metalness,
+    float roughness,
     float3 albedo,
     float3x3 tangentToWorld,
     out float3 outAttenuation)
@@ -41,9 +42,12 @@ RayDesc GenerateIndirectRadianceRay(
     {
         if (length(reflectance) > randomNoise)
         {
+            float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
+            float3 rayDir = ImportanceSampleGGX(randomNoise, roughness, reflectedRayDir);
+
             RayDesc ray;
             ray.Origin = hitPosition;
-            ray.Direction = normalize(reflect(WorldRayDirection(), normal));
+            ray.Direction = normalize(rayDir);
             ray.TMin = 0.001;
             ray.TMax = 10000.0;
             outAttenuation = reflectance;
@@ -54,9 +58,12 @@ RayDesc GenerateIndirectRadianceRay(
     {
         if (length(reflectance) > randomNoise)
         {
+            float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
+            float3 rayDir = ImportanceSampleGGX(randomNoise, roughness, reflectedRayDir);
+
             RayDesc ray;
             ray.Origin = hitPosition;
-            ray.Direction = normalize(reflect(WorldRayDirection(), normal));
+            ray.Direction = normalize(rayDir);
             ray.TMin = 0.001;
             ray.TMax = 10000.0;
             outAttenuation = reflectance;
