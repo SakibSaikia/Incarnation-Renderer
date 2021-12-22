@@ -2331,12 +2331,16 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 	// Upload texture data
 	if(images && uploadContext)
 	{
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(numMips);
-		for(int mipIndex = 0; mipIndex < numMips; ++mipIndex)
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(numMips * numSlices);
+		for (int sliceIndex = 0; sliceIndex < numSlices; ++sliceIndex)
 		{
-			srcData[mipIndex].pData = images[mipIndex].pixels;
-			srcData[mipIndex].RowPitch = images[mipIndex].rowPitch;
-			srcData[mipIndex].SlicePitch = images[mipIndex].slicePitch;
+			for (int mipIndex = 0; mipIndex < numMips; ++mipIndex)
+			{
+				const uint32_t subresourceIndex = sliceIndex * numMips + mipIndex;
+				srcData[subresourceIndex].pData = images[subresourceIndex].pixels;
+				srcData[subresourceIndex].RowPitch = images[subresourceIndex].rowPitch;
+				srcData[subresourceIndex].SlicePitch = images[subresourceIndex].slicePitch;
+			}
 		}
 
 		uploadContext->UpdateSubresources(
@@ -2368,6 +2372,15 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
 		srvDesc.TextureCube.MipLevels = numMips;
 		srvDesc.TextureCube.MostDetailedMip = 0;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+		break;
+	case BindlessResourceType::Texture2DArray:
+		srvDesc.Format = format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+		srvDesc.Texture2DArray.ArraySize = numSlices;
+		srvDesc.Texture2DArray.MipLevels = numMips;
+		srvDesc.Texture2DArray.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
 		break;
