@@ -26,7 +26,7 @@ TriangleHitGroup k_shadowHitGroup =
 
 RaytracingShaderConfig  k_shaderConfig =
 {
-    24,                                 // max payload size
+    32,                                 // max payload size
     8                                   // max attribute size
 };
 
@@ -39,7 +39,7 @@ struct RayPayload
 {
     float4 color;
     int pathLength;
-    float attenuation;
+    float3 attenuation;
 };
 
 struct ShadowRayPayload
@@ -78,7 +78,7 @@ void rgsMain()
     RayPayload payload;
     payload.color = float4(0, 0, 0, 0);
     payload.pathLength = 0;
-    payload.attenuation = 1.f;
+    payload.attenuation = float3(1.f, 1.f, 1.f);
 
     // MultiplierForGeometryContributionToHitGroupIndex is explicitly set to 0 because we are using GeometryIndex() to directly index primitive data instead of using hit group records.
     TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
@@ -179,8 +179,8 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         float randomNoise = whiteNoiseTex.Load(int4(texelIndex.x, texelIndex.y, g_globalConstants.whiteNoiseArrayIndex, 0)).r;
 
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
-        float outAttenuation = 1.f;
-        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, outAttenuation);
+        float3 outAttenuation;
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, outAttenuation);
         payload.attenuation *= outAttenuation;
 
         TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
@@ -192,7 +192,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 void msMain(inout RayPayload payload)
 {
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
-    payload.color = payload.attenuation * float4(envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb, 0.f);
+    payload.color.rgb = payload.attenuation * envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb;
 }
 
 [shader("anyhit")]

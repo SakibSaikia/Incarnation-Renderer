@@ -24,26 +24,43 @@ RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWo
     return ray;
 }
 
-RayDesc GenerateIndirectRadianceRay(float randomNoise, float3 hitPosition, float3 normal, out float outAttenuation)
+RayDesc GenerateIndirectRadianceRay(float randomNoise, float3 hitPosition, float3 normal, float3 reflectance, float metalness, out float3 outAttenuation)
 {
-    //float3 F0 = material.metallic * material.basecolor + (1.f - material.metallic) * 0.04;
-    RayDesc ray;
-    ray.Origin = hitPosition;
-    ray.Direction = normalize(reflect(WorldRayDirection(), normal));
-    ray.TMin = 0.001;
-    ray.TMax = 10000.0;
-    outAttenuation = randomNoise > 0.5 ? 1.f : 0.1f;
-    return ray;
+    RayDesc defaultRay;
+    defaultRay.Origin = hitPosition;
+    defaultRay.Direction = normalize(reflect(WorldRayDirection(), normal));
+    defaultRay.TMin = 0.001;
+    defaultRay.TMax = 10000.0;
+    outAttenuation = 0.f;
 
-
-    /*if (material.metallic > 0.5)
+    if (metalness > randomNoise) // Metal
     {
-        float3 F0 = material.metallic * material.basecolor + (1.f - material.metallic) * 0.04;
+        if (length(reflectance) > randomNoise)
+        {
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = normalize(reflect(WorldRayDirection(), normal));
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+            outAttenuation = reflectance;
+            return ray;
+        }
     }
-    else
+    else // Dielectric
     {
+        if (length(reflectance) > randomNoise)
+        {
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = normalize(reflect(WorldRayDirection(), normal));
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+            outAttenuation = reflectance;
+            return ray;
+        }
+    }
 
-    }*/
+    return defaultRay;
 }
 
 // Retrieve attribute at a hit position interpolated from the hit's barycentrics.

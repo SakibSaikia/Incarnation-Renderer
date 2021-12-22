@@ -41,6 +41,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	if (Config::g_pathTrace)
 	{
 		static int cycledArrayIndex = 0;
+		cycledArrayIndex = (cycledArrayIndex + 1) % Config::g_whiteNoiseArrayCount;
 
 		renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
 
@@ -50,7 +51,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		pathtraceDesc.resY = resY;
 		pathtraceDesc.scene = GetScene();
 		pathtraceDesc.view = GetView();
-		pathtraceDesc.whiteNoiseArrayIndex = (cycledArrayIndex + 1) % Config::g_whiteNoiseArrayCount;
+		pathtraceDesc.whiteNoiseArrayIndex = cycledArrayIndex;
 		pathtraceDesc.whiteNoiseTextureSize = Config::g_whiteNoiseTextureSize;
 		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 

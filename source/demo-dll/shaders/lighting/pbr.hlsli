@@ -78,30 +78,6 @@ float Fd_Burley(float NoV, float NoL, float LoH, float roughness)
     return lightScatter * viewScatter * (1.0 / PI);
 }
 
-// Real Shading in Unreal Engine 4 coursenotes by Brian Karis, Epic Games
-float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
-{
-    float a = Roughness * Roughness;
-
-    // Construct spherical coordinates from input Low Descrepancy Sequence Xi
-    float Phi = 2 * PI * Xi.x;
-    float CosTheta = sqrt((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
-    float SinTheta = sqrt(1.f - CosTheta * CosTheta);
-
-    // Convert from spherical coordinates to cartesian coordinates
-    float3 H;
-    H.x = SinTheta * cos(Phi);
-    H.y = SinTheta * sin(Phi);
-    H.z = CosTheta;
-
-    // Convert from tangent space to world space sample vector
-    float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
-    float3 tangent = normalize(cross(up, N));
-    float3 bitangent = cross(N, tangent);
-
-    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
-}
-
 // https://learnopengl.com/PBR/Theory
 float D_GGX(float NoH, float Roughness)
 {

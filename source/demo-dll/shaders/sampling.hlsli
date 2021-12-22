@@ -1,6 +1,8 @@
 #ifndef __SAMPLING_HLSLI_
 #define __SAMPLING_HLSLI_
 
+#define PI 3.14159265f
+
 // A pseudorandom foating point number generator.
 // Maps an integer value to a pseudorandom foating point number in the [0,1) interval where the sequence is determined by a second integer.
 // https://graphics.pixar.com/library/MultiJitteredSampling/paper.pdf
@@ -28,6 +30,30 @@ float2 Hammersley(uint i, float numSamples)
     bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
     bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
     return float2(float(i) / numSamples, float(bits) / exp2(32));
+}
+
+// Real Shading in Unreal Engine 4 coursenotes by Brian Karis, Epic Games
+float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
+{
+    float a = Roughness * Roughness;
+
+    // Construct spherical coordinates from input Low Descrepancy Sequence Xi
+    float Phi = 2 * PI * Xi.x;
+    float CosTheta = sqrt((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
+    float SinTheta = sqrt(1.f - CosTheta * CosTheta);
+
+    // Convert from spherical coordinates to cartesian coordinates
+    float3 H;
+    H.x = SinTheta * cos(Phi);
+    H.y = SinTheta * sin(Phi);
+    H.z = CosTheta;
+
+    // Convert from tangent space to world space sample vector
+    float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 tangent = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+
+    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
 #endif
