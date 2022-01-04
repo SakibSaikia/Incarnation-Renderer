@@ -179,6 +179,8 @@ namespace Demo
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 	std::unique_ptr<FBindlessShaderResource> s_whiteNoise;
+	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
+	uint32_t s_pathtraceHistoryFrameCount;
 	bool s_pauseRendering = false;
 
 	std::vector<std::wstring> s_modelList;
@@ -207,6 +209,16 @@ namespace Demo
 	uint32_t GetWhiteNoiseSrvIndex()
 	{
 		return s_whiteNoise->m_srvIndex;
+	}
+
+	FBindlessUav* GetPathtraceHistoryBuffer()
+	{
+		return s_pathtraceHistoryBuffer.get();
+	}
+
+	uint32_t& GetPathtraceHistoryFrameCount()
+	{
+		return s_pathtraceHistoryFrameCount;
 	}
 
 	void UpdateUI(float deltaTime);
@@ -239,6 +251,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 
 	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
 	s_whiteNoise = GenerateWhiteNoiseTextures(Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseArrayCount);
+	s_pathtraceHistoryBuffer = RenderBackend12::CreateBindlessUavTexture(L"hdr_history_buffer_rt", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -335,6 +348,10 @@ void Demo::Teardown(HWND& windowHandle)
 	s_scene.Clear();
 	s_textureCache.Clear();
 	s_samplerCache.Clear();
+
+	s_envBRDF.reset(nullptr);
+	s_whiteNoise.reset(nullptr);
+	s_pathtraceHistoryBuffer.reset(nullptr);
 
 	if (windowHandle)
 	{
@@ -1718,6 +1735,10 @@ void FView::UpdateViewTransform()
 	m_viewTransform(1, 3) = 0.0f;
 	m_viewTransform(2, 3) = 0.0f;
 	m_viewTransform(3, 3) = 1.0f;
+
+	// If the view is updated reset the pathtrace history
+	uint32_t& pathtraceHistory = Demo::GetPathtraceHistoryFrameCount();
+	pathtraceHistory = 1;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------

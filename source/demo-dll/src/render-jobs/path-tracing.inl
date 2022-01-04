@@ -2,7 +2,9 @@ namespace RenderJob
 {
 	struct PathTracingDesc
 	{
-		FBindlessUav* target;
+		FBindlessUav* targetBuffer;
+		FBindlessUav* historyBuffer;
+		uint32_t historyFrameCount;
 		uint32_t resX;
 		uint32_t resY;
 		const FScene* scene;
@@ -14,7 +16,7 @@ namespace RenderJob
 	concurrency::task<void> PathTrace(RenderJob::Sync& jobSync, const PathTracingDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t uavTransitionToken = passDesc.target->m_resource->GetTransitionToken();
+		size_t uavTransitionToken = passDesc.targetBuffer->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -144,7 +146,7 @@ namespace RenderJob
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
-					cbDest->destUavIndex = passDesc.target->m_uavIndices[0];
+					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
 					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
@@ -164,7 +166,7 @@ namespace RenderJob
 			d3dCmdList->SetComputeRootShaderResourceView(1, passDesc.scene->m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Transitions
-			passDesc.target->m_resource->Transition(cmdList, uavTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			passDesc.targetBuffer->m_resource->Transition(cmdList, uavTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 			// Dispatch rays
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
@@ -180,6 +182,50 @@ namespace RenderJob
 			dispatchDesc.Height = passDesc.resY;
 			dispatchDesc.Depth = 1;
 			d3dCmdList->DispatchRays(&dispatchDesc);
+
+			// Combine with history buffer to integrate results over time
+			passDesc.targetBuffer->m_resource->Transition(cmdList, uavTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({
+				L"raytracing/pathtrace-integrate.hlsl",
+				L"rootsig",
+				L"rootsig_1_1" });
+			d3dCmdList->SetComputeRootSignature(rootsig.get());
+
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({
+				L"raytracing/pathtrace-integrate.hlsl",
+				L"cs_main",
+				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16",
+				L"cs_6_6" });
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* newPSO = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(newPSO);
+
+			struct
+			{
+				uint32_t currentBufferTextureIndex;
+				uint32_t historyBufferUavIndex;
+				uint32_t historyFrameCount;
+				uint32_t resX;
+				uint32_t resY;
+			} rootConstants = { 
+				passDesc.targetBuffer->m_srvIndex,
+				passDesc.historyBuffer->m_uavIndices[0],
+				passDesc.historyFrameCount,
+				passDesc.resX,
+				passDesc.resY
+			};
+
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.resX / 16), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(passDesc.resY / 16), 1);
+			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 
 			return cmdList;
 

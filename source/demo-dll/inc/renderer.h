@@ -158,6 +158,8 @@ namespace Demo
 	const FView* GetView();
 	uint32_t GetEnvBrdfSrvIndex();
 	uint32_t GetWhiteNoiseSrvIndex();
+	FBindlessUav* GetPathtraceHistoryBuffer();
+	uint32_t& GetPathtraceHistoryFrameCount();
 	std::unique_ptr<FBindlessShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height);
 	std::unique_ptr<FBindlessShaderResource> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth);
 }
