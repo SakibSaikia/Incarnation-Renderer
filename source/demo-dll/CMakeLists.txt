@@ -38,7 +38,7 @@ include_directories(
     "${project_ext_dir}/directXTK/inc"
     "${project_ext_dir}/winpixeventruntime.1.0.210209001/Include/WinPixEventRuntime"
     "${project_ext_dir}/directXTex/inc"
-    "${project_ext_dir}/d3d12.1.4.9/include"
+    "${project_ext_dir}/d3d12.1.600.10/include"
     "${project_ext_dir}/tracy")
 
 # Macro defines
