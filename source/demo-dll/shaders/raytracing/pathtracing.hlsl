@@ -198,7 +198,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 void msMain(inout RayPayload payload)
 {
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
-    payload.color.rgb = payload.attenuation * envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb;
+    payload.color.rgb += payload.attenuation * envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb;
 }
 
 [shader("anyhit")]
