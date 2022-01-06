@@ -38,9 +38,9 @@ RayDesc GenerateIndirectRadianceRay(
     RayDesc defaultRay = (RayDesc)0;
     outAttenuation = 0.f;
 
-    if (metalness > randomNoise) // Metal
+    if (metalness > 0.5) // Metal
     {
-        if (length(reflectance) > randomNoise)
+        //if (length(reflectance) > randomNoise)
         {
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
             float3 rayDir = ImportanceSampleGGX(randomNoise, roughness, reflectedRayDir);
