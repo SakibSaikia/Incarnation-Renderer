@@ -180,7 +180,7 @@ namespace Demo
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 	std::unique_ptr<FBindlessShaderResource> s_whiteNoise;
 	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
-	uint32_t s_pathtraceHistoryFrameCount;
+	uint32_t s_pathtraceHistoryFrameCount = 1;
 	bool s_pauseRendering = false;
 
 	std::vector<std::wstring> s_modelList;

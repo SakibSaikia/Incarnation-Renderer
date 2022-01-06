@@ -148,7 +148,7 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, float3 albedo, float rou
 
 		// Diffuse & Specular BRDF
 		float3 Fd = albedo * Fd_Lambert();
-		float3 Fr = (D * F * G) / (4.f * NoV * NoL);
+		float3 Fr = (D * F * G);// / (4.f * NoV * NoL);
 
 		float irradiance = light.intensity * NoL;
 		radiance += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
