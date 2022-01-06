@@ -37,7 +37,7 @@ namespace RenderJob
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.format;
-			psoDesc.SampleDesc.Count = passDesc.sampleCount;
+			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
 			// PSO - Shaders

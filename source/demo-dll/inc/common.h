@@ -6,7 +6,7 @@
 struct Config
 {
 	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	static inline std::wstring g_modelFilename = L"Sponza.gltf";
+	static inline std::wstring g_modelFilename = L"DamagedHelmet.gltf";
 	static inline std::wstring g_environmentFilename = L"lilienstein_2k.hdr";
 	static inline bool g_useContentCache = true;
 	static inline float g_fov = 0.25f * DirectX::XM_PI;
@@ -16,7 +16,8 @@ struct Config
 	static inline bool g_enableDirectLighting = true;
 	static inline bool g_enableDiffuseIBL = true;
 	static inline bool g_enableSpecularIBL = true;
-	static inline bool g_pathTrace = true;
+	static inline bool g_pathTrace = false;
+	static inline bool g_enableTAA = true;
 	static inline uint32_t g_whiteNoiseTextureSize = 256;
 	static inline uint32_t g_whiteNoiseArrayCount = 8;
 };

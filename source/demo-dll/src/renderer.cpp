@@ -14,11 +14,30 @@
 #include "render-jobs/base-pass.inl"
 #include "render-jobs/environment-sky.inl"
 #include "render-jobs/msaa-resolve.inl"
+#include "render-jobs/taa-resolve.inl"
 #include "render-jobs/ui-pass.inl"
 #include "render-jobs/present.inl"
 #include "render-jobs/path-tracing.inl"
 #include "render-jobs/tonemap.inl"
 #include "render-jobs/update-tlas.inl"
+
+namespace
+{
+	float Halton(uint64_t sampleIndex, uint32_t base)
+	{
+		float result = 0.f;
+		float f = 1.f;
+
+		while (sampleIndex > 0)
+		{
+			f = f / base;
+			result += f * (sampleIndex % base);
+			sampleIndex = sampleIndex / base;
+		}
+
+		return result;
+	}
+}
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
@@ -30,25 +49,18 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::vector<concurrency::task<void>> renderJobs;
 	static RenderJob::Sync jobSync;
 
-	bool bCapturing = false;
-	if (Demo::GetPathtraceHistoryFrameCount() == 1)
-	{
-		RenderBackend12::BeginCapture();
-		bCapturing = true;
-	}
+	static uint64_t frameIndex = 0;
+	frameIndex++;
 
 	// These resources need to be kept alive until all the render jobs have finished and joined
-	const uint32_t sampleCount = 4;
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
-	std::unique_ptr<FRenderTexture> hdrRasterSceneColor = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster_msaa", hdrFormat, resX, resY, 1, 1, sampleCount);
-	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, sampleCount);
-	std::unique_ptr<FRenderTexture> hdrRasterSceneColorResolve = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster", hdrFormat, resX, resY, 1, 1, 1);
+	std::unique_ptr<FRenderTexture> hdrRasterSceneColor = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster", hdrFormat, resX, resY, 1, 1, 1);
+	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", hdrFormat, resX, resY, 1, 1);
 
 	if (Config::g_pathTrace)
 	{
-		static int cycledArrayIndex = 0;
-		cycledArrayIndex = (cycledArrayIndex + 1) % Config::g_whiteNoiseArrayCount;
+		int cycledArrayIndex = frameIndex % Config::g_whiteNoiseArrayCount;
 
 		renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
 
@@ -76,6 +88,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
+		Vector2 pixelJitter = { Halton(frameIndex, 2), Halton(frameIndex, 3) };
+		pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
+
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
 		baseDesc.colorTarget = hdrRasterSceneColor.get();
@@ -83,9 +98,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.format = hdrFormat;
 		baseDesc.resX = resX;
 		baseDesc.resY = resY;
-		baseDesc.sampleCount = sampleCount;
 		baseDesc.scene = GetScene();
 		baseDesc.view = GetView();
+		baseDesc.jitter = pixelJitter;
 		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
 		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
@@ -94,18 +109,17 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		// i.e the color and not the radiance. Refer the following for more information:
 		// https://therealmjp.github.io/posts/msaa-overview/#fnref:3
 
-		// MSAA Resolve
-		RenderJob::MSAAResolveDesc resolveDesc = {};
-		resolveDesc.colorSource = hdrRasterSceneColor.get();
-		resolveDesc.colorTarget = hdrRasterSceneColorResolve.get();
-		resolveDesc.format = hdrFormat;
+		// TAA Resolve
+		RenderJob::TAAResolveDesc resolveDesc = {};
+		resolveDesc.source = hdrRasterSceneColor.get();
+		resolveDesc.target = Demo::GetTAAAccumulationBuffer();
 		resolveDesc.resX = resX;
 		resolveDesc.resY = resY;
-		renderJobs.push_back(RenderJob::MSAAResolve(jobSync, resolveDesc));
+		renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
 		// Tonemap
-		RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
-		tonemapDesc.source = hdrRasterSceneColorResolve.get();
+		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+		tonemapDesc.source = Demo::GetTAAAccumulationBuffer();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.format = Config::g_backBufferFormat;
 		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
@@ -126,11 +140,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	// Wait for all render jobs to finish
 	auto joinTask = concurrency::when_all(std::begin(renderJobs), std::end(renderJobs));
 	joinTask.wait();
-
-	if (bCapturing)
-	{
-		RenderBackend12::EndCapture();
-	}
 
 	RenderBackend12::PresentDisplay();
 }

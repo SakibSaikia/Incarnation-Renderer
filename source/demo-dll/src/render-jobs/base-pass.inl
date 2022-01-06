@@ -7,9 +7,9 @@ namespace RenderJob
 		DXGI_FORMAT format;
 		uint32_t resX;
 		uint32_t resY;
-		uint32_t sampleCount;
 		const FScene* scene;
 		const FView* view;
+		Vector2 jitter;
 	};
 
 	concurrency::task<void> BasePass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
@@ -55,22 +55,26 @@ namespace RenderJob
 				int envBrdfTextureIndex;
 				FLightProbe sceneProbeData;
 				int sceneBvhIndex;
+				float jitterX;
+				float jitterY;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList,
-				[scene = passDesc.scene](uint8_t* pDest)
+				[passDesc](uint8_t* pDest)
 			{
 				auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
-				cbDest->sceneRotation = scene->m_rootTransform;
-				cbDest->sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
-				cbDest->sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
-				cbDest->sceneMaterialBufferIndex = scene->m_packedMaterials->m_srvIndex;
+				cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+				cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
+				cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
+				cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
 				cbDest->envBrdfTextureIndex = Demo::GetEnvBrdfSrvIndex();
-				cbDest->sceneProbeData = scene->m_globalLightProbe;
-				cbDest->sceneBvhIndex = scene->m_tlas->m_srvIndex;
+				cbDest->sceneProbeData = passDesc.scene->m_globalLightProbe;
+				cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
+				cbDest->jitterX = passDesc.jitter.x;
+				cbDest->jitterY = passDesc.jitter.y;
 			});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -108,7 +112,7 @@ namespace RenderJob
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.format;
-			psoDesc.SampleDesc.Count = passDesc.sampleCount;
+			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
 			// PSO - Shaders

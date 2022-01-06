@@ -179,6 +179,7 @@ namespace Demo
 	float s_aspectRatio;
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
 	std::unique_ptr<FBindlessShaderResource> s_whiteNoise;
+	std::unique_ptr<FBindlessUav> s_taaAccumulationBuffer;
 	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
 	uint32_t s_pathtraceHistoryFrameCount = 1;
 	bool s_pauseRendering = false;
@@ -214,6 +215,11 @@ namespace Demo
 	FBindlessUav* GetPathtraceHistoryBuffer()
 	{
 		return s_pathtraceHistoryBuffer.get();
+	}
+
+	FBindlessUav* GetTAAAccumulationBuffer()
+	{
+		return s_taaAccumulationBuffer.get();
 	}
 
 	uint32_t& GetPathtraceHistoryFrameCount()
@@ -252,6 +258,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
 	s_whiteNoise = GenerateWhiteNoiseTextures(Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseArrayCount);
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateBindlessUavTexture(L"hdr_history_buffer_rt", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
+	s_taaAccumulationBuffer = RenderBackend12::CreateBindlessUavTexture(L"taa_accumulation_buffer_raster", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -352,6 +359,7 @@ void Demo::Teardown(HWND& windowHandle)
 	s_envBRDF.reset(nullptr);
 	s_whiteNoise.reset(nullptr);
 	s_pathtraceHistoryBuffer.reset(nullptr);
+	s_taaAccumulationBuffer.reset(nullptr);
 
 	if (windowHandle)
 	{
