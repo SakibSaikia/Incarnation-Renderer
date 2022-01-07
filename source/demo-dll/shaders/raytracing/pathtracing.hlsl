@@ -63,8 +63,6 @@ struct GlobalCbLayout
     int whiteNoiseTextureIndex;
     int whiteNoiseArrayIndex;
     int whiteNoiseTextureSize;
-    float jitterX;
-    float jitterY;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -75,9 +73,8 @@ RaytracingAccelerationStructure g_sceneBvh : register(t0);
 void rgsMain()
 {
     RWTexture2D<float4> destUav = ResourceDescriptorHeap[g_globalConstants.destUavIndex];
-    float2 jitter = float2(g_globalConstants.jitterX, g_globalConstants.jitterY);
 
-    RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy + jitter, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
+    RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
     RayPayload payload;
     payload.color = float4(0, 0, 0, 0);
     payload.pathLength = 0;
