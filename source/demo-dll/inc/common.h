@@ -14,8 +14,8 @@ struct Config
 	static inline float g_cameraSpeed = 5.f;
 	static inline bool g_lightingOnlyView = false;
 	static inline bool g_enableDirectLighting = true;
-	static inline bool g_enableDiffuseIBL = true;
-	static inline bool g_enableSpecularIBL = true;
+	static inline bool g_enableDiffuseIBL = false;
+	static inline bool g_enableSpecularIBL = false;
 	static inline bool g_pathTrace = false;
 	static inline bool g_enableTAA = true;
 	static inline uint32_t g_whiteNoiseTextureSize = 256;
