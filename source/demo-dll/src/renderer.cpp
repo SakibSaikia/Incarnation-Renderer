@@ -50,6 +50,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		static int cycledArrayIndex = 0;
 		cycledArrayIndex = (cycledArrayIndex + 1) % Config::g_whiteNoiseArrayCount;
 
+		uint32_t& pathtraceHistory = Demo::GetPathtraceHistoryFrameCount();
+		Vector2 pixelJitter = { Halton(pathtraceHistory, 2), Halton(pathtraceHistory, 3) };
+
 		renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
 
 		RenderJob::PathTracingDesc pathtraceDesc = {};
@@ -62,6 +65,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		pathtraceDesc.view = GetView();
 		pathtraceDesc.whiteNoiseArrayIndex = cycledArrayIndex;
 		pathtraceDesc.whiteNoiseTextureSize = Config::g_whiteNoiseTextureSize;
+		pathtraceDesc.jitter = pixelJitter;
 		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
@@ -71,7 +75,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
 		// Accumulate history frames
-		uint32_t& pathtraceHistory = Demo::GetPathtraceHistoryFrameCount();
 		pathtraceHistory++;
 	}
 	else

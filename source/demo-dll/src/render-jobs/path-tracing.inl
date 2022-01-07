@@ -11,6 +11,7 @@ namespace RenderJob
 		const FView* view;
 		int whiteNoiseArrayIndex;
 		int whiteNoiseTextureSize;
+		Vector2 jitter;
 	};
 
 	concurrency::task<void> PathTrace(RenderJob::Sync& jobSync, const PathTracingDesc& passDesc)
@@ -137,6 +138,8 @@ namespace RenderJob
 				int whiteNoiseTextureIndex;
 				int whiteNoiseArrayIndex;
 				int whiteNoiseTextureSize;
+				float jitterX;
+				float jitterY;
 			};
 
 			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
@@ -160,6 +163,8 @@ namespace RenderJob
 					cbDest->whiteNoiseTextureIndex = Demo::GetWhiteNoiseSrvIndex();
 					cbDest->whiteNoiseArrayIndex = passDesc.whiteNoiseArrayIndex;
 					cbDest->whiteNoiseTextureSize = passDesc.whiteNoiseTextureSize;
+					cbDest->jitterX = passDesc.jitter.x;
+					cbDest->jitterY = passDesc.jitter.y;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

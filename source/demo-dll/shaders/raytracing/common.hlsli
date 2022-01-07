@@ -4,7 +4,7 @@
 #include "sampling.hlsli"
 
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
-RayDesc GenerateCameraRay(uint2 index, float3 cameraPos, float4x4 projectionToWorld)
+RayDesc GenerateCameraRay(float2 index, float3 cameraPos, float4x4 projectionToWorld)
 {
     float2 xy = index + 0.5f;
     float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
