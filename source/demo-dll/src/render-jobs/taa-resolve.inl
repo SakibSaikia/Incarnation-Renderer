@@ -6,6 +6,7 @@ namespace RenderJob
 		FBindlessUav* target;
 		uint32_t resX;
 		uint32_t resY;
+		uint32_t historyIndex;
 	};
 
 	concurrency::task<void> TAAResolve(RenderJob::Sync& jobSync, const TAAResolveDesc& passDesc)
@@ -62,7 +63,8 @@ namespace RenderJob
 				uint32_t taaAccumulationUavIndex;
 				uint32_t resX;
 				uint32_t resY;
-			} rootConstants = { passDesc.source->m_srvIndex, passDesc.target->m_uavIndices[0], passDesc.resX, passDesc.resY };
+				uint32_t historyIndex;
+			} rootConstants = { passDesc.source->m_srvIndex, passDesc.target->m_uavIndices[0], passDesc.resX, passDesc.resY, passDesc.historyIndex };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 

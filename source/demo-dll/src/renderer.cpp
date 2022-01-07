@@ -50,7 +50,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	static RenderJob::Sync jobSync;
 
 	static uint64_t frameIndex = 0;
-	frameIndex++;
 
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
@@ -115,6 +114,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		resolveDesc.target = Demo::GetTAAAccumulationBuffer();
 		resolveDesc.resX = resX;
 		resolveDesc.resY = resY;
+		resolveDesc.historyIndex = (uint32_t)frameIndex;
 		renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
 		// Tonemap
@@ -124,6 +124,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		tonemapDesc.format = Config::g_backBufferFormat;
 		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 	}
+
+	frameIndex++;
 
 	// UI
 	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), Config::g_backBufferFormat };

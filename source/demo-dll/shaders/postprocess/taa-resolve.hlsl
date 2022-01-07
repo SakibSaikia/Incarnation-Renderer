@@ -8,7 +8,7 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "RootConstants(b0, num32BitConstants=4, visibility = SHADER_VISIBILITY_ALL)"
+    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL)"
 
 struct CbLayout
 {
@@ -16,6 +16,7 @@ struct CbLayout
     uint taaAccumulationUavIndex;
     uint resX;
     uint resY;
+    uint historyIndex;
 };
 
 ConstantBuffer<CbLayout> g_constants : register(b0);
@@ -30,8 +31,16 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (dispatchThreadId.x < g_constants.resX && dispatchThreadId.y < g_constants.resY)
     {
         float3 currentColor = hdrSceneColor.Load(uint3(dispatchThreadId.x, dispatchThreadId.y, 0)).rgb;
-        float3 previousColor = taaAccumulationBuffer[dispatchThreadId.xy];
-        float3 output = currentColor * 0.1f + previousColor * 0.9f;
-        taaAccumulationBuffer[dispatchThreadId.xy] = output;
+
+        if (g_constants.historyIndex == 0)
+        {
+            taaAccumulationBuffer[dispatchThreadId.xy] = currentColor;
+        }
+        else
+        {
+            float3 previousColor = taaAccumulationBuffer[dispatchThreadId.xy];
+            float3 output = currentColor * 0.1f + previousColor * 0.9f;
+            taaAccumulationBuffer[dispatchThreadId.xy] = output;
+        }
     }
 }
