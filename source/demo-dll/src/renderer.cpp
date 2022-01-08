@@ -90,8 +90,16 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
-		Vector2 pixelJitter = { Halton(frameIndex, 2), Halton(frameIndex, 3) };
-		pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
+		Vector2 pixelJitter;
+		if (Config::g_enableTAA)
+		{
+			pixelJitter = { Halton(frameIndex, 2), Halton(frameIndex, 3) };
+			pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
+		}
+		else
+		{
+			pixelJitter = { 0.f, 0.f };
+		}
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
@@ -106,26 +114,34 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
 		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
-		// NOTE: The following is not technically correct. Tonemapping should be performed 
-		// before or during the resolve so that we are filtering the correct signal response
-		// i.e the color and not the radiance. Refer the following for more information:
-		// https://therealmjp.github.io/posts/msaa-overview/#fnref:3
+		
+		if (Config::g_enableTAA)
+		{
+			// TAA Resolve
+			RenderJob::TAAResolveDesc resolveDesc = {};
+			resolveDesc.source = hdrRasterSceneColor.get();
+			resolveDesc.target = Demo::GetTAAAccumulationBuffer();
+			resolveDesc.resX = resX;
+			resolveDesc.resY = resY;
+			resolveDesc.historyIndex = (uint32_t)frameIndex;
+			renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
-		// TAA Resolve
-		RenderJob::TAAResolveDesc resolveDesc = {};
-		resolveDesc.source = hdrRasterSceneColor.get();
-		resolveDesc.target = Demo::GetTAAAccumulationBuffer();
-		resolveDesc.resX = resX;
-		resolveDesc.resY = resY;
-		resolveDesc.historyIndex = (uint32_t)frameIndex;
-		renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
-
-		// Tonemap
-		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
-		tonemapDesc.source = Demo::GetTAAAccumulationBuffer();
-		tonemapDesc.target = RenderBackend12::GetBackBuffer();
-		tonemapDesc.format = Config::g_backBufferFormat;
-		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+			// Tonemap
+			RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+			tonemapDesc.source = Demo::GetTAAAccumulationBuffer();
+			tonemapDesc.target = RenderBackend12::GetBackBuffer();
+			tonemapDesc.format = Config::g_backBufferFormat;
+			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+		}
+		else
+		{
+			// Tonemap
+			RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
+			tonemapDesc.source = hdrRasterSceneColor.get();
+			tonemapDesc.target = RenderBackend12::GetBackBuffer();
+			tonemapDesc.format = Config::g_backBufferFormat;
+			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+		}
 	}
 
 	frameIndex++;
