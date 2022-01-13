@@ -1508,6 +1508,12 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	s_debugController->EnableDebugLayer();
 	dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 
+	#if 0
+		// GPU-based validation
+		s_debugController->SetEnableGPUBasedValidation(true);
+		s_debugController->SetEnableSynchronizedCommandQueueValidation(true);
+	#endif
+
 	// Programmatic Capture
 	DXGIGetDebugInterface1(0, IID_PPV_ARGS(s_graphicsAnalysis.put()));
 #endif
