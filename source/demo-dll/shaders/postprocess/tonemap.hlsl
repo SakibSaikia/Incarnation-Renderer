@@ -30,14 +30,14 @@ vs_to_ps vs_main(uint id : SV_VertexID)
 float4 ps_main(vs_to_ps input) : SV_Target
 {
 	Texture2D hdrTex = ResourceDescriptorHeap[g_hdrInputTextureIndex];
-	float3 luminance = hdrTex.Sample(g_pointSampler, input.uv).rgb;
+	float3 hdrColor = hdrTex.Sample(g_pointSampler, input.uv).rgb;
 
 	// Exposure correction. Computes the exposure normalization from the camera's EV100
-	float e = exposure(g_exposure);
-	luminance *= e;
+	float e = Exposure(g_exposure);
+	hdrColor *= e;
 
 	// Tonemapping
-	float3 ldrColor = Reinhard(luminance);
+	float3 ldrColor = ACESFilm(hdrColor);
 
 	return float4(ldrColor, 1.f);
 }

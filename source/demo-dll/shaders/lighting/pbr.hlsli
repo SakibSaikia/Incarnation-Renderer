@@ -92,7 +92,7 @@ float D_GGX(float NoH, float Roughness)
 }
 
 // Computes the exposure normalization factor from the camera's EV100
-float exposure(int ev100) 
+float Exposure(int ev100) 
 {
     return 1.0 / (pow(2.0, ev100) * 1.2);
 }
@@ -110,8 +110,7 @@ float3 ACESFilm(float3 x)
 
 float3 Reinhard(float3 x)
 {
-    float a = 2.f;
-    return x / (x + a.xxx);
+    return x / (x + 1.f);
 }
 
 #endif
