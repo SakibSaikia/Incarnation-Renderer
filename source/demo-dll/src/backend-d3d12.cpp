@@ -26,6 +26,7 @@ constexpr uint32_t k_backBufferCount = 3;
 constexpr size_t k_rtvHeapSize = 32;
 constexpr size_t k_dsvHeapSize = 8;
 constexpr size_t k_samplerHeapSize = 16;
+constexpr size_t k_nonShaderVisibleDescriptorCount = 32;
 constexpr size_t k_sharedResourceMemory = 64 * 1024 * 1024;
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -48,6 +49,7 @@ namespace
 	FBindlessIndexPool* GetBindlessPool();
 	concurrency::concurrent_queue<uint32_t>& GetRTVIndexPool();
 	concurrency::concurrent_queue<uint32_t>& GetDSVIndexPool();
+	concurrency::concurrent_queue<uint32_t>& GetNonShaderVisibleDescriptorPool();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -1287,7 +1289,7 @@ public:
 			}
 		});
 
-		auto addToFreePool = [this, resource = uav->m_resource, uavIndices = std::move(uav->m_uavIndices), srvIndex = uav->m_srvIndex]() mutable
+		auto addToFreePool = [this, resource = uav->m_resource, uavIndices = std::move(uav->m_uavIndices), srvIndex = uav->m_srvIndex, nonShaderVisibleUavIndices = std::move(uav->m_nonShaderVisibleUavIndices)]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -1299,6 +1301,11 @@ public:
 			if (srvIndex != ~0u)
 			{
 				GetBindlessPool()->ReturnIndex(srvIndex);
+			}
+
+			for (uint32_t descriptorIndex : nonShaderVisibleUavIndices)
+			{
+				GetNonShaderVisibleDescriptorPool().push(descriptorIndex);
 			}
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
@@ -1424,6 +1431,7 @@ namespace RenderBackend12
 
 	uint32_t s_descriptorSize[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
 	winrt::com_ptr<D3DDescriptorHeap_t> s_descriptorHeaps[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
+	winrt::com_ptr<D3DDescriptorHeap_t> s_nonShaderVisibleDescriptorHeap;
 
 	winrt::com_ptr<D3DCommandQueue_t> s_graphicsQueue;
 	winrt::com_ptr<D3DCommandQueue_t> s_computeQueue;
@@ -1443,6 +1451,7 @@ namespace RenderBackend12
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_samplerIndexPool;
+	concurrency::concurrent_queue<uint32_t> s_nonShaderVisibleDescriptorPool;
 }
 
 namespace 
@@ -1495,6 +1504,11 @@ namespace
 	concurrency::concurrent_queue<uint32_t>& GetDSVIndexPool()
 	{
 		return RenderBackend12::s_dsvIndexPool;
+	}
+
+	concurrency::concurrent_queue<uint32_t>& GetNonShaderVisibleDescriptorPool()
+	{
+		return RenderBackend12::s_nonShaderVisibleDescriptorPool;
 	}
 }
 
@@ -1579,7 +1593,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.put())));
 	s_copyQueue->SetName(L"copy_queue");
 
-	// Bindless SRV heap
+	// Shader Visible Bindless heap
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
 		cbvSrvUavHeapDesc.NumDescriptors = (uint32_t)BindlessDescriptorRange::TotalCount;
@@ -1655,6 +1669,26 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 			D3D12_CPU_DESCRIPTOR_HANDLE sampler = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, i);
 			GetDevice()->CreateSampler(&nullDesc, sampler);
 			s_samplerIndexPool.push(i);
+		}
+	}
+
+	// Non Shader Visible Descriptor Heap
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+		heapDesc.NumDescriptors = k_nonShaderVisibleDescriptorCount;
+		heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		AssertIfFailed(
+			s_d3dDevice->CreateDescriptorHeap(
+				&heapDesc,
+				IID_PPV_ARGS(s_nonShaderVisibleDescriptorHeap.put()))
+		);
+		s_nonShaderVisibleDescriptorHeap->SetName(L"non_shader_visible_heap");
+
+		// Cache available indices
+		for (int i = 0; i < k_nonShaderVisibleDescriptorCount; ++i)
+		{
+			s_nonShaderVisibleDescriptorPool.push(i);
 		}
 	}
 
@@ -1769,6 +1803,7 @@ void RenderBackend12::Teardown()
 
 	s_frameFence.get()->Release();
 
+	s_nonShaderVisibleDescriptorHeap.get()->Release();
 	for (auto& descriptorHeap : s_descriptorHeaps)
 	{
 		if (descriptorHeap)
@@ -2074,13 +2109,22 @@ D3DDescriptorHeap_t* RenderBackend12::GetDescriptorHeap(const D3D12_DESCRIPTOR_H
 	return RenderBackend12::s_descriptorHeaps[type].get();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex)
+D3D12_CPU_DESCRIPTOR_HANDLE RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex, bool bShaderVisible)
 {
-	D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
-	descriptor.ptr = GetDescriptorHeap(descriptorHeapType)->GetCPUDescriptorHandleForHeapStart().ptr +
-		descriptorIndex * GetDescriptorSize(descriptorHeapType);
-
-	return descriptor;
+	if (descriptorHeapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && !bShaderVisible)
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
+		descriptor.ptr = s_nonShaderVisibleDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr +
+			descriptorIndex * GetDescriptorSize(descriptorHeapType);
+		return descriptor;
+	}
+	else
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE descriptor;
+		descriptor.ptr = GetDescriptorHeap(descriptorHeapType)->GetCPUDescriptorHandleForHeapStart().ptr +
+			descriptorIndex * GetDescriptorSize(descriptorHeapType);
+		return descriptor;
+	}
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex)
@@ -2515,7 +2559,8 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 	const size_t height,
 	const size_t mipLevels,
 	const size_t arraySize,
-	const bool bCreateSRV)
+	const bool bCreateSRV, 
+	const bool bRequiresClear)
 {
 	D3D12_RESOURCE_DESC uavDesc = {};
 	uavDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -2532,6 +2577,7 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 
 	// Descriptor(s)
 	std::vector<uint32_t> uavIndices;
+	std::vector<uint32_t> nonShaderVisibleUavIndices;
 	for(int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
 	{
 		uint32_t uavIndex = GetBindlessPool()->FetchIndex(arraySize > 1 ? BindlessResourceType::RWTexture2DArray : BindlessResourceType::RWTexture2D);
@@ -2557,6 +2603,16 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 	
 		GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, uav);
 		uavIndices.push_back(uavIndex);
+
+		if (bRequiresClear)
+		{
+			uint32_t descriptorIndex;
+			bool ok = s_nonShaderVisibleDescriptorPool.try_pop(descriptorIndex);
+			DebugAssert(ok, "Ran out of Non Shader Visible descriptors");
+			D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, descriptorIndex, false);
+			GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
+			nonShaderVisibleUavIndices.push_back(descriptorIndex);
+		}
 	}
 
 	// SRV Descriptor
@@ -2600,6 +2656,7 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
 	auto uav = std::make_unique<FBindlessUav>();
 	uav->m_resource = uavResource;
 	uav->m_uavIndices = std::move(uavIndices);
+	uav->m_nonShaderVisibleUavIndices = std::move(nonShaderVisibleUavIndices);
 	uav->m_srvIndex = srvIndex;
 
 	return std::move(uav);

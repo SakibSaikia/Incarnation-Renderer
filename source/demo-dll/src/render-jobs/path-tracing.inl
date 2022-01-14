@@ -168,6 +168,13 @@ namespace RenderJob
 			// Transitions
 			passDesc.targetBuffer->m_resource->Transition(cmdList, uavTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
+			const float clearValue[] = { 0.f, 0.f, 0.f, 0.f };
+			d3dCmdList->ClearUnorderedAccessViewFloat(
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.targetBuffer->m_uavIndices[0]),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.targetBuffer->m_nonShaderVisibleUavIndices[0], false),
+				passDesc.targetBuffer->m_resource->m_d3dResource,
+				clearValue, 0, nullptr);
+
 			// Dispatch rays
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
 			dispatchDesc.HitGroupTable.StartAddress = hitGroupShaderTable->m_resource->m_d3dResource->GetGPUVirtualAddress();

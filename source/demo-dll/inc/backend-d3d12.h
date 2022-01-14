@@ -165,7 +165,8 @@ struct FBindlessShaderResource
 struct FBindlessUav
 {
 	FResource* m_resource;
-	std::vector<uint32_t> m_uavIndices; // one for each mip level
+	std::vector<uint32_t> m_uavIndices;					// one for each mip level
+	std::vector<uint32_t> m_nonShaderVisibleUavIndices; // one for each mip level
 	uint32_t m_srvIndex;
 
 	~FBindlessUav();
@@ -296,7 +297,7 @@ namespace RenderBackend12
 
 	// Descriptor Management
 	D3DDescriptorHeap_t* GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type);
-	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
+	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex, bool bShaderVisible = true);
 	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
 
 	// Feature Support
@@ -355,7 +356,8 @@ namespace RenderBackend12
 		const size_t height,
 		const size_t mipLevels,
 		const size_t arraySize,
-		const bool bCreateSRV = true);
+		const bool bCreateSRV = true,
+		const bool bRequiresClear = false);
 
 	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
 		const std::wstring& name,
