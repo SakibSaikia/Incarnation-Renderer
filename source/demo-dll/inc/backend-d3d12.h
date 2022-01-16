@@ -145,6 +145,19 @@ struct FResource
 
 	FResource();
 	~FResource();
+	FResource& operator==(FResource&& other)
+	{
+		// Resources are moved during async level load. 
+		// A custom move assingment is used here because we want to avoid 
+		// calling the desctructor which can release the resource.
+		m_d3dResource = other.m_d3dResource;
+		m_name = other.m_name;
+		m_subresourceStates = std::move(other.m_subresourceStates);
+		m_transitionFence = other.m_transitionFence;
+		m_transitionFenceValue = other.m_transitionFenceValue;
+		other.m_d3dResource = nullptr;
+	}
+
 	void SetName(const std::wstring& name);
 	HRESULT InitCommittedResource(const std::wstring& name, const D3D12_HEAP_PROPERTIES& heapProperties, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue = nullptr);
 	HRESULT InitReservedResource(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState);
@@ -160,6 +173,16 @@ struct FBindlessShaderResource
 	uint32_t m_srvIndex = ~0u;
 
 	~FBindlessShaderResource();
+	FBindlessShaderResource& operator==(FBindlessShaderResource&& other)
+	{
+		// BindlessShaderResources are moved during async level load. 
+		// A custom move assingment is used here because we want to avoid 
+		// calling the desctructor which can release the resource.
+		m_resource = other.m_resource;
+		m_srvIndex = other.m_srvIndex;
+		other.m_resource = nullptr;
+		other.m_srvIndex = ~0u;
+	}
 };
 
 struct FBindlessUav

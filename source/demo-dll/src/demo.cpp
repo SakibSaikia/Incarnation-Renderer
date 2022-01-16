@@ -182,7 +182,7 @@ namespace Demo
 	std::unique_ptr<FBindlessUav> s_taaAccumulationBuffer;
 	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
 	uint32_t s_pathtraceHistoryFrameCount = 1;
-	bool s_pauseRendering = false;
+	bool s_pauseRendering = true;
 
 	std::vector<std::wstring> s_modelList;
 	std::vector<std::wstring> s_hdriList;
@@ -296,9 +296,22 @@ void Demo::Tick(float deltaTime)
 	if (s_scene.m_modelFilename.empty() ||
 		s_scene.m_modelFilename != Config::g_modelFilename)
 	{
-		SCOPED_PAUSE_RENDERING;
-		s_scene.ReloadModel(Config::g_modelFilename);
-		s_view.Reset(&s_scene);
+		// Async loading of model. Create a temp scene on the stack 
+		// and replace the main scene once loading has finished.
+		// --> A shared pointer is used to keep the temp scene alive and pass to the continuation task. 
+		// --> The modelFilename is updated immediately to prevent subsequent reloads before the async reloading has finished.
+		// TODO: support cancellation if a different model load is triggered
+		std::shared_ptr<FScene> newScene = std::make_shared<FScene>();
+		s_scene.m_modelFilename = Config::g_modelFilename;
+		concurrency::create_task([newScene]()
+		{
+			newScene->ReloadModel(Config::g_modelFilename);
+		}).then([newScene]()
+		{
+			SCOPED_PAUSE_RENDERING;
+			s_scene = std::move(*newScene);
+			s_view.Reset(&s_scene);
+		});
 	}
 
 	// Reload scene environment if required
@@ -659,11 +672,11 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// If the model required fixup during load, resave a cached copy so that 
 	// subsequent loads are faster.
-	if (requiresResave && Config::g_useContentCache)
+	/*if (requiresResave && Config::g_useContentCache)
 	{
 		ok = loader.WriteGltfSceneToFile(&model, cachedFilepath.string(), false, false, true, false);
 		DebugAssert(ok, "Failed to save cached glTF model");
-	}
+	}*/
 
 	// Scene bounds
 	std::vector<DirectX::BoundingBox> meshWorldBounds(m_entities.m_objectSpaceBoundsList.size());
