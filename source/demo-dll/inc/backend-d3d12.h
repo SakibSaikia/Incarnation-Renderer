@@ -66,9 +66,9 @@ enum class BindlessDescriptorType
 enum class BindlessDescriptorRange : uint32_t
 {
 	BufferBegin,
-	BufferEnd = BufferBegin + 999,
+	BufferEnd = BufferBegin + 4999,
 	Texture2DBegin,
-	Texture2DEnd = Texture2DBegin + 999,
+	Texture2DEnd = Texture2DBegin + 4999,
 	Texture2DMultisampleBegin,
 	Texture2DMultisampleEnd = Texture2DMultisampleBegin + 999,
 	Texture2DArrayBegin,
@@ -80,7 +80,7 @@ enum class BindlessDescriptorRange : uint32_t
 	RWTexture2DArrayBegin,
 	RWTexture2DArrayEnd = RWTexture2DArrayBegin + 999,
 	AccelerationStructureBegin,
-	AccelerationStructureEnd = AccelerationStructureBegin + 999,
+	AccelerationStructureEnd = AccelerationStructureBegin + 4999,
 	TotalCount
 };
 
