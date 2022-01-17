@@ -259,6 +259,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	s_whiteNoise = GenerateWhiteNoiseTextures(Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseArrayCount);
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateBindlessUavTexture(L"hdr_history_buffer_rt", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 	s_taaAccumulationBuffer = RenderBackend12::CreateBindlessUavTexture(L"taa_accumulation_buffer_raster", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
+	GeneratePixelJitterValues(resX, resY);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();

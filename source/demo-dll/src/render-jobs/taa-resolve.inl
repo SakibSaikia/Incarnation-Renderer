@@ -64,7 +64,8 @@ namespace RenderJob
 				uint32_t resX;
 				uint32_t resY;
 				uint32_t historyIndex;
-			} rootConstants = { passDesc.source->m_srvIndex, passDesc.target->m_uavIndices[0], passDesc.resX, passDesc.resY, passDesc.historyIndex };
+				float exposure;
+			} rootConstants = { passDesc.source->m_srvIndex, passDesc.target->m_uavIndices[0], passDesc.resX, passDesc.resY, passDesc.historyIndex, Config::g_exposure };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 

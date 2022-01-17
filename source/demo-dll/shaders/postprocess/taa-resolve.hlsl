@@ -1,3 +1,5 @@
+#include "lighting/pbr.hlsli"
+
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1
 #endif
@@ -8,7 +10,7 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL)"
+    "RootConstants(b0, num32BitConstants=6, visibility = SHADER_VISIBILITY_ALL)"
 
 struct CbLayout
 {
@@ -17,9 +19,23 @@ struct CbLayout
     uint resX;
     uint resY;
     uint historyIndex;
+    float exposure;
 };
 
 ConstantBuffer<CbLayout> g_constants : register(b0);
+
+float3 Tonemap(float3 hdrColor)
+{
+    float e = Exposure(g_constants.exposure);
+    return Reinhard(e * hdrColor);
+}
+
+float3 InverseTonemap(float3 ldrColor)
+{
+    float3 hdrColor = ldrColor / (1.f - ldrColor);
+    float e = Exposure(g_constants.exposure);
+    return hdrColor / e;
+}
 
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
@@ -39,8 +55,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         else
         {
             float3 previousColor = taaAccumulationBuffer[dispatchThreadId.xy];
-            float3 output = currentColor * 0.1f + previousColor * 0.9f;
-            taaAccumulationBuffer[dispatchThreadId.xy] = output;
+            float3 output = Tonemap(currentColor) * 0.1f + Tonemap(previousColor) * 0.9f;
+            taaAccumulationBuffer[dispatchThreadId.xy] = InverseTonemap(output);
         }
     }
 }

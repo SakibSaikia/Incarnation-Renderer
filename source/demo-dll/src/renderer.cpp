@@ -39,6 +39,11 @@ namespace
 	}
 }
 
+namespace Demo
+{
+	std::vector<Vector2> s_pixelJitterValues;
+}
+
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	if (Demo::IsRenderingPaused())
@@ -90,16 +95,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
-		Vector2 pixelJitter;
-		if (Config::g_enableTAA)
-		{
-			pixelJitter = { Halton(frameIndex, 2), Halton(frameIndex, 3) };
-			pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
-		}
-		else
-		{
-			pixelJitter = { 0.f, 0.f };
-		}
+		Vector2 pixelJitter = Config::g_enableTAA ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
@@ -262,4 +258,14 @@ std::unique_ptr<FBindlessShaderResource> Demo::GenerateWhiteNoiseTextures(const 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	return std::move(noiseTexArray);
+}
+
+void Demo::GeneratePixelJitterValues(const uint32_t resX, const uint32_t resY)
+{
+	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
+	{
+		Vector2 pixelJitter = { Halton(sampleIdx, 2), Halton(sampleIdx, 3) };
+		pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
+		s_pixelJitterValues.push_back(pixelJitter);
+	}
 }
