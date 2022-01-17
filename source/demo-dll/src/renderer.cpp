@@ -16,6 +16,7 @@ namespace Demo
 	std::unique_ptr<FBindlessUav> s_taaAccumulationBuffer;
 	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
+	Matrix s_prevViewProjectionTransform;
 }
 
 // Render Jobs
@@ -242,6 +243,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		
 		if (Config::g_enableTAA)
 		{
+			const FView* view = GetView();
+			Matrix viewProjectionTransform = view->m_viewTransform * view->m_projectionTransform;
+
 			// TAA Resolve
 			RenderJob::TAAResolveDesc resolveDesc = {};
 			resolveDesc.source = hdrRasterSceneColor.get();
@@ -249,6 +253,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			resolveDesc.resX = resX;
 			resolveDesc.resY = resY;
 			resolveDesc.historyIndex = (uint32_t)frameIndex;
+			resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
+			resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
+			resolveDesc.depthTextureIndex = depthBuffer->m_srvIndex;
 			renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
 			// Tonemap
@@ -257,6 +264,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			tonemapDesc.target = RenderBackend12::GetBackBuffer();
 			tonemapDesc.format = Config::g_backBufferFormat;
 			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+
+			// Save view projection transform for next frame's reprojection
+			s_prevViewProjectionTransform = viewProjectionTransform;
 		}
 		else
 		{

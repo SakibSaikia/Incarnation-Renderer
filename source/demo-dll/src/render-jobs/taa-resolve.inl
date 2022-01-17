@@ -7,6 +7,9 @@ namespace RenderJob
 		uint32_t resX;
 		uint32_t resY;
 		uint32_t historyIndex;
+		Matrix invViewProjectionTransform;
+		Matrix prevViewProjectionTransform;
+		uint32_t depthTextureIndex;
 	};
 
 	concurrency::task<void> TAAResolve(RenderJob::Sync& jobSync, const TAAResolveDesc& passDesc)
@@ -57,17 +60,40 @@ namespace RenderJob
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			struct
+			struct TaaConstants
 			{
+				Matrix invViewProjectionTransform;
+				Matrix prevViewProjectionTransform;
 				uint32_t hdrSceneColorTextureIndex;
 				uint32_t taaAccumulationUavIndex;
+				uint32_t taaAccumulationSrvIndex;
+				uint32_t depthTextureIndex;
 				uint32_t resX;
 				uint32_t resY;
 				uint32_t historyIndex;
 				float exposure;
-			} rootConstants = { passDesc.source->m_srvIndex, passDesc.target->m_uavIndices[0], passDesc.resX, passDesc.resY, passDesc.historyIndex, Config::g_exposure };
+			};
 
-			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+			std::unique_ptr<FTransientBuffer> cbuf = RenderBackend12::CreateTransientBuffer(
+				L"taa_cb",
+				sizeof(TaaConstants),
+				cmdList,
+				[passDesc](uint8_t* pDest)
+				{
+					auto cb = reinterpret_cast<TaaConstants*>(pDest);
+					cb->invViewProjectionTransform = passDesc.invViewProjectionTransform;
+					cb->prevViewProjectionTransform = passDesc.prevViewProjectionTransform;
+					cb->hdrSceneColorTextureIndex = passDesc.source->m_srvIndex;
+					cb->taaAccumulationUavIndex = passDesc.target->m_uavIndices[0];
+					cb->taaAccumulationSrvIndex = passDesc.target->m_srvIndex;
+					cb->depthTextureIndex = passDesc.depthTextureIndex;
+					cb->resX = passDesc.resX;
+					cb->resY = passDesc.resY;
+					cb->historyIndex = passDesc.historyIndex;
+					cb->exposure = Config::g_exposure;
+				});
+
+			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Dispatch
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.resX / 16), 1);
