@@ -160,7 +160,7 @@ namespace RenderJob
 					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
-					cbDest->whiteNoiseTextureIndex = Demo::GetWhiteNoiseSrvIndex();
+					cbDest->whiteNoiseTextureIndex = Demo::s_whiteNoise->m_srvIndex;
 					cbDest->whiteNoiseArrayIndex = passDesc.whiteNoiseArrayIndex;
 					cbDest->whiteNoiseTextureSize = passDesc.whiteNoiseTextureSize;
 					cbDest->jitterX = passDesc.jitter.x;
