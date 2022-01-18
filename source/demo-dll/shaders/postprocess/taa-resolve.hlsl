@@ -1,3 +1,4 @@
+// Reference: https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/
 #include "lighting/pbr.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
@@ -29,19 +30,6 @@ struct CbLayout
 
 ConstantBuffer<CbLayout> g_constants : register(b0);
 SamplerState g_bilinearSampler : register(s0);
-
-float3 Tonemap(float3 hdrColor)
-{
-    float e = Exposure(g_constants.exposure);
-    return Reinhard(e * hdrColor);
-}
-
-float3 InverseTonemap(float3 ldrColor)
-{
-    float3 hdrColor = ldrColor / (1.f - ldrColor);
-    float e = Exposure(g_constants.exposure);
-    return hdrColor / e;
-}
 
 // Find the position of the pixel in the previous frame by unprojecting to 
 // world space and then reprojecting using the previous frame's view projection matrix
@@ -87,6 +75,14 @@ float3 ColorClamp(float2 dtid, float3 prevColor)
     return clamp(prevColor, minColor, maxColor);
 }
 
+// Convert color to LDR space for filtering and calculate weights which are 
+// use to convert back to HDR after blending
+float CalcLuminanceWeight(float3 hdrColor)
+{
+    float luminance = dot(hdrColor, float3(0.299, 0.587, 0.114));
+    return 1.f / (1.f + luminance);
+}
+
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -105,11 +101,23 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
         else
         {
+            // Use reprojected UVs to sample previous frame's color
             float2 reprojectedUV = Reproject(dispatchThreadId.xy);
             float3 previousColor = historyColorTex.SampleLevel(g_bilinearSampler, reprojectedUV, 0).rgb;
+
+            // Apply neighborhood clamping
             float3 clampedPreviousColor = ColorClamp(dispatchThreadId.xy, previousColor);
-            float3 output = Tonemap(currentColor) * 0.1f + Tonemap(clampedPreviousColor) * 0.9f;
-            taaAccumulationBuffer[dispatchThreadId.xy] = InverseTonemap(output);
+
+            // Combine blend weights with luminance weights
+            // https://graphicrants.blogspot.com/2013/12/tone-mapping.html
+            float currentWeight = 0.1 * CalcLuminanceWeight(currentColor);
+            float previousWeight = 0.9 * CalcLuminanceWeight(clampedPreviousColor);
+
+            // Blend in LDR space and then covert back to HDR
+            float3 output = currentColor * currentWeight + clampedPreviousColor * previousWeight;
+            output /= (currentWeight + previousWeight);
+
+            taaAccumulationBuffer[dispatchThreadId.xy] = output;
         }
     }
 }
