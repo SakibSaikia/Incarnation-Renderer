@@ -6,7 +6,8 @@
     "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
-	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
+	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)," \
+	"StaticSampler(s2, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
 struct LightProbeData
 {
@@ -45,6 +46,7 @@ struct PrimitiveCbLayout
 };
 
 SamplerState g_trilinearSampler : register(s1, space1);
+SamplerState g_anisotropicSampler : register(s2, space1);
 ConstantBuffer<PrimitiveCbLayout> g_primitiveConstants : register(b0);
 ConstantBuffer<ViewCbLayout> g_viewConstants : register(b1);
 ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
@@ -97,7 +99,7 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 float4 ps_main(vs_to_ps input) : SV_Target
 {
 	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
-	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv);
+	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisotropicSampler);
 
 #if LIGHTING_ONLY
 	p.basecolor = 0.5.xxx;

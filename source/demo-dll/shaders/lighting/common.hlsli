@@ -40,7 +40,7 @@ struct FLight
 	bool shadowcasting;
 };
 
-FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
+FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, SamplerState s)
 {
 	FMaterialProperties output;
 
@@ -49,8 +49,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	if (mat.m_baseColorTextureIndex != -1)
 	{
 		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-		SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
-		float alpha = TEX_SAMPLE(baseColorTex, baseColorSampler, uv).a;
+		float alpha = TEX_SAMPLE(baseColorTex, s, uv).a;
 		clip(alpha - 0.5);
 	}
 #endif
@@ -60,8 +59,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	if (mat.m_emissiveTextureIndex != -1)
 	{
 		Texture2D emissiveTex = ResourceDescriptorHeap[mat.m_emissiveTextureIndex];
-		SamplerState emissiveSampler = SamplerDescriptorHeap[mat.m_emissiveSamplerIndex];
-		output.emissive *= TEX_SAMPLE(emissiveTex, emissiveSampler, uv).rgb;
+		output.emissive *= TEX_SAMPLE(emissiveTex, s, uv).rgb;
 	}
 
 	// Base Color
@@ -69,8 +67,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	if (mat.m_baseColorTextureIndex != -1)
 	{
 		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-		SamplerState baseColorSampler = SamplerDescriptorHeap[mat.m_baseColorSamplerIndex];
-		output.basecolor *= TEX_SAMPLE(baseColorTex, baseColorSampler, uv).rgb;
+		output.basecolor *= TEX_SAMPLE(baseColorTex, s, uv).rgb;
 	}
 
 	// Normalmap
@@ -78,8 +75,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	if (output.bHasNormalmap)
 	{
 		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
-		SamplerState normalmapSampler = SamplerDescriptorHeap[mat.m_normalSamplerIndex];
-		float2 normalXY = TEX_SAMPLE(normalmapTex, normalmapSampler, uv).rg;
+		float2 normalXY = TEX_SAMPLE(normalmapTex, s, uv).rg;
 		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
 		output.normalmap = float3(normalXY, normalZ);
 	}
@@ -92,8 +88,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	if (mat.m_metallicRoughnessTextureIndex != -1)
 	{
 		Texture2D metallicRoughnessTex = ResourceDescriptorHeap[mat.m_metallicRoughnessTextureIndex];
-		SamplerState metallicRoughnessSampler = SamplerDescriptorHeap[mat.m_metallicRoughnessSamplerIndex];
-		float2 metallicRoughnessMap = TEX_SAMPLE(metallicRoughnessTex, metallicRoughnessSampler, uv).rg;
+		float2 metallicRoughnessMap = TEX_SAMPLE(metallicRoughnessTex, s, uv).rg;
 		output.metallic = metallicRoughnessMap.x;
 		output.roughness = metallicRoughnessMap.y;
 	}
@@ -103,8 +98,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv)
 	if (mat.m_aoTextureIndex != -1)
 	{
 		Texture2D aoTex = ResourceDescriptorHeap[mat.m_aoTextureIndex];
-		SamplerState aoSampler = SamplerDescriptorHeap[mat.m_aoSamplerIndex];
-		output.ao = TEX_SAMPLE(aoTex, aoSampler, uv).r;
+		output.ao = TEX_SAMPLE(aoTex, s, uv).r;
 	}
 
 	output.aoblend = mat.m_aoStrength;
