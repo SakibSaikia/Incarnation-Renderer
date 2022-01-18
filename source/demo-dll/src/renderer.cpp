@@ -192,14 +192,15 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", hdrFormat, resX, resY, 1, 1, true, true);
 
+	// Update acceleration structure. Can be used by both pathtracing and raster paths.
+	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
+
 	if (Config::g_pathTrace)
 	{
 		int cycledArrayIndex = frameIndex % Config::g_whiteNoiseArrayCount;
 
 		uint32_t& pathtraceHistory = Demo::GetPathtraceHistoryFrameCount();
 		Vector2 pixelJitter = { Halton(pathtraceHistory, 2), Halton(pathtraceHistory, 3) };
-
-		renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
 
 		RenderJob::PathTracingDesc pathtraceDesc = {};
 		pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
