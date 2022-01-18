@@ -170,11 +170,14 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float texWidth, texHeight, mipCount;
 		prefilteredEnvMap.GetDimensions(0, texWidth, texHeight, mipCount);
 
-		float3 R = reflect(-V, N);
-		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
-		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
-		float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
-		radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
+		if (dot(V, N) > 0.f)
+		{
+			float3 R = normalize(reflect(-V, N));
+			float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
+			float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
+			float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
+			radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
+		}
 	}
 #endif
 
