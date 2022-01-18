@@ -115,7 +115,12 @@ namespace RenderJob
 			{
 				int hdrSceneColorTextureIndex;
 				float exposure;
-			} rootConstants = { passDesc.source->m_srvIndex, Config::g_exposure };
+				int enableNaNCheck;
+			} rootConstants = { 
+					passDesc.source->m_srvIndex, 
+					Config::g_exposure, 
+					Config::g_enableNaNCheck ? 1 : 0
+			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
 			// Transitions

@@ -18,6 +18,7 @@ struct Config
 	static inline bool g_enableSpecularIBL = true;
 	static inline bool g_pathTrace = false;
 	static inline bool g_enableTAA = true;
+	static inline bool g_enableNaNCheck = false;
 	static inline uint32_t g_whiteNoiseTextureSize = 256;
 	static inline uint32_t g_whiteNoiseArrayCount = 8;
 };

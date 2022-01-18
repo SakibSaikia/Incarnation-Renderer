@@ -395,6 +395,7 @@ void Demo::UpdateUI(float deltaTime)
 		ImGui::Spacing();
 		ImGui::Checkbox("Pathtracing", &Config::g_pathTrace);
 		ImGui::Checkbox("TAA", &Config::g_enableTAA);
+		ImGui::Checkbox("NaN Check", &Config::g_enableNaNCheck);
 
 		// -----------------------------------------------------------------------------------------------------------------------------------------
 
