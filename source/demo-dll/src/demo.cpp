@@ -265,6 +265,10 @@ void Demo::Tick(float deltaTime)
 {
 	SCOPED_CPU_EVENT("tick_demo", PIX_COLOR_INDEX(1));
 
+	// Scene rotation
+	static float rotX = 0.f;
+	static float rotY = 0.f;
+
 	// Reload scene model if required
 	if (s_scene.m_modelFilename.empty() ||
 		s_scene.m_modelFilename != Config::g_modelFilename)
@@ -284,6 +288,8 @@ void Demo::Tick(float deltaTime)
 			SCOPED_PAUSE_RENDERING;
 			s_scene = std::move(*newScene);
 			s_view.Reset(&s_scene);
+			rotX = 0.f;
+			rotY = 0.f;
 		});
 	}
 
@@ -302,8 +308,6 @@ void Demo::Tick(float deltaTime)
 	// Handle scene rotation
 	{
 		// Mouse rotation but as applied in view space
-		static float rotX = 0.f;
-		static float rotY = 0.f;
 		Matrix rotation = Matrix::Identity;
 
 		rotX -= s_controller.RotateSceneX();
