@@ -1551,7 +1551,8 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		// Filter messages
 		D3D12_MESSAGE_ID hide[] =
 		{
-			D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE
+			D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,	// Disables warning about clear value mismatch
+			D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED					// Disables warning about buffers being created in resource state COMMON
 		};
 
 		D3D12_INFO_QUEUE_FILTER filter = {};
