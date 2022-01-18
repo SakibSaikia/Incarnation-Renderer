@@ -55,8 +55,6 @@ namespace RenderJob
 				int envBrdfTextureIndex;
 				FLightProbe sceneProbeData;
 				int sceneBvhIndex;
-				float jitterX;
-				float jitterY;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -73,8 +71,6 @@ namespace RenderJob
 				cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
 				cbDest->sceneProbeData = passDesc.scene->m_globalLightProbe;
 				cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-				cbDest->jitterX = passDesc.jitter.x;
-				cbDest->jitterY = passDesc.jitter.y;
 			});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -92,12 +88,12 @@ namespace RenderJob
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList,
-				[view = passDesc.view](uint8_t* pDest)
+				[passDesc](uint8_t* pDest)
 			{
 				auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-				cbDest->viewTransform = view->m_viewTransform;
-				cbDest->projectionTransform = view->m_projectionTransform;
-				cbDest->eyePos = view->m_position;
+				cbDest->viewTransform = passDesc.view->m_viewTransform;
+				cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+				cbDest->eyePos = passDesc.view->m_position;
 				cbDest->exposure = Config::g_exposure;
 			});
 

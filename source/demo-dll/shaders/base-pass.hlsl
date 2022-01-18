@@ -23,8 +23,6 @@ struct FrameCbLayout
 	int envBrdfTextureIndex;
 	LightProbeData sceneLightProbe;
 	int sceneBvhIndex;
-	float jitterX;
-	float jitterY;
 };
 
 struct ViewCbLayout
@@ -67,7 +65,6 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 
 	float4x4 localToWorld = mul(g_primitiveConstants.localToWorld, g_frameConstants.sceneRotation);
 	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
-	float2 pixelJitter = float2(g_frameConstants.jitterX, g_frameConstants.jitterY);
 
 	// index
 	uint vertIndex = MeshMaterial::GetUint(index, g_primitiveConstants.indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
@@ -76,7 +73,7 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 	float3 position = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	o.worldPos = worldPos;
-	o.pos = mul(worldPos, viewProjTransform) + float4(pixelJitter, 0.f, 0.f);
+	o.pos = mul(worldPos, viewProjTransform);
 
 	// uv
 	o.uv = MeshMaterial::GetFloat2(vertIndex, g_primitiveConstants.uvAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
