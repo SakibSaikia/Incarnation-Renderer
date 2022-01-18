@@ -280,7 +280,7 @@ void Demo::Tick(float deltaTime)
 		// TODO: support cancellation if a different model load is triggered
 		std::shared_ptr<FScene> newScene = std::make_shared<FScene>();
 		s_scene.m_modelFilename = Config::g_modelFilename;
-		concurrency::create_task([newScene]()
+		concurrency::task<void> loadSceneTask = concurrency::create_task([newScene]()
 		{
 			newScene->ReloadModel(Config::g_modelFilename);
 		}).then([newScene]()
@@ -291,6 +291,15 @@ void Demo::Tick(float deltaTime)
 			rotX = 0.f;
 			rotY = 0.f;
 		});
+
+		// Block when loading for the first time so that we have a scene to render.
+		// Subsequent loads will load in the background while displaying the previous scene.
+		static bool bInitialLoad = true;
+		if (bInitialLoad)
+		{
+			loadSceneTask.wait();
+			bInitialLoad = false;
+		}
 	}
 
 	// Reload scene environment if required
