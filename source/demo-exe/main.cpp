@@ -142,16 +142,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			s_demoProcs.mouseMove(wParam, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		}
 		return 0;
-	case WM_ACTIVATE:
-		if (LOWORD(wParam) == WA_ACTIVE || LOWORD(wParam) == WA_CLICKACTIVE)
-		{
-			EnableWindow(hWnd, TRUE);
-		}
-		else if (LOWORD(wParam) == WA_INACTIVE)
-		{
-			EnableWindow(hWnd, FALSE);
-		}
-		return 0;
 	}
 
 	return DefWindowProc(hWnd, msg, wParam, lParam);
