@@ -8,7 +8,8 @@ GlobalRootSignature k_globalRootsig =
     "RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
     "CBV(b0), " \
     "SRV(t0), " \
-    "StaticSampler(s0, space = 1, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP) "
+    "StaticSampler(s0, space = 1, filter = FILTER_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP), " \
+    "StaticSampler(s1, space = 1, filter = FILTER_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 };
 
 TriangleHitGroup k_hitGroup =
@@ -69,6 +70,7 @@ struct GlobalCbLayout
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
 SamplerState g_envmapSampler : register(s0, space1);
+SamplerState g_trilinearSampler : register(s1, space1);
 RaytracingAccelerationStructure g_sceneBvh : register(t0);
 
 [shader("raygeneration")]
@@ -144,7 +146,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     // Material 
     FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, globalMaterialBufferIndex);
-    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv);
+    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv, g_trilinearSampler);
 
 #if LIGHTING_ONLY
     matInfo.basecolor = 0.5.xxx;
