@@ -4,14 +4,11 @@ namespace RenderJob
 	{
 		FBindlessUav* targetBuffer;
 		FBindlessUav* historyBuffer;
-		uint32_t historyFrameCount;
+		uint32_t currentSampleIndex;
 		uint32_t resX;
 		uint32_t resY;
 		const FScene* scene;
 		const FView* view;
-		int whiteNoiseArrayIndex;
-		int whiteNoiseTextureSize;
-		Vector2 jitter;
 	};
 
 	concurrency::task<void> PathTrace(RenderJob::Sync& jobSync, const PathTracingDesc& passDesc)
@@ -135,11 +132,7 @@ namespace RenderJob
 				int envmapTextureIndex;
 				int scenePrimitivesIndex;
 				int scenePrimitiveCountsIndex;
-				int whiteNoiseTextureIndex;
-				int whiteNoiseArrayIndex;
-				int whiteNoiseTextureSize;
-				float jitterX;
-				float jitterY;
+				uint32_t currentSampleIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
@@ -160,11 +153,7 @@ namespace RenderJob
 					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
-					cbDest->whiteNoiseTextureIndex = Demo::s_whiteNoise->m_srvIndex;
-					cbDest->whiteNoiseArrayIndex = passDesc.whiteNoiseArrayIndex;
-					cbDest->whiteNoiseTextureSize = passDesc.whiteNoiseTextureSize;
-					cbDest->jitterX = passDesc.jitter.x;
-					cbDest->jitterY = passDesc.jitter.y;
+					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -229,7 +218,7 @@ namespace RenderJob
 			} rootConstants = { 
 				passDesc.targetBuffer->m_srvIndex,
 				passDesc.historyBuffer->m_uavIndices[0],
-				passDesc.historyFrameCount,
+				passDesc.currentSampleIndex,
 				passDesc.resX,
 				passDesc.resY
 			};

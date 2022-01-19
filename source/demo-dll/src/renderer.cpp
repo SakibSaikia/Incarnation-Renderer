@@ -199,20 +199,16 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	{
 		int cycledArrayIndex = frameIndex % Config::g_whiteNoiseArrayCount;
 
-		uint32_t& pathtraceHistory = Demo::GetPathtraceHistoryFrameCount();
-		Vector2 pixelJitter = { Halton(pathtraceHistory, 2), Halton(pathtraceHistory, 3) };
+		uint32_t& sampleIndex = Demo::GetCurrentPathtraceSampleIndex();
 
 		RenderJob::PathTracingDesc pathtraceDesc = {};
 		pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
 		pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
-		pathtraceDesc.historyFrameCount = Demo::GetPathtraceHistoryFrameCount();
+		pathtraceDesc.currentSampleIndex = sampleIndex;
 		pathtraceDesc.resX = resX;
 		pathtraceDesc.resY = resY;
 		pathtraceDesc.scene = GetScene();
 		pathtraceDesc.view = GetView();
-		pathtraceDesc.whiteNoiseArrayIndex = cycledArrayIndex;
-		pathtraceDesc.whiteNoiseTextureSize = Config::g_whiteNoiseTextureSize;
-		pathtraceDesc.jitter = pixelJitter;
 		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
@@ -221,8 +217,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		tonemapDesc.format = Config::g_backBufferFormat;
 		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
-		// Accumulate history frames
-		pathtraceHistory++;
+		// Accumulate samples
+		sampleIndex++;
 	}
 	else
 	{

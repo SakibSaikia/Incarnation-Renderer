@@ -56,11 +56,61 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
     return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
-float3 SampleDirectionHemisphere(float u1, float u2)
+float3 SampleDirectionHemisphere(float2 u)
 {
-    float r = sqrt(max(0.0f, 1.0f - u1 * u1));
-    float phi = 2.f * PI * u2;
-    return float3(r * cos(phi), r * sin(phi), u1);
+    float r = sqrt(max(0.0f, 1.0f - u.x * u.x));
+    float phi = 2.f * PI * u.y;
+    return float3(r * cos(phi), r * sin(phi), u.x);
+}
+
+uint CMJ_Permute(uint i, uint l, uint p)
+{
+    uint w = l - 1;
+    w |= w >> 1;
+    w |= w >> 2;
+    w |= w >> 4;
+    w |= w >> 8;
+    w |= w >> 16;
+    do
+    {
+        i ^= p; i *= 0xe170893d;
+        i ^= p >> 16;
+        i ^= (i & w) >> 4;
+        i ^= p >> 8; i *= 0x0929eb3f;
+        i ^= p >> 23;
+        i ^= (i & w) >> 1; i *= 1 | p >> 27;
+        i *= 0x6935fa69;
+        i ^= (i & w) >> 11; i *= 0x74dcb303;
+        i ^= (i & w) >> 2; i *= 0x9e501cc3;
+        i ^= (i & w) >> 2; i *= 0xc860a3df;
+        i &= w;
+        i ^= i >> 5;
+    } while (i >= l);
+    return (i + p) % l;
+}
+
+float CMJ_RandFloat(uint i, uint p)
+{
+    i ^= p;
+    i ^= i >> 17;
+    i ^= i >> 10; i *= 0xb36534e5;
+    i ^= i >> 12;
+    i ^= i >> 21; i *= 0x93fc4795;
+    i ^= 0xdf6e307f;
+    i ^= i >> 17; i *= 1 | p >> 18;
+    return i * (1.0f / 4294967808.0f);
+}
+
+// Returns a 2D sample from a particular pattern using correlated multi-jittered sampling [Kensler 2013]
+float2 CorrelatedMultiJitteredSampling(uint sampleIdx, uint numSamplesX, uint numSamplesY, uint pattern)
+{
+    uint N = numSamplesX * numSamplesY;
+    sampleIdx = CMJ_Permute(sampleIdx, N, pattern * 0x51633e2d);
+    uint sx = CMJ_Permute(sampleIdx % numSamplesX, numSamplesX, pattern * 0x68bc21eb);
+    uint sy = CMJ_Permute(sampleIdx / numSamplesX, numSamplesY, pattern * 0x02e5be93);
+    float jx = CMJ_RandFloat(sampleIdx, pattern * 0x967a889b);
+    float jy = CMJ_RandFloat(sampleIdx, pattern * 0x368cc8b7);
+    return float2((sx + (sy + jx) / numSamplesY) / numSamplesX, (sampleIdx + jy) / N);
 }
 
 #endif

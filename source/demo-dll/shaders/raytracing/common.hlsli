@@ -3,6 +3,22 @@
 
 #include "sampling.hlsli"
 
+static float2 SamplePoint(uint pixelIdx, uint sampleIdx, inout uint setIdx)
+{
+    const uint numPixels = DispatchRaysDimensions().x * DispatchRaysDimensions().y;
+    const uint permutationIdx = setIdx * numPixels + pixelIdx;
+    setIdx += 1;
+    return CorrelatedMultiJitteredSampling(sampleIdx, 1024, 1024, permutationIdx);
+}
+
+static float SampleRand(uint pixelIdx, uint sampleIdx, inout uint setIdx)
+{
+    const uint numPixels = DispatchRaysDimensions().x * DispatchRaysDimensions().y;
+    const uint permutationIdx = setIdx * numPixels + pixelIdx;
+    setIdx += 1;
+    return CMJ_RandFloat(sampleIdx, permutationIdx);
+}
+
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
 RayDesc GenerateCameraRay(float2 index, float3 cameraPos, float4x4 projectionToWorld)
 {
@@ -25,14 +41,16 @@ RayDesc GenerateCameraRay(float2 index, float3 cameraPos, float4x4 projectionToW
 }
 
 RayDesc GenerateIndirectRadianceRay(
-    float randomNoise, 
-    float3 hitPosition, 
-    float3 normal, 
-    float3 reflectance, 
+    float3 hitPosition,
+    float3 normal,
+    float3 reflectance,
     float metalness,
     float roughness,
     float3 albedo,
     float3x3 tangentToWorld,
+    uint pixelIndex,
+    uint sampleIndex,
+    uint sampleSetIndex,
     out float3 outAttenuation)
 {
     RayDesc defaultRay = (RayDesc)0;
@@ -42,8 +60,9 @@ RayDesc GenerateIndirectRadianceRay(
     {
         //if (length(reflectance) > randomNoise)
         {
+            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex);
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
-            float3 rayDir = ImportanceSampleGGX(randomNoise, roughness, reflectedRayDir);
+            float3 rayDir = ImportanceSampleGGX(ggxSample, roughness, reflectedRayDir);
 
             RayDesc ray;
             ray.Origin = hitPosition;
@@ -56,10 +75,13 @@ RayDesc GenerateIndirectRadianceRay(
     }
     else // Dielectric
     {
-        if (length(reflectance) > randomNoise)
+        float reflectionProbability = SampleRand(pixelIndex, sampleIndex, sampleSetIndex);
+
+        if (length(reflectance) > reflectionProbability)
         {
+            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex);
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
-            float3 rayDir = ImportanceSampleGGX(randomNoise, roughness, reflectedRayDir);
+            float3 rayDir = ImportanceSampleGGX(ggxSample, roughness, reflectedRayDir);
 
             RayDesc ray;
             ray.Origin = hitPosition;
@@ -71,7 +93,8 @@ RayDesc GenerateIndirectRadianceRay(
         }
         else
         {
-            float3 rayDir = SampleDirectionHemisphere(randomNoise, randomNoise);
+            float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex);
+            float3 rayDir = SampleDirectionHemisphere(hemisphereSample);
             rayDir = normalize(mul(rayDir, tangentToWorld));
 
             RayDesc ray;

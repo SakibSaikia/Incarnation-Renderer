@@ -177,7 +177,7 @@ namespace Demo
 	FTextureCache s_textureCache;
 	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
-	uint32_t s_pathtraceHistoryFrameCount = 1;
+	uint32_t s_pathtraceCurrentSampleIndex = 1;
 	bool s_pauseRendering = true;
 
 	std::vector<std::wstring> s_modelList;
@@ -198,9 +198,9 @@ namespace Demo
 		return &s_view;
 	}
 
-	uint32_t& GetPathtraceHistoryFrameCount()
+	uint32_t& GetCurrentPathtraceSampleIndex()
 	{
-		return s_pathtraceHistoryFrameCount;
+		return s_pathtraceCurrentSampleIndex;
 	}
 
 	void UpdateUI(float deltaTime);
@@ -1742,9 +1742,9 @@ void FView::UpdateViewTransform()
 	m_viewTransform(2, 3) = 0.0f;
 	m_viewTransform(3, 3) = 1.0f;
 
-	// If the view is updated reset the pathtrace history
-	uint32_t& pathtraceHistory = Demo::GetPathtraceHistoryFrameCount();
-	pathtraceHistory = 1;
+	// If the view is updated reset the pathtrace sample index
+	uint32_t& sampleIndex = Demo::GetCurrentPathtraceSampleIndex();
+	sampleIndex = 1;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------

@@ -27,7 +27,7 @@ TriangleHitGroup k_shadowHitGroup =
 
 RaytracingShaderConfig  k_shaderConfig =
 {
-    32,                                 // max payload size
+    40,                                 // max payload size
     8                                   // max attribute size
 };
 
@@ -41,6 +41,8 @@ struct RayPayload
     float4 color;
     int pathLength;
     float3 attenuation;
+    uint pixelIndex;
+    uint sampleSetIndex;
 };
 
 struct ShadowRayPayload
@@ -61,11 +63,8 @@ struct GlobalCbLayout
     int envmapTextureIndex;
     int scenePrimitivesIndex;
     int scenePrimitiveCountsIndex;
-    int whiteNoiseTextureIndex;
-    int whiteNoiseArrayIndex;
-    int whiteNoiseTextureSize;
-    float jitterX;
-    float jitterY;
+    uint currentSampleIndex;
+
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -77,13 +76,20 @@ RaytracingAccelerationStructure g_sceneBvh : register(t0);
 void rgsMain()
 {
     RWTexture2D<float4> destUav = ResourceDescriptorHeap[g_globalConstants.destUavIndex];
-    float2 jitter = float2(g_globalConstants.jitterX, g_globalConstants.jitterY);
+
+    uint sampleSetIdx = 0;
+    const uint sampleIdx = g_globalConstants.currentSampleIndex;
+    const uint2 pixelCoord = DispatchRaysIndex().xy;
+    const uint pixelIdx = pixelCoord.y * DispatchRaysDimensions().x + pixelCoord.x;
+    float2 jitter = SamplePoint(pixelIdx, sampleIdx, sampleSetIdx);
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy + jitter, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
     RayPayload payload;
     payload.color = float4(0, 0, 0, 0);
     payload.pathLength = 0;
     payload.attenuation = float3(1.f, 1.f, 1.f);
+    payload.pixelIndex = pixelIdx;
+    payload.sampleSetIndex = sampleSetIdx;
 
     // MultiplierForGeometryContributionToHitGroupIndex is explicitly set to 0 because we are using GeometryIndex() to directly index primitive data instead of using hit group records.
     TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
@@ -182,13 +188,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     if (payload.pathLength < MAX_RECURSION_DEPTH)
     {
-        Texture2DArray whiteNoiseTex = ResourceDescriptorHeap[g_globalConstants.whiteNoiseTextureIndex];
-        int2 texelIndex = DispatchRaysIndex().xy % g_globalConstants.whiteNoiseTextureSize;
-        float randomNoise = whiteNoiseTex.Load(int4(texelIndex.x, texelIndex.y, g_globalConstants.whiteNoiseArrayIndex, 0)).r;
-
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
         float3 outAttenuation;
-        RayDesc secondaryRay = GenerateIndirectRadianceRay(randomNoise, hitPosition, N, F, matInfo.metallic, roughness, albedo, tangentToWorld, outAttenuation);
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(hitPosition, N, F, matInfo.metallic, roughness, albedo, tangentToWorld, payload.pixelIndex, g_globalConstants.currentSampleIndex, payload.sampleSetIndex, outAttenuation);
         payload.attenuation *= outAttenuation;
 
         if (any(payload.attenuation) > 0.001)
