@@ -22,6 +22,8 @@ struct Config
 	static inline uint32_t g_whiteNoiseTextureSize = 256;
 	static inline uint32_t g_whiteNoiseArrayCount = 8;
 	static inline uint32_t g_maxSampleCount = 256;
+	static inline float g_pathtracing_cameraAperture = 0.01f;
+	static inline float g_pathtracing_cameraFocalLength = 7.f;
 };
 
 inline void AssertIfFailed(HRESULT hr)

@@ -20,20 +20,30 @@ static float SampleRand(uint pixelIdx, uint sampleIdx, inout uint setIdx)
 }
 
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
-RayDesc GenerateCameraRay(float2 index, float3 cameraPos, float4x4 projectionToWorld)
+RayDesc GenerateCameraRay(float2 index, float4x4 cameraMatrix, float4x4 projectionToWorld, float aperture, float focalLength, float2 randomSample)
 {
     float2 xy = index + 0.5f;
     float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
     screenPos.y = -screenPos.y;
 
+    // Use primary ray to determine focal point
+    float3 cameraPos = cameraMatrix[3].xyz;
     float4 world = mul(float4(screenPos, 0.0001f, 1.f), projectionToWorld);
     world.xyz /= world.w;
+    float3 primaryRayDir = normalize(world.xyz - cameraPos);
+    float3 focalPoint = cameraPos + focalLength * primaryRayDir;
+
+    // Generate secondary ray used for tracing by sampling a disk around the camera origin based on the aperture
+    float3 cameraRight = cameraMatrix[0].xyz;
+    float3 cameraUp = cameraMatrix[1].xyz;
+    float2 offset = 2.f * randomSample - 1.xx;
+    float3 rayOrigin = cameraPos + aperture * offset.x * cameraRight + aperture * offset.y * cameraUp;
 
     // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
     // TMin should be kept small to prevent missing geometry at close contact areas.
     RayDesc ray;
-    ray.Origin = cameraPos;
-    ray.Direction = normalize(world.xyz - cameraPos);
+    ray.Origin = rayOrigin;
+    ray.Direction = normalize(focalPoint - rayOrigin);
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
 

@@ -56,10 +56,13 @@ struct GlobalCbLayout
     int sceneMeshBufferViewsIndex;
     int sceneMaterialBufferIndex;
     int sceneBvhIndex;
-    float3 cameraPosition;
+    float cameraAperture;
+    float cameraFocalLength;
+    float _pad0;
     int destUavIndex;
     float4x4 projectionToWorld;
     float4x4 sceneRotation;
+    float4x4 cameraMatrix;
     int envmapTextureIndex;
     int scenePrimitivesIndex;
     int scenePrimitiveCountsIndex;
@@ -78,19 +81,27 @@ void rgsMain()
 {
     RWTexture2D<float4> destUav = ResourceDescriptorHeap[g_globalConstants.destUavIndex];
 
-    uint sampleSetIdx = 0;
+    uint raygenSampleSetIdx = 0;
     const uint sampleIdx = g_globalConstants.currentSampleIndex;
     const uint2 pixelCoord = DispatchRaysIndex().xy;
     const uint pixelIdx = pixelCoord.y * DispatchRaysDimensions().x + pixelCoord.x;
-    float2 jitter = SamplePoint(pixelIdx, sampleIdx, sampleSetIdx, g_globalConstants.sqrtSampleCount);
+    float2 subPixelJitter = SamplePoint(pixelIdx, sampleIdx, raygenSampleSetIdx, g_globalConstants.sqrtSampleCount);
+    float2 apertureSample = SamplePoint(pixelIdx, sampleIdx, raygenSampleSetIdx, g_globalConstants.sqrtSampleCount); // Note: SamplePoint modifies the SampleSetIndex
 
-    RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy + jitter, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
+    RayDesc ray = GenerateCameraRay(
+        DispatchRaysIndex().xy + subPixelJitter, 
+        g_globalConstants.cameraMatrix, 
+        g_globalConstants.projectionToWorld, 
+        g_globalConstants.cameraAperture,
+        g_globalConstants.cameraFocalLength,
+        apertureSample);
+
     RayPayload payload;
     payload.color = float4(0, 0, 0, 0);
     payload.pathLength = 0;
     payload.attenuation = float3(1.f, 1.f, 1.f);
     payload.pixelIndex = pixelIdx;
-    payload.sampleSetIndex = sampleSetIdx;
+    payload.sampleSetIndex = 0;
 
     // MultiplierForGeometryContributionToHitGroupIndex is explicitly set to 0 because we are using GeometryIndex() to directly index primitive data instead of using hit group records.
     TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
@@ -169,7 +180,8 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         N = normalize(mul(matInfo.normalmap, tangentToWorld));
     }
 
-    float3 V = normalize(g_globalConstants.cameraPosition - hitPosition);
+    float3 cameraPosition = g_globalConstants.cameraMatrix[3].xyz;
+    float3 V = normalize(cameraPosition - hitPosition);
     float3 H = normalize(N + V);
 
     float NoV = saturate(dot(N, V));

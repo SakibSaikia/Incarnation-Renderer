@@ -126,10 +126,13 @@ namespace RenderJob
 				int sceneMeshBufferViewsIndex;
 				int sceneMaterialBufferIndex;
 				int sceneBvhIndex;
-				Vector3 cameraPosition;
+				float cameraAperture;
+				float cameraFocalLength;
+				float _pad0;
 				int destUavIndex;
 				Matrix projectionToWorld;
 				Matrix sceneRotation;
+				Matrix cameraMatrix;
 				int envmapTextureIndex;
 				int scenePrimitivesIndex;
 				int scenePrimitiveCountsIndex;
@@ -149,9 +152,11 @@ namespace RenderJob
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-					cbDest->cameraPosition = passDesc.view->m_position;
+					cbDest->cameraAperture = Config::g_pathtracing_cameraAperture;
+					cbDest->cameraFocalLength = Config::g_pathtracing_cameraFocalLength;
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
 					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
 					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;

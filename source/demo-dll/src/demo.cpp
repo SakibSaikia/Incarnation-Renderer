@@ -420,7 +420,16 @@ void Demo::UpdateUI(float deltaTime)
 		if (ImGui::CollapsingHeader("Path Tracing"))
 		{
 			ImGui::Checkbox("Pathtracing", &Config::g_pathTrace);
-			ImGui::SliderInt("Max. Sample Count", (int*) & Config::g_maxSampleCount, 1, 1024);
+
+			bool bReset = false;
+			bReset |= ImGui::SliderInt("Max. Sample Count", (int*) &Config::g_maxSampleCount, 1, 1024);
+			bReset |= ImGui::SliderFloat("Camera Aperture", &Config::g_pathtracing_cameraAperture, 0.f, 0.1f);
+			bReset |= ImGui::SliderFloat("Camera Focal Length", &Config::g_pathtracing_cameraFocalLength, 1.f, 15.f);
+
+			if (bReset)
+			{
+				Demo::ResetPathtraceAccumulation();
+			}
 		}
 
 		// -----------------------------------------------------------------------------------------------------------------------------------------
