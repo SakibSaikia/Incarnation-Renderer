@@ -5,11 +5,12 @@ Experimetal rendering engine for loading and displaying Gltf models as shown bel
 ![image](https://user-images.githubusercontent.com/8186559/132597501-5a13ab40-7f4c-40af-926a-332e30fe29bb.png)
 
 ## Features
+* Supports both Path Tracing and Rasterization 
 * Physically Based Rendering
 * Image Based Lighting using Split Sum Approximation
 * Job-based renderer with parallel recording and submission
 * Normalmap and Roughness map filtering using von Mises-Fisher convolution
-* MSAA
+* Temporal Anti-Aliasing
 
 ## Build
 This project uses [Cmake with Visual Studio](https://docs.microsoft.com/en-us/cpp/build/cmake-projects-in-visual-studio?view=msvc-160). 
