@@ -178,14 +178,14 @@ namespace Demo
 	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
 	uint32_t s_pathtraceCurrentSampleIndex = 1;
-	bool s_pauseRendering = true;
+	bool s_suspendRendering = true;
 
 	std::vector<std::wstring> s_modelList;
 	std::vector<std::wstring> s_hdriList;
 
-	bool IsRenderingPaused()
+	bool IsRenderingSuspended()
 	{
-		return s_pauseRendering;
+		return s_suspendRendering;
 	}
 
 	const FScene* GetScene()
@@ -211,14 +211,14 @@ class ScopedPauseRendering
 public:
 	ScopedPauseRendering()
 	{
-		Demo::s_pauseRendering = true;
+		Demo::s_suspendRendering = true;
 		RenderBackend12::FlushGPU();
 	}
 
 	~ScopedPauseRendering()
 	{
 		RenderBackend12::FlushGPU();
-		Demo::s_pauseRendering = false;
+		Demo::s_suspendRendering = false;
 	}
 };
 
@@ -342,13 +342,18 @@ void Demo::HeartbeatThread()
 {
 	while (true)
 	{
-		RenderBackend12::RecompileModifiedShaders();
+		if (!s_suspendRendering)
+		{
+			RenderBackend12::RecompileModifiedShaders();
+		}
+
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	}
 }
 
 void Demo::Teardown(HWND& windowHandle)
 {
+	s_suspendRendering = true;
 	RenderBackend12::FlushGPU();
 
 	s_scene.Clear();

@@ -153,7 +153,7 @@ private:
 
 namespace Demo
 {
-	bool IsRenderingPaused();
+	bool IsRenderingSuspended();
 	const FScene* GetScene();
 	const FView* GetView();
 	uint32_t& GetCurrentPathtraceSampleIndex();

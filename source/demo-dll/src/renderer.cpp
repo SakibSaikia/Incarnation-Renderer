@@ -176,7 +176,7 @@ void Demo::TeardownRenderer()
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	if (Demo::IsRenderingPaused())
+	if (Demo::IsRenderingSuspended())
 		return;
 
 	SCOPED_CPU_EVENT("render", PIX_COLOR_DEFAULT);
