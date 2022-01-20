@@ -14,7 +14,7 @@ GlobalRootSignature k_globalRootsig =
 
 TriangleHitGroup k_hitGroup =
 {
-    "",                                 // AnyHit Shader
+    "ahsMain",                          // AnyHit Shader
     "chsMain",                          // ClosestHit Shader
 };
 
@@ -212,6 +212,40 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         }
     }
 #endif
+}
+
+[shader("anyhit")]
+void ahsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    const int globalMeshAccessorsIndex = g_globalConstants.sceneMeshAccessorsIndex;
+    const int globalMeshBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
+    const int globalMaterialBufferIndex = g_globalConstants.sceneMaterialBufferIndex;
+
+    const FGpuPrimitive primitive = MeshMaterial::GetPrimitive(InstanceIndex(), GeometryIndex(), g_globalConstants.scenePrimitivesIndex, g_globalConstants.scenePrimitiveCountsIndex);
+
+    uint baseIndex = PrimitiveIndex() * primitive.m_indicesPerTriangle;
+    const uint3 indices = MeshMaterial::GetUint3(baseIndex, primitive.m_indexAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex);
+
+    float2 vertexUVs[3] =
+    {
+        MeshMaterial::GetFloat2(indices.x, primitive.m_uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat2(indices.y, primitive.m_uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex),
+        MeshMaterial::GetFloat2(indices.z, primitive.m_uvAccessor, globalMeshAccessorsIndex, globalMeshBufferViewsIndex)
+    };
+
+    float2 uv = HitAttribute(vertexUVs, attr.barycentrics);
+    FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, globalMaterialBufferIndex);
+
+    // Alpha test
+    if (material.m_baseColorTextureIndex != -1)
+    {
+        Texture2D baseColorTex = ResourceDescriptorHeap[material.m_baseColorTextureIndex];
+        float alpha = baseColorTex.SampleLevel(g_trilinearSampler, uv, 0).a;
+        if (alpha < 0.5f)
+        {
+            IgnoreHit();
+        }
+    }
 }
 
 [shader("miss")]

@@ -36,6 +36,7 @@ namespace RenderJob
 			// Define lib exports
 			D3D12_EXPORT_DESC exports[] = {
 				{L"rgsMain", nullptr, D3D12_EXPORT_FLAG_NONE },
+				{L"ahsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"chsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"msMain", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"ahsShadow",nullptr, D3D12_EXPORT_FLAG_NONE },
