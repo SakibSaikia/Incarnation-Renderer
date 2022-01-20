@@ -177,7 +177,6 @@ namespace Demo
 	FTextureCache s_textureCache;
 	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
-	uint32_t s_pathtraceCurrentSampleIndex = 1;
 	bool s_suspendRendering = true;
 
 	std::vector<std::wstring> s_modelList;
@@ -196,11 +195,6 @@ namespace Demo
 	const FView* GetView()
 	{
 		return &s_view;
-	}
-
-	uint32_t& GetCurrentPathtraceSampleIndex()
-	{
-		return s_pathtraceCurrentSampleIndex;
 	}
 
 	void UpdateUI(float deltaTime);
@@ -319,13 +313,20 @@ void Demo::Tick(float deltaTime)
 		// Mouse rotation but as applied in view space
 		Matrix rotation = Matrix::Identity;
 
-		rotX -= s_controller.RotateSceneX();
+		float newRotX = s_controller.RotateSceneX();
+		float newRotY = s_controller.RotateSceneY();
+		if (newRotX != 0.f || newRotY != 0.f)
+		{
+			Demo::ResetPathtraceAccumulation();
+		}
+
+		rotX -= newRotX;
 		if (rotX != 0.f)
 		{
 			rotation *= Matrix::CreateFromAxisAngle(s_view.m_up, rotX);
 		}
 
-		rotY -= s_controller.RotateSceneY();
+		rotY -= newRotY;
 		if (rotY != 0.f)
 		{
 			rotation *= Matrix::CreateFromAxisAngle(s_view.m_right, rotY);
@@ -1755,8 +1756,7 @@ void FView::UpdateViewTransform()
 	m_viewTransform(3, 3) = 1.0f;
 
 	// If the view is updated reset the pathtrace sample index
-	uint32_t& sampleIndex = Demo::GetCurrentPathtraceSampleIndex();
-	sampleIndex = 1;
+	Demo::ResetPathtraceAccumulation();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------

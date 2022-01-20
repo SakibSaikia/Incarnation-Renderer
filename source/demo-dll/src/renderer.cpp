@@ -17,6 +17,7 @@ namespace Demo
 	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
 	Matrix s_prevViewProjectionTransform;
+	uint32_t s_pathtraceCurrentSampleIndex = 1;
 }
 
 // Render Jobs
@@ -197,13 +198,12 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	if (Config::g_pathTrace)
 	{
-		uint32_t& sampleIndex = Demo::GetCurrentPathtraceSampleIndex();
-		if (sampleIndex < Config::g_maxSampleCount)
+		if (s_pathtraceCurrentSampleIndex < Config::g_maxSampleCount)
 		{
 			RenderJob::PathTracingDesc pathtraceDesc = {};
 			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
 			pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
-			pathtraceDesc.currentSampleIndex = sampleIndex;
+			pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
 			pathtraceDesc.resX = resX;
 			pathtraceDesc.resY = resY;
 			pathtraceDesc.scene = GetScene();
@@ -211,7 +211,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 			// Accumulate samples
-			sampleIndex++;
+			s_pathtraceCurrentSampleIndex++;
 		}
 
 		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
@@ -296,4 +296,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	joinTask.wait();
 
 	RenderBackend12::PresentDisplay();
+}
+
+void Demo::ResetPathtraceAccumulation()
+{
+	s_pathtraceCurrentSampleIndex = 1;
 }

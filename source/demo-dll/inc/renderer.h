@@ -156,7 +156,7 @@ namespace Demo
 	bool IsRenderingSuspended();
 	const FScene* GetScene();
 	const FView* GetView();
-	uint32_t& GetCurrentPathtraceSampleIndex();
+	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
 	void TeardownRenderer();
 }
