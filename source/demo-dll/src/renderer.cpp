@@ -190,7 +190,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	std::unique_ptr<FRenderTexture> hdrRasterSceneColor = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster", hdrFormat, resX, resY, 1, 1, 1);
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", hdrFormat, resX, resY, 1, 1, true, true);
+	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, true, true);
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));

@@ -102,6 +102,7 @@ float CMJ_RandFloat(uint i, uint p)
 }
 
 // Returns a 2D sample from a particular pattern using correlated multi-jittered sampling [Kensler 2013]
+// See: https://graphics.pixar.com/library/MultiJitteredSampling/paper.pdf
 float2 CorrelatedMultiJitteredSampling(uint sampleIdx, uint numSamplesX, uint numSamplesY, uint pattern)
 {
     uint N = numSamplesX * numSamplesY;

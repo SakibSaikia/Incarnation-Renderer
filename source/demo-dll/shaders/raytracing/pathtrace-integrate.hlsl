@@ -24,8 +24,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         RWTexture2D<float3> historyBuffer = ResourceDescriptorHeap[g_constants.historyBufferUavIndex];
         float3 historyColor = historyBuffer[dispatchThreadId.xy];
 
-        //float3 avgColor = ((g_constants.historyFrameCount - 1.f) * historyColor + currentColor) / (float)g_constants.historyFrameCount;
-        float3 avgColor = g_constants.historyFrameCount <= 1 ? currentColor : currentColor * 0.1 + historyColor * 0.9;
+        float3 avgColor = ((g_constants.historyFrameCount - 1.f) * historyColor + currentColor) / (float)g_constants.historyFrameCount;
+        //float3 avgColor = g_constants.historyFrameCount <= 1 ? currentColor : currentColor * 0.1 + historyColor * 0.9;
         historyBuffer[uint2(dispatchThreadId.x, dispatchThreadId.y)] = avgColor;
     }
 }
