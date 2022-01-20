@@ -133,6 +133,7 @@ namespace RenderJob
 				int scenePrimitivesIndex;
 				int scenePrimitiveCountsIndex;
 				uint32_t currentSampleIndex;
+				uint32_t sqrtSampleCount;
 			};
 
 			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
@@ -154,6 +155,7 @@ namespace RenderJob
 					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
+					cbDest->sqrtSampleCount = std::sqrt(Config::g_maxSampleCount);
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

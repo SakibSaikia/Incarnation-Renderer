@@ -1,7 +1,7 @@
 #include "raytracing/common.hlsli"
 #include "lighting/common.hlsli"
 
-#define MAX_RECURSION_DEPTH 8
+#define MAX_RECURSION_DEPTH 4
 
 GlobalRootSignature k_globalRootsig =
 {
@@ -64,6 +64,7 @@ struct GlobalCbLayout
     int scenePrimitivesIndex;
     int scenePrimitiveCountsIndex;
     uint currentSampleIndex;
+    uint sqrtSampleCount;
 
 };
 
@@ -81,7 +82,7 @@ void rgsMain()
     const uint sampleIdx = g_globalConstants.currentSampleIndex;
     const uint2 pixelCoord = DispatchRaysIndex().xy;
     const uint pixelIdx = pixelCoord.y * DispatchRaysDimensions().x + pixelCoord.x;
-    float2 jitter = SamplePoint(pixelIdx, sampleIdx, sampleSetIdx);
+    float2 jitter = SamplePoint(pixelIdx, sampleIdx, sampleSetIdx, g_globalConstants.sqrtSampleCount);
 
     RayDesc ray = GenerateCameraRay(DispatchRaysIndex().xy + jitter, g_globalConstants.cameraPosition, g_globalConstants.projectionToWorld);
     RayPayload payload;
@@ -190,9 +191,21 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     {
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
         float3 outAttenuation;
-        RayDesc secondaryRay = GenerateIndirectRadianceRay(hitPosition, N, F, matInfo.metallic, roughness, albedo, tangentToWorld, payload.pixelIndex, g_globalConstants.currentSampleIndex, payload.sampleSetIndex, outAttenuation);
-        payload.attenuation *= outAttenuation;
+        RayDesc secondaryRay = GenerateIndirectRadianceRay(
+            hitPosition, 
+            N, 
+            F, 
+            matInfo.metallic, 
+            roughness, 
+            albedo, 
+            tangentToWorld, 
+            payload.pixelIndex, 
+            g_globalConstants.currentSampleIndex, 
+            payload.sampleSetIndex,
+            g_globalConstants.sqrtSampleCount,
+            outAttenuation);
 
+        payload.attenuation *= outAttenuation;
         if (any(payload.attenuation) > 0.001)
         {
             TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);

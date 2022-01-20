@@ -197,28 +197,28 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	if (Config::g_pathTrace)
 	{
-		int cycledArrayIndex = frameIndex % Config::g_whiteNoiseArrayCount;
-
 		uint32_t& sampleIndex = Demo::GetCurrentPathtraceSampleIndex();
+		if (sampleIndex < Config::g_maxSampleCount)
+		{
+			RenderJob::PathTracingDesc pathtraceDesc = {};
+			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
+			pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
+			pathtraceDesc.currentSampleIndex = sampleIndex;
+			pathtraceDesc.resX = resX;
+			pathtraceDesc.resY = resY;
+			pathtraceDesc.scene = GetScene();
+			pathtraceDesc.view = GetView();
+			renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
-		RenderJob::PathTracingDesc pathtraceDesc = {};
-		pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
-		pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
-		pathtraceDesc.currentSampleIndex = sampleIndex;
-		pathtraceDesc.resX = resX;
-		pathtraceDesc.resY = resY;
-		pathtraceDesc.scene = GetScene();
-		pathtraceDesc.view = GetView();
-		renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
+			RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+			tonemapDesc.source = Demo::s_pathtraceHistoryBuffer.get();
+			tonemapDesc.target = RenderBackend12::GetBackBuffer();
+			tonemapDesc.format = Config::g_backBufferFormat;
+			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
-		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
-		tonemapDesc.source = Demo::s_pathtraceHistoryBuffer.get();
-		tonemapDesc.target = RenderBackend12::GetBackBuffer();
-		tonemapDesc.format = Config::g_backBufferFormat;
-		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
-
-		// Accumulate samples
-		sampleIndex++;
+			// Accumulate samples
+			sampleIndex++;
+		}
 	}
 	else
 	{

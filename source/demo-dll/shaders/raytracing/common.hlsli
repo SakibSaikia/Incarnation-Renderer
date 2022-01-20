@@ -3,12 +3,12 @@
 
 #include "sampling.hlsli"
 
-static float2 SamplePoint(uint pixelIdx, uint sampleIdx, inout uint setIdx)
+static float2 SamplePoint(uint pixelIdx, uint sampleIdx, inout uint setIdx, uint sqrtSampleCount)
 {
     const uint numPixels = DispatchRaysDimensions().x * DispatchRaysDimensions().y;
     const uint permutationIdx = setIdx * numPixels + pixelIdx;
     setIdx += 1;
-    return CorrelatedMultiJitteredSampling(sampleIdx, 1024, 1024, permutationIdx);
+    return CorrelatedMultiJitteredSampling(sampleIdx, sqrtSampleCount, sqrtSampleCount, permutationIdx);
 }
 
 static float SampleRand(uint pixelIdx, uint sampleIdx, inout uint setIdx)
@@ -51,6 +51,7 @@ RayDesc GenerateIndirectRadianceRay(
     uint pixelIndex,
     uint sampleIndex,
     uint sampleSetIndex,
+    uint sqrtSampleCount,
     out float3 outAttenuation)
 {
     RayDesc defaultRay = (RayDesc)0;
@@ -60,7 +61,7 @@ RayDesc GenerateIndirectRadianceRay(
     {
         //if (length(reflectance) > randomNoise)
         {
-            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex);
+            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
             float3 rayDir = ImportanceSampleGGX(ggxSample, roughness, reflectedRayDir);
 
@@ -79,7 +80,7 @@ RayDesc GenerateIndirectRadianceRay(
 
         if (length(reflectance) > reflectionProbability)
         {
-            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex);
+            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
             float3 rayDir = ImportanceSampleGGX(ggxSample, roughness, reflectedRayDir);
 
@@ -93,7 +94,7 @@ RayDesc GenerateIndirectRadianceRay(
         }
         else
         {
-            float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex);
+            float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
             float3 rayDir = SampleDirectionHemisphere(hemisphereSample);
             rayDir = normalize(mul(rayDir, tangentToWorld));
 
