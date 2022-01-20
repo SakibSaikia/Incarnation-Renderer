@@ -471,6 +471,7 @@ void Demo::UpdateUI(float deltaTime)
 					{
 						curHdriIndex = n;
 						Config::g_environmentFilename = s_hdriList[n];
+						Demo::ResetPathtraceAccumulation();
 					}
 
 					if (bSelected)
