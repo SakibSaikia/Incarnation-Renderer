@@ -56,18 +56,29 @@ struct FMaterial
 	float m_metallicFactor;
 	float m_roughnessFactor;
 	float m_aoStrength;
+	float m_transmissionFactor;
+	float m_clearcoatFactor;
+	float m_clearcoarRoughnessFactor;
 
 	int m_emissiveTextureIndex;
 	int m_baseColorTextureIndex;
 	int m_metallicRoughnessTextureIndex;
 	int m_normalTextureIndex;
 	int m_aoTextureIndex;
+	int m_transmissionTextureIndex;
+	int m_clearcoatTextureIndex;
+	int m_clearcoatRoughnessTextureIndex;
+	int m_clearcoatNormalTextureIndex;
 
 	int m_emissiveSamplerIndex;
 	int m_baseColorSamplerIndex;
 	int m_metallicRoughnessSamplerIndex;
 	int m_normalSamplerIndex;
 	int m_aoSamplerIndex;
+	int m_transmissionSamplerIndex;
+	int m_clearcoatSamplerIndex;
+	int m_clearcoatRoughnessSamplerIndex;
+	int m_clearcoatNormalSamplerIndex;
 
 	int m_alphaMode;
 };

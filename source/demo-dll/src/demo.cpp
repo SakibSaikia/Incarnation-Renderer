@@ -1211,15 +1211,10 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 	mat.m_normalSamplerIndex = material.normalTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.normalTexture.index].sampler]) : -1;
 	mat.m_aoSamplerIndex = material.occlusionTexture.index != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[material.occlusionTexture.index].sampler]) : -1;
 
-	mat.m_alphaMode = AlphaMode::Opaque;
-	if (material.alphaMode == "MASK") 
-		mat.m_alphaMode = AlphaMode::Masked;
-	else if (material.alphaMode == "BLEND") 
-		mat.m_alphaMode = AlphaMode::Blend;
-
-	// If a normalmap and roughness map are specified, prefilter to reduce specular aliasing
+	// VMF filtering of Normal-Roughness maps
 	if (material.normalTexture.index != -1 && material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1)
 	{
+		// If a normalmap and roughness map are specified, prefilter together to reduce specular aliasing
 		const tinygltf::Image& normalmapImage = model.images[model.textures[material.normalTexture.index].source];
 		const tinygltf::Image& metallicRoughnessImage = model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source];
 
@@ -1236,9 +1231,88 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 	}
 	else
 	{
+		// Otherwise filter individually
 		mat.m_metallicRoughnessTextureIndex = material.pbrMetallicRoughness.metallicRoughnessTexture.index != -1 ? LoadTexture(model.images[model.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index].source], DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_BC5_UNORM) : -1; // Note that this uses a swizzled format to extract the G and B channels for metal/roughness
 		mat.m_normalTextureIndex = material.normalTexture.index != -1 ? LoadTexture(model.images[model.textures[material.normalTexture.index].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC5_SNORM) : -1;
 	}
+
+	// ## TRANSMISSION ##
+	mat.m_transmissionFactor = 0.f;
+	mat.m_transmissionTextureIndex = -1;
+	mat.m_transmissionSamplerIndex = -1;
+	auto transmissionIt = material.extensions.find("KHR_materials_transmission");
+	if (transmissionIt != material.extensions.cend())
+	{
+		mat.m_transmissionFactor = transmissionIt->second.Has("transmissionFactor") ? transmissionIt->second.Get("transmissionFactor").GetNumberAsDouble() : 0.f;
+
+		if (transmissionIt->second.Has("transmissionTexture"))
+		{
+			int texId = transmissionIt->second.Get("transmissionTexture").Get("index").GetNumberAsInt();
+			mat.m_transmissionTextureIndex = LoadTexture(model.images[model.textures[texId].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC4_UNORM);
+			mat.m_transmissionSamplerIndex = Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[texId].sampler]);
+		}
+	}
+
+	// ## CLEARCOAT ##
+	mat.m_clearcoatFactor = 0.f;
+	mat.m_clearcoarRoughnessFactor = 0.f;
+	mat.m_clearcoatTextureIndex = -1;
+	mat.m_clearcoatRoughnessTextureIndex = -1;
+	mat.m_clearcoatNormalTextureIndex = -1;
+	mat.m_clearcoatSamplerIndex = -1;
+	mat.m_clearcoatRoughnessSamplerIndex = -1;
+	mat.m_clearcoatNormalSamplerIndex = -1;
+	auto clearcoatIt = material.extensions.find("KHR_materials_clearcoat");
+	if (clearcoatIt != material.extensions.cend())
+	{
+		mat.m_clearcoatFactor = clearcoatIt->second.Has("clearcoatFactor") ? clearcoatIt->second.Get("clearcoatFactor").GetNumberAsDouble() : 0.f;
+		mat.m_clearcoarRoughnessFactor = clearcoatIt->second.Has("clearcoatRoughnessFactor") ? clearcoatIt->second.Get("clearcoatRoughnessFactor").GetNumberAsDouble() : 0.f;
+
+		if (clearcoatIt->second.Has("clearcoatTexture"))
+		{
+			int texId = clearcoatIt->second.Get("clearcoatTexture").Get("index").GetNumberAsInt();
+			mat.m_clearcoatTextureIndex = LoadTexture(model.images[model.textures[texId].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC4_UNORM);
+			mat.m_clearcoatSamplerIndex = Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[texId].sampler]);
+		}
+
+		int clearcoatRoughnessTexId = clearcoatIt->second.Has("clearcoatRoughnessTexture") ? clearcoatIt->second.Get("clearcoatRoughnessTexture").Get("index").GetNumberAsInt() : -1;
+		int clearcoatNormalTexId = clearcoatIt->second.Has("clearcoatNormalTexture") ? clearcoatIt->second.Get("clearcoatNormalTexture").Get("index").GetNumberAsInt() : -1;
+
+		// VMF filtering of Clearcoat Normal-Roughness maps
+		if (clearcoatNormalTexId != -1 && clearcoatRoughnessTexId != -1)
+		{
+			// If a normalmap and roughness map are specified, prefilter together to reduce specular aliasing
+			const tinygltf::Image& normalmapImage = model.images[model.textures[clearcoatNormalTexId].source];
+			const tinygltf::Image& roughnessImage = model.images[model.textures[clearcoatRoughnessTexId].source];
+
+			// Skip pre-filtering if a cached version is available, which means that they are already pre-filtered
+			if (normalmapImage.image.empty() && roughnessImage.image.empty())
+			{
+				mat.m_clearcoatRoughnessTextureIndex = LoadTexture(roughnessImage);
+				mat.m_clearcoatNormalTextureIndex = LoadTexture(normalmapImage);
+			}
+			else
+			{
+				std::tie(mat.m_clearcoatNormalTextureIndex, mat.m_clearcoatRoughnessTextureIndex) = PrefilterNormalRoughnessTextures(model.images[model.textures[clearcoatNormalTexId].source], model.images[model.textures[clearcoatRoughnessTexId].source]);
+			}
+		}
+		else
+		{
+			// Otherwise filter individually
+			mat.m_clearcoatRoughnessTextureIndex = clearcoatRoughnessTexId != -1 ? LoadTexture(model.images[model.textures[clearcoatRoughnessTexId].source], DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_BC5_UNORM) : -1;
+			mat.m_clearcoatNormalTextureIndex = clearcoatNormalTexId != -1 ? LoadTexture(model.images[model.textures[clearcoatNormalTexId].source], DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC5_SNORM) : -1;
+		}
+
+		mat.m_clearcoatRoughnessSamplerIndex = clearcoatRoughnessTexId != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[clearcoatRoughnessTexId].sampler]) : -1;
+		mat.m_clearcoatNormalSamplerIndex = clearcoatNormalTexId != -1 ? Demo::s_samplerCache.CacheSampler(model.samplers[model.textures[clearcoatNormalTexId].sampler]) : -1;
+	}
+
+	// ## BLEND MODE ##
+	mat.m_alphaMode = AlphaMode::Opaque;
+	if (material.alphaMode == "MASK") 
+		mat.m_alphaMode = AlphaMode::Masked;
+	else if (material.alphaMode == "BLEND") 
+		mat.m_alphaMode = AlphaMode::Blend;
 
 	return mat;
 }
