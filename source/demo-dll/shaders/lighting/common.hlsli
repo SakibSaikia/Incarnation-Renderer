@@ -151,7 +151,7 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matI
 
 	const float3 L = light.positionOrDirection;
 	float lightVisibility = 1.f;
-	float3 radiance = 0.f;
+	float3 radiance = matInfo.emissive * 20000;
 
 	if (light.shadowcasting)
 	{
