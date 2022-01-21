@@ -1060,7 +1060,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				primitiveDescs.push_back(geometry);
 			}
 
-			// Build BLAS
+			// Build BLAS - One per mesh entity
 			{
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blasInputsDesc = {};
 				blasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
@@ -1094,12 +1094,19 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 			}
 		}
 
+		// Mesh is considered double sided if any of the primitives are
+		bool bDoubleSided = false;
+		for (const auto& primitive : mesh.m_primitives)
+		{
+			bDoubleSided |= m_materialList[primitive.m_materialIndex].m_doubleSided;
+		}
+
 		// Create D3D12_RAYTRACING_INSTANCE_DESC for each mesh
 		D3D12_RAYTRACING_INSTANCE_DESC instance = {};
 		instance.InstanceID = 0;
 		instance.InstanceContributionToHitGroupIndex = 0;
 		instance.InstanceMask = 1;
-		instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+		instance.Flags = bDoubleSided ? D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE : D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 		instance.AccelerationStructure = m_blasList[mesh.m_name]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
 		// Transpose and convert to 3x4 matrix
@@ -1313,6 +1320,9 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 		mat.m_alphaMode = AlphaMode::Masked;
 	else if (material.alphaMode == "BLEND") 
 		mat.m_alphaMode = AlphaMode::Blend;
+
+	// ## DOUBLE SIDED ##
+	mat.m_doubleSided = material.doubleSided;
 
 	return mat;
 }

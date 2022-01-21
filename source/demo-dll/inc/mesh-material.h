@@ -81,6 +81,7 @@ struct FMaterial
 	int m_clearcoatNormalSamplerIndex;
 
 	int m_alphaMode;
+	bool m_doubleSided;
 };
 
 #ifndef __cplusplus
