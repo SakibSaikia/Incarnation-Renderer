@@ -62,16 +62,16 @@ namespace RenderJob
 				sizeof(FrameCbLayout),
 				cmdList,
 				[passDesc](uint8_t* pDest)
-			{
-				auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
-				cbDest->sceneRotation = passDesc.scene->m_rootTransform;
-				cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
-				cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
-				cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
-				cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
-				cbDest->sceneProbeData = passDesc.scene->m_globalLightProbe;
-				cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-			});
+				{
+					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
+					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
+					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
+					cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
+					cbDest->sceneProbeData = passDesc.scene->m_globalLightProbe;
+					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
+				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -89,13 +89,13 @@ namespace RenderJob
 				sizeof(ViewCbLayout),
 				cmdList,
 				[passDesc](uint8_t* pDest)
-			{
-				auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-				cbDest->viewTransform = passDesc.view->m_viewTransform;
-				cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
-				cbDest->eyePos = passDesc.view->m_position;
-				cbDest->exposure = Config::g_exposure;
-			});
+				{
+					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
+					cbDest->viewTransform = passDesc.view->m_viewTransform;
+					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+					cbDest->eyePos = passDesc.view->m_position;
+					cbDest->exposure = Config::g_exposure;
+				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
