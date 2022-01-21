@@ -187,12 +187,6 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float NoV = saturate(dot(N, V));
     float NoH = saturate(dot(N, H));
     float VoH = saturate(dot(V, H));
-    float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-    float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
-    float roughness = matInfo.roughness;
-
-    float D = D_GGX(NoH, roughness);
-    float3 F = F_Schlick(VoH, F0);
 
 #if DIRECT_LIGHTING
     FLight sun;
@@ -202,7 +196,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     sun.shadowcasting = true;
 
     payload.pathLength += 1;
-    payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, albedo, roughness, N, D, F, NoV, NoH, VoH, g_sceneBvh);
+    payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, matInfo, N, NoV, NoH, VoH, g_sceneBvh);
 
     if (payload.pathLength < MAX_RECURSION_DEPTH)
     {
@@ -210,11 +204,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         float3 outAttenuation;
         RayDesc secondaryRay = GenerateIndirectRadianceRay(
             hitPosition, 
-            N, 
-            F, 
-            matInfo.metallic, 
-            roughness, 
-            albedo, 
+            N,
+            VoH,
+            matInfo, 
             tangentToWorld, 
             payload.pixelIndex, 
             g_globalConstants.currentSampleIndex, 

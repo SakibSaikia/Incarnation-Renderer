@@ -58,7 +58,7 @@ struct FMaterial
 	float m_aoStrength;
 	float m_transmissionFactor;
 	float m_clearcoatFactor;
-	float m_clearcoarRoughnessFactor;
+	float m_clearcoatRoughnessFactor;
 
 	int m_emissiveTextureIndex;
 	int m_baseColorTextureIndex;

@@ -1,7 +1,7 @@
 #ifndef __RAYTRACING_COMMON_HLSLI_
 #define __RAYTRACING_COMMON_HLSLI_
 
-#include "sampling.hlsli"
+#include "lighting/common.hlsli"
 
 static float2 SamplePoint(uint pixelIdx, uint sampleIdx, inout uint setIdx, uint sqrtSampleCount)
 {
@@ -53,10 +53,8 @@ RayDesc GenerateCameraRay(float2 index, float4x4 cameraMatrix, float4x4 projecti
 RayDesc GenerateIndirectRadianceRay(
     float3 hitPosition,
     float3 normal,
-    float3 reflectance,
-    float metalness,
-    float roughness,
-    float3 albedo,
+    float VoH,
+    FMaterialProperties matInfo,
     float3x3 tangentToWorld,
     uint pixelIndex,
     uint sampleIndex,
@@ -64,23 +62,27 @@ RayDesc GenerateIndirectRadianceRay(
     uint sqrtSampleCount,
     out float3 outAttenuation)
 {
+    float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
+    float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+    float3 F = F_Schlick(VoH, F0);
+
     RayDesc defaultRay = (RayDesc)0;
     outAttenuation = 0.f;
 
-    if (metalness > 0.5) // Metal
+    if (matInfo.metallic > 0.5) // Metal
     {
         //if (length(reflectance) > randomNoise)
         {
             float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
-            float3 rayDir = ImportanceSampleGGX(ggxSample, roughness, reflectedRayDir);
+            float3 rayDir = ImportanceSampleGGX(ggxSample, matInfo.roughness, reflectedRayDir);
 
             RayDesc ray;
             ray.Origin = hitPosition;
             ray.Direction = normalize(rayDir);
             ray.TMin = 0.001;
             ray.TMax = 10000.0;
-            outAttenuation = reflectance;
+            outAttenuation = F;
             return ray;
         }
     }
@@ -88,18 +90,18 @@ RayDesc GenerateIndirectRadianceRay(
     {
         float reflectionProbability = SampleRand(pixelIndex, sampleIndex, sampleSetIndex);
 
-        if (length(reflectance) > reflectionProbability)
+        if (length(F) > reflectionProbability)
         {
             float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
             float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
-            float3 rayDir = ImportanceSampleGGX(ggxSample, roughness, reflectedRayDir);
+            float3 rayDir = ImportanceSampleGGX(ggxSample, matInfo.roughness, reflectedRayDir);
 
             RayDesc ray;
             ray.Origin = hitPosition;
             ray.Direction = normalize(rayDir);
             ray.TMin = 0.001;
             ray.TMax = 10000.0;
-            outAttenuation = reflectance;
+            outAttenuation = F;
             return ray;
         }
         else

@@ -1255,7 +1255,7 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 
 	// ## CLEARCOAT ##
 	mat.m_clearcoatFactor = 0.f;
-	mat.m_clearcoarRoughnessFactor = 0.f;
+	mat.m_clearcoatRoughnessFactor = 0.f;
 	mat.m_clearcoatTextureIndex = -1;
 	mat.m_clearcoatRoughnessTextureIndex = -1;
 	mat.m_clearcoatNormalTextureIndex = -1;
@@ -1266,7 +1266,7 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 	if (clearcoatIt != material.extensions.cend())
 	{
 		mat.m_clearcoatFactor = clearcoatIt->second.Has("clearcoatFactor") ? clearcoatIt->second.Get("clearcoatFactor").GetNumberAsDouble() : 0.f;
-		mat.m_clearcoarRoughnessFactor = clearcoatIt->second.Has("clearcoatRoughnessFactor") ? clearcoatIt->second.Get("clearcoatRoughnessFactor").GetNumberAsDouble() : 0.f;
+		mat.m_clearcoatRoughnessFactor = clearcoatIt->second.Has("clearcoatRoughnessFactor") ? clearcoatIt->second.Get("clearcoatRoughnessFactor").GetNumberAsDouble() : 0.f;
 
 		if (clearcoatIt->second.Has("clearcoatTexture"))
 		{

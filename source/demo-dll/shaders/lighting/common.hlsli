@@ -30,6 +30,11 @@ struct FMaterialProperties
 	float roughness;
 	float ao;
 	float aoblend;
+	float transmission;
+	float clearcoat;
+	float clearcoatRoughness;
+	bool bHasClearcoatNormalmap;
+	float3 clearcoatNormalmap;
 };
 
 struct FLight
@@ -94,6 +99,7 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 	}
 
 	// Ambient Occlusion
+	output.aoblend = mat.m_aoStrength;
 	output.ao = 1.f;
 	if (mat.m_aoTextureIndex != -1)
 	{
@@ -101,12 +107,48 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 		output.ao = TEX_SAMPLE(aoTex, s, uv).r;
 	}
 
-	output.aoblend = mat.m_aoStrength;
+	// Transmission
+	output.transmission = mat.m_transmissionFactor;
+	if (mat.m_transmissionTextureIndex != -1)
+	{
+		Texture2D transmissionTex = ResourceDescriptorHeap[mat.m_transmissionTextureIndex];
+		output.transmission *= TEX_SAMPLE(transmissionTex, s, uv).r;
+	}
+
+	// Clearcoat
+	output.clearcoat = mat.m_clearcoatFactor;
+	if (mat.m_clearcoatTextureIndex != -1)
+	{
+		Texture2D clearcoatTex = ResourceDescriptorHeap[mat.m_clearcoatTextureIndex];
+		output.clearcoat *= TEX_SAMPLE(clearcoatTex, s, uv).r;
+	}
+
+	output.clearcoatRoughness = mat.m_clearcoatRoughnessFactor;
+	if (mat.m_clearcoatRoughnessTextureIndex != -1)
+	{
+		Texture2D clearcoatRoughnessTex = ResourceDescriptorHeap[mat.m_clearcoatRoughnessTextureIndex];
+		output.clearcoatRoughness *= TEX_SAMPLE(clearcoatRoughnessTex, s, uv).r;
+	}
+
+	output.bHasClearcoatNormalmap = mat.m_clearcoatNormalTextureIndex != -1;
+	if (output.bHasClearcoatNormalmap)
+	{
+		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_clearcoatNormalTextureIndex];
+		float2 normalXY = TEX_SAMPLE(normalmapTex, s, uv).rg;
+		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
+		output.clearcoatNormalmap = float3(normalXY, normalZ);
+	}
+
 	return output;
 }
 
-float3 GetDirectRadiance(FLight light, float3 worldPos, float3 albedo, float roughness, float3 N, float D, float3 F, float NoV, float NoH, float VoH, RaytracingAccelerationStructure sceneBvh)
+float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matInfo, float3 N, float NoV, float NoH, float VoH, RaytracingAccelerationStructure sceneBvh)
 {
+	float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
+	float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+	float D = D_GGX(NoH, matInfo.roughness);
+	float3 F = F_Schlick(VoH, F0);
+
 	const float3 L = light.positionOrDirection;
 	float lightVisibility = 1.f;
 	float3 radiance = 0.f;
@@ -140,7 +182,7 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, float3 albedo, float rou
 		float NoL = saturate(dot(N, L));
 		if (NoL > 0.f && NoV > 0.f)
 		{
-			float G = G_Smith_Direct(NoV, NoL, roughness);
+			float G = G_Smith_Direct(NoV, NoL, matInfo.roughness);
 
 			// Diffuse & Specular BRDF
 			float3 Fd = albedo * Fd_Lambert();

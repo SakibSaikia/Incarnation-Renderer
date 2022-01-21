@@ -140,7 +140,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	sun.intensity = 100000.f;
 	sun.shadowcasting = true;
 
-	radiance += GetDirectRadiance(sun, input.worldPos.xyz, albedo, roughness, N, D, F, NoV, NoH, VoH, sceneBvh);
+	radiance += GetDirectRadiance(sun, input.worldPos.xyz, p, N, NoV, NoH, VoH, sceneBvh);
 #endif
 
 	// Diffuse IBL
