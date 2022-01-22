@@ -99,76 +99,6 @@ namespace RenderJob
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
-			// PSO
-			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.NodeMask = 1;
-			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.get();
-			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = passDesc.format;
-			psoDesc.SampleDesc.Count = 1;
-			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-			// PSO - Shaders
-			{
-				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
-				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
-
-				std::wstringstream s;
-				s << L"LIGHTING_ONLY=" << (Config::g_lightingOnlyView ? L"1" : L"0") <<
-					L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0") <<
-					L" DIFFUSE_IBL=" << (Config::g_enableDiffuseIBL ? L"1" : L"0") <<
-					L" SPECULAR_IBL=" << (Config::g_enableSpecularIBL ? L"1" : L"0");
-
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
-
-				vs.pShaderBytecode = vsBlob->GetBufferPointer();
-				vs.BytecodeLength = vsBlob->GetBufferSize();
-				ps.pShaderBytecode = psBlob->GetBufferPointer();
-				ps.BytecodeLength = psBlob->GetBufferSize();
-			}
-
-			// PSO - Rasterizer State
-			{
-				D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
-				desc.FillMode = D3D12_FILL_MODE_SOLID;
-				desc.CullMode = D3D12_CULL_MODE_BACK;
-				desc.FrontCounterClockwise = TRUE;
-				desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-				desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-				desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-				desc.DepthClipEnable = TRUE;
-				desc.MultisampleEnable = FALSE;
-				desc.AntialiasedLineEnable = FALSE;
-				desc.ForcedSampleCount = 0;
-				desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-			}
-
-			// PSO - Blend State
-			{
-				D3D12_BLEND_DESC& desc = psoDesc.BlendState;
-				desc.AlphaToCoverageEnable = FALSE;
-				desc.IndependentBlendEnable = FALSE;
-				desc.RenderTarget[0].BlendEnable = FALSE;
-				desc.RenderTarget[0].LogicOpEnable = FALSE;
-				desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-			}
-
-			// PSO - Depth Stencil State
-			{
-				D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
-				desc.DepthEnable = TRUE;
-				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-				desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
-				desc.StencilEnable = FALSE;
-			}
-
-			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
-			d3dCmdList->SetPipelineState(pso);
-
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };
 			d3dCmdList->RSSetViewports(1, &viewport);
@@ -191,6 +121,78 @@ namespace RenderJob
 				for (const FMeshPrimitive& primitive : mesh.m_primitives)
 				{
 					d3dCmdList->IASetPrimitiveTopology(primitive.m_topology);
+
+					// PSO
+					D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+					psoDesc.NodeMask = 1;
+					psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+					psoDesc.pRootSignature = rootsig.get();
+					psoDesc.SampleMask = UINT_MAX;
+					psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+					psoDesc.NumRenderTargets = 1;
+					psoDesc.RTVFormats[0] = passDesc.format;
+					psoDesc.SampleDesc.Count = 1;
+					psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+					// PSO - Shaders
+					{
+						D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
+						D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
+
+						std::wstringstream s;
+						s << L"LIGHTING_ONLY=" << (Config::g_lightingOnlyView ? L"1" : L"0") <<
+							L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0") <<
+							L" DIFFUSE_IBL=" << (Config::g_enableDiffuseIBL ? L"1" : L"0") <<
+							L" SPECULAR_IBL=" << (Config::g_enableSpecularIBL ? L"1" : L"0");
+
+						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
+						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
+
+						vs.pShaderBytecode = vsBlob->GetBufferPointer();
+						vs.BytecodeLength = vsBlob->GetBufferSize();
+						ps.pShaderBytecode = psBlob->GetBufferPointer();
+						ps.BytecodeLength = psBlob->GetBufferSize();
+					}
+
+					// PSO - Rasterizer State
+					{
+						bool bDoubleSidedMaterial = passDesc.scene->m_materialList[primitive.m_materialIndex].m_doubleSided;
+
+						D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
+						desc.FillMode = D3D12_FILL_MODE_SOLID;
+						desc.CullMode = bDoubleSidedMaterial ? D3D12_CULL_MODE_NONE : D3D12_CULL_MODE_BACK;
+						desc.FrontCounterClockwise = TRUE;
+						desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+						desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+						desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+						desc.DepthClipEnable = TRUE;
+						desc.MultisampleEnable = FALSE;
+						desc.AntialiasedLineEnable = FALSE;
+						desc.ForcedSampleCount = 0;
+						desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+					}
+
+					// PSO - Blend State
+					{
+						D3D12_BLEND_DESC& desc = psoDesc.BlendState;
+						desc.AlphaToCoverageEnable = FALSE;
+						desc.IndependentBlendEnable = FALSE;
+						desc.RenderTarget[0].BlendEnable = FALSE;
+						desc.RenderTarget[0].LogicOpEnable = FALSE;
+						desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+					}
+
+					// PSO - Depth Stencil State
+					{
+						D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
+						desc.DepthEnable = TRUE;
+						desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+						desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+						desc.StencilEnable = FALSE;
+					}
+
+					D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
+					d3dCmdList->SetPipelineState(pso);
 
 					// Geometry constants
 					struct PrimitiveCbLayout
