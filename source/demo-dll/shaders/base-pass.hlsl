@@ -117,18 +117,6 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	}
 
 	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
-	float3 H = normalize(N + V);
-
-	float NoV = saturate(dot(N, V));
-	float NoH = saturate(dot(N, H));
-	float VoH = saturate(dot(V, H));
-	float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
-	float3 albedo = (1.f - p.metallic) * p.basecolor;
-	float roughness = p.roughness;
-
-	float D = D_GGX(NoH, roughness);
-	float3 F = F_Schlick(VoH, F0);
-	
 	float3 radiance = 0.f;
 	
 #if DIRECT_LIGHTING
@@ -140,7 +128,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	sun.intensity = 100000.f;
 	sun.shadowcasting = true;
 
-	radiance += GetDirectRadiance(sun, input.worldPos.xyz, p, N, NoV, NoH, VoH, sceneBvh);
+	radiance += GetDirectRadiance(sun, input.worldPos.xyz, p, N, V, sceneBvh);
 #endif
 
 	// Diffuse IBL
@@ -156,7 +144,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
 		}
 
-		float3 shDiffuse = (1.f - F) * albedo * Fd_Lambert() * ShIrradiance(N, shRadiance);
+		float3 albedo = (1.f - p.metallic) * (1.f - p.transmission) * p.basecolor;
+		float3 shDiffuse = /*(1.f - F) * */albedo * Fd_Lambert() * ShIrradiance(N, shRadiance);
 		radiance += lerp(shDiffuse, p.ao * shDiffuse, p.aoblend);
 	}
 #endif
@@ -171,12 +160,14 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 		float texWidth, texHeight, mipCount;
 		prefilteredEnvMap.GetDimensions(0, texWidth, texHeight, mipCount);
+		float NoV = saturate(dot(N, V));
 
-		if (dot(V, N) > 0.f)
+		if (NoV > 0.f)
 		{
+			float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
 			float3 R = normalize(reflect(-V, N));
-			float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * mipCount).rgb;
-			float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
+			float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, p.roughness * mipCount).rgb;
+			float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, p.roughness), 0.f).rg;
 			float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
 			radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
 		}

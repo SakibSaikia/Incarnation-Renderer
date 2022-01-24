@@ -111,6 +111,7 @@ void rgsMain()
 [shader("closesthit")]
 void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+    payload.pathLength += 1;
     const int globalMeshAccessorsIndex = g_globalConstants.sceneMeshAccessorsIndex;
     const int globalMeshBufferViewsIndex = g_globalConstants.sceneMeshBufferViewsIndex;
     const int globalMaterialBufferIndex = g_globalConstants.sceneMaterialBufferIndex;
@@ -175,13 +176,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         N = normalize(mul(matInfo.normalmap, tangentToWorld));
     }
 
-    float3 cameraPosition = g_globalConstants.cameraMatrix[3].xyz;
-    float3 V = normalize(cameraPosition - hitPosition);
-    float3 H = normalize(N + V);
-
-    float NoV = saturate(dot(N, V));
-    float NoH = saturate(dot(N, H));
-    float VoH = saturate(dot(V, H));
+    // For primary ray, this is the ray pointing back at the viewer.
+    // For secondary rays, this points back to the origin of the bounce (which is the viewer for that ray)
+    float3 V = -WorldRayDirection();
 
 #if DIRECT_LIGHTING
     FLight sun;
@@ -189,9 +186,8 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     sun.positionOrDirection = normalize(float3(1, 1, -1));
     sun.intensity = 100000.f;
     sun.shadowcasting = true;
-
-    payload.pathLength += 1;
-    payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, matInfo, N, NoV, NoH, VoH, g_sceneBvh);
+    payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, matInfo, N, V, g_sceneBvh);
+#endif
 
     if (payload.pathLength < MAX_RECURSION_DEPTH)
     {
@@ -200,7 +196,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         RayDesc secondaryRay = GenerateIndirectRadianceRay(
             hitPosition, 
             N,
-            VoH,
+            V,
             matInfo, 
             tangentToWorld, 
             payload.pixelIndex, 
@@ -215,7 +211,6 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
             TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
         }
     }
-#endif
 }
 
 [shader("anyhit")]

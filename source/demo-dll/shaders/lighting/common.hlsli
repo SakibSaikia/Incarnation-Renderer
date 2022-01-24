@@ -142,17 +142,11 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 	return output;
 }
 
-float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matInfo, float3 N, float NoV, float NoH, float VoH, RaytracingAccelerationStructure sceneBvh)
+float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
 {
-	float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-	float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
-	float D = D_GGX(NoH, matInfo.roughness);
-	float3 F = F_Schlick(VoH, F0);
-
 	const float3 L = light.positionOrDirection;
-	float lightVisibility = 1.f;
-	float3 radiance = matInfo.emissive * 20000;
 
+	float lightVisibility = 1.f;
 	if (light.shadowcasting)
 	{
 		RayDesc ray;
@@ -177,11 +171,22 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matI
 		}
 	}
 
+	float3 radiance = matInfo.emissive * 20000;
 	if (lightVisibility > 0.f)
 	{
-		float NoL = saturate(dot(N, L));
+		float NoL = dot(N, L);
+		float NoV = dot(N, V);
 		if (NoL > 0.f && NoV > 0.f)
 		{
+			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
+			float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
+
+			float3 H = normalize(L + V);
+			float NoH = saturate(dot(N, H));
+			float VoH = saturate(dot(V, H));
+
+			float D = D_GGX(NoH, matInfo.roughness);
+			float3 F = F_Schlick(VoH, F0);
 			float G = G_Smith_Direct(NoV, NoL, matInfo.roughness);
 
 			// Diffuse & Specular BRDF

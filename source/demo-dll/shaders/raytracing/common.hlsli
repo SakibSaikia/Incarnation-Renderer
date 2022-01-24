@@ -3,6 +3,8 @@
 
 #include "lighting/common.hlsli"
 
+static const float k_rayOffset = 0.001f;
+
 static float2 SamplePoint(uint pixelIdx, uint sampleIdx, inout uint setIdx, uint sqrtSampleCount)
 {
     const uint numPixels = DispatchRaysDimensions().x * DispatchRaysDimensions().y;
@@ -52,8 +54,8 @@ RayDesc GenerateCameraRay(float2 index, float4x4 cameraMatrix, float4x4 projecti
 
 RayDesc GenerateIndirectRadianceRay(
     float3 hitPosition,
-    float3 normal,
-    float VoH,
+    float3 N,
+    float3 V,
     FMaterialProperties matInfo,
     float3x3 tangentToWorld,
     uint pixelIndex,
@@ -63,8 +65,6 @@ RayDesc GenerateIndirectRadianceRay(
     out float3 outAttenuation)
 {
     float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-    float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
-    float3 F = F_Schlick(VoH, F0);
 
     RayDesc defaultRay = (RayDesc)0;
     outAttenuation = 0.f;
@@ -73,14 +73,18 @@ RayDesc GenerateIndirectRadianceRay(
     {
         //if (length(reflectance) > randomNoise)
         {
+            // GGX sample half vectors around the normal based on roughness.
+            // Reflect the ray direction (V) about H to get the new direction for indirect lighting L
             float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
-            float3 rayDir = ImportanceSampleGGX(ggxSample, matInfo.roughness, reflectedRayDir);
+            float3 H = ImportanceSampleGGX(ggxSample, matInfo.roughness, N);
+            float3 L = normalize(reflect(-V, H));
+            float VoH = saturate(dot(V, H));
+            float3 F = F_Schlick(VoH, F0);
 
             RayDesc ray;
             ray.Origin = hitPosition;
-            ray.Direction = normalize(rayDir);
-            ray.TMin = 0.001;
+            ray.Direction = L;
+            ray.TMin = k_rayOffset;
             ray.TMax = 10000.0;
             outAttenuation = F;
             return ray;
@@ -88,32 +92,57 @@ RayDesc GenerateIndirectRadianceRay(
     }
     else // Dielectric
     {
-        float reflectionProbability = SampleRand(pixelIndex, sampleIndex, sampleSetIndex);
+        float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
+        float3 H = ImportanceSampleGGX(ggxSample, matInfo.roughness, N);
+        float VoH = saturate(dot(V, H));
+        float3 F = F_Schlick(VoH, F0);
 
+        float reflectionProbability = SampleRand(pixelIndex, sampleIndex, sampleSetIndex);
         if (length(F) > reflectionProbability)
         {
-            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 reflectedRayDir = reflect(WorldRayDirection(), normal);
-            float3 rayDir = ImportanceSampleGGX(ggxSample, matInfo.roughness, reflectedRayDir);
+            float3 L = normalize(reflect(-V, H));
 
             RayDesc ray;
             ray.Origin = hitPosition;
-            ray.Direction = normalize(rayDir);
-            ray.TMin = 0.001;
+            ray.Direction = L;
+            ray.TMin = k_rayOffset;
             ray.TMax = 10000.0;
             outAttenuation = F;
             return ray;
         }
-        else
+        else if (matInfo.transmission > 0.f)
         {
-            float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 rayDir = SampleDirectionHemisphere(hemisphereSample);
-            rayDir = normalize(mul(rayDir, tangentToWorld));
+            // Since the surface is considered to be infinitely thin, we will ignore macroscopic refraction caused by 
+            // the orientation of the surface. However, microfacets on either side of the thin surface will cause light 
+            // to be refracted in random directions, effectively blurring the transmitted light. 
+            // That is, the roughness of the surface directly causes the transmitted light to become blurred. 
+            // This microfacet lobe is exactly the same as the specular lobe except sampled along the line of sight through the surface.
+            // The BaseColor is used to define the light that is transmitted (not absorbed) by a transparent surface.
+            float3 tint = matInfo.basecolor;
+            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
+            float3 transmittedRayDir = WorldRayDirection();
+            float3 rayDir = normalize(ImportanceSampleGGX(ggxSample, matInfo.roughness, transmittedRayDir));
 
             RayDesc ray;
             ray.Origin = hitPosition;
             ray.Direction = rayDir;
-            ray.TMin = 0.001;
+            ray.TMin = k_rayOffset;
+            ray.TMax = 10000.0;
+            outAttenuation = tint;
+            return ray;
+
+        }
+        else
+        {
+            float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
+            float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
+            float3 L = SampleDirectionHemisphere(hemisphereSample);
+            L = normalize(mul(L, tangentToWorld));
+
+            RayDesc ray;
+            ray.Origin = hitPosition;
+            ray.Direction = L;
+            ray.TMin = k_rayOffset;
             ray.TMax = 10000.0;
             outAttenuation = albedo;
             return ray;
