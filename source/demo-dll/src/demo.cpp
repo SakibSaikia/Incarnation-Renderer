@@ -277,6 +277,7 @@ void Demo::Tick(float deltaTime)
 		concurrency::task<void> loadSceneTask = concurrency::create_task([newScene]()
 		{
 			newScene->ReloadModel(Config::g_modelFilename);
+			newScene->ReloadEnvironment(Config::g_environmentFilename);
 		}).then([newScene]()
 		{
 			SCOPED_PAUSE_RENDERING;
