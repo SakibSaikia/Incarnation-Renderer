@@ -54,11 +54,14 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             float NoH = saturate(H.z);
             float VoH = saturate(dot(V, H));
 
-            float G = G_Smith_IBL(NoV, NoL, Roughness);
-            float G_Vis = G * VoH / (NoH * NoV);
-            float Fc = pow(1 - VoH, 5);
-            A += (1 - Fc) * G_Vis;
-            B += Fc * G_Vis;
+            if (NoL > 0.f && NoV > 0.f)
+            {
+                float G = G_Smith_IBL(NoV, NoL, Roughness);
+                float G_Vis = G * VoH / (NoH * NoV);
+                float Fc = pow(1.f - VoH, 5);
+                A += (1 - Fc) * G_Vis;
+                B += Fc * G_Vis;
+            }
         }
 
         RWTexture2D<float2> dest = ResourceDescriptorHeap[g_computeConstants.outputUavIndex];
