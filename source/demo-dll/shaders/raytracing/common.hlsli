@@ -86,7 +86,7 @@ RayDesc GenerateIndirectRadianceRay(
             ray.Direction = L;
             ray.TMin = k_rayOffset;
             ray.TMax = 10000.0;
-            outAttenuation = F;
+            outAttenuation = F0;
             return ray;
         }
     }
@@ -107,7 +107,7 @@ RayDesc GenerateIndirectRadianceRay(
             ray.Direction = L;
             ray.TMin = k_rayOffset;
             ray.TMax = 10000.0;
-            outAttenuation = F;
+            outAttenuation = F0;
             return ray;
         }
         else if (matInfo.transmission > 0.f)
