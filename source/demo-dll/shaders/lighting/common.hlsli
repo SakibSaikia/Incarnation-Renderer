@@ -176,7 +176,7 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matI
 	{
 		float NoL = dot(N, L);
 		float NoV = dot(N, V);
-		if (NoL > 0.f && NoV > 0.f)
+		if (NoL > 0.f)
 		{
 			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
 			float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
@@ -191,7 +191,7 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matI
 
 			// Diffuse & Specular BRDF
 			float3 Fd = albedo * Fd_Lambert();
-			float3 Fr = (D * F * G) / (4.f * NoV * NoL);
+			float3 Fr = (D * F * G) / max(4.f * NoV * NoL, 0.001);
 
 			float irradiance = light.intensity * NoL;
 			radiance += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;

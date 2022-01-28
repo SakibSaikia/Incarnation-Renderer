@@ -144,7 +144,7 @@ RayDesc GenerateIndirectRadianceRay(
             ray.Direction = L;
             ray.TMin = k_rayOffset;
             ray.TMax = 10000.0;
-            outAttenuation = albedo;
+            outAttenuation = albedo; // The PDF of sampling a cosine hemisphere is NdotL / Pi, which cancels out those terms from the diffuse BRDF and the irradiance integral
             return ray;
         }
     }
