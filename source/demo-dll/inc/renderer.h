@@ -36,34 +36,25 @@ struct FMesh
 };
 
 // SOA struct for scene entities
-struct FSceneEntities
+template<class T>
+struct TSceneEntities
 {
-	std::vector<FMesh> m_meshList;
+	std::vector<T> m_entityList;
 	std::vector<Matrix> m_transformList;
 	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
 
 	void Resize(const size_t count)
 	{
-		m_meshList.resize(count);
+		m_entityList.resize(count);
 		m_transformList.resize(count);
 		m_objectSpaceBoundsList.resize(count);
 	}
 
 	void Clear()
 	{
-		m_meshList.clear();
+		m_entityList.clear();
 		m_transformList.clear();
 		m_objectSpaceBoundsList.clear();
-	}
-
-	size_t GetScenePrimitiveCount() const
-	{
-		size_t primCount = 0;
-		for (const auto& mesh : m_meshList)
-		{
-			primCount += mesh.m_primitives.size();
-		}
-		return primCount;
 	}
 };
 
@@ -72,6 +63,26 @@ struct FCamera
 	std::string m_name;
 	Matrix m_viewTransform;
 	Matrix m_projectionTransform;
+};
+
+struct FLight
+{
+	enum Type
+	{
+		Directional,
+		Point,
+		Spot,
+		Sphere,
+		Disk,
+		Rect
+	};
+
+	std::string m_name;
+	Type m_type;
+	Vector3 m_color;
+	float m_intensity;
+	float m_range;
+	Vector2 m_spotAngles;
 };
 
 struct FLightProbe
@@ -96,7 +107,10 @@ struct FScene
 	std::string m_modelCachePath = {};
 
 	// Scene entity lists
-	FSceneEntities m_entities;
+	using FSceneMeshEntities = TSceneEntities<FMesh>;
+	using FSceneLightEntities = TSceneEntities<int>;
+	FSceneMeshEntities m_sceneMeshes;
+	FSceneLightEntities m_sceneLights;
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
@@ -111,7 +125,9 @@ struct FScene
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
-	// Image based lighting
+	// Lights
+	std::vector<FLight> m_lightList;
+	std::unique_ptr<FBindlessShaderResource> m_packedLightsBuffer;
 	FLightProbe m_globalLightProbe;
 
 	// Transform
@@ -121,6 +137,7 @@ private:
 	void LoadMeshBuffers(const tinygltf::Model& model);
 	void LoadMeshBufferViews(const tinygltf::Model& model);
 	void LoadMeshAccessors(const tinygltf::Model& model);
+	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
 	void CreateGpuPrimitiveBuffers();
 	void LoadMaterials(const tinygltf::Model& model);
@@ -154,7 +171,7 @@ private:
 namespace Demo
 {
 	bool IsRenderingSuspended();
-	const FScene* GetScene();
+	FScene* GetScene();
 	const FView* GetView();
 	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);

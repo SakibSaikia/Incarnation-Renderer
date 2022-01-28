@@ -14,12 +14,12 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "update_tlas", PIX_COLOR_DEFAULT);
 
 			std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-			instanceDescs.reserve(scene->m_entities.m_meshList.size());
+			instanceDescs.reserve(scene->m_sceneMeshes.m_entityList.size());
 			int instanceIndex = 0;
 
-			for (int meshIndex = 0; meshIndex < scene->m_entities.m_meshList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
 			{
-				const FMesh& mesh = scene->m_entities.m_meshList[meshIndex];
+				const FMesh& mesh = scene->m_sceneMeshes.m_entityList[meshIndex];
 
 				const auto& search = scene->m_blasList.find(mesh.m_name);
 				DebugAssert(search != scene->m_blasList.end());
@@ -32,7 +32,7 @@ namespace RenderJob
 				instance.AccelerationStructure = search->second->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
 				// Transpose and convert to 3x4 matrix
-				const Matrix& localToWorld = scene->m_entities.m_transformList[meshIndex] * scene->m_rootTransform;
+				const Matrix& localToWorld = scene->m_sceneMeshes.m_transformList[meshIndex] * scene->m_rootTransform;
 				decltype(instance.Transform)& dest = instance.Transform;
 				dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
 				dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
