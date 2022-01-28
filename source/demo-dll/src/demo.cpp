@@ -762,7 +762,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
-	m_globalLightProbe = Demo::s_textureCache.CacheHDRI(filename);
+	m_environmentSky = Demo::s_textureCache.CacheHDRI(filename);
 	m_environmentFilename = filename;
 }
 

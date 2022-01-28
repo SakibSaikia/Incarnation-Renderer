@@ -115,7 +115,7 @@ namespace RenderJob
 			parallaxViewMatrix.Translation(Vector3::Zero);
 
 			CbLayout constants{};
-			constants.envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
+			constants.envmapTextureIndex = passDesc.scene->m_environmentSky.m_envmapTextureIndex;
 			constants.invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
 			constants.exposure = Config::g_exposure;
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(CbLayout) / 4, &constants, 0);

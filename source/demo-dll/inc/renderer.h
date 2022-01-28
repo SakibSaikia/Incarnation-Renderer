@@ -128,7 +128,7 @@ struct FScene
 	// Lights
 	std::vector<FLight> m_lightList;
 	std::unique_ptr<FBindlessShaderResource> m_packedLightsBuffer;
-	FLightProbe m_globalLightProbe;
+	FLightProbe m_environmentSky;
 
 	// Transform
 	Matrix m_rootTransform;

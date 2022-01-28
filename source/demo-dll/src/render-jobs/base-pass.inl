@@ -69,7 +69,7 @@ namespace RenderJob
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
 					cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
-					cbDest->sceneProbeData = passDesc.scene->m_globalLightProbe;
+					cbDest->sceneProbeData = passDesc.scene->m_environmentSky;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 				});
 
