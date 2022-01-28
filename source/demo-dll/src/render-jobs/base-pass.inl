@@ -69,7 +69,7 @@ namespace RenderJob
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
 					cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
-					cbDest->sceneProbeData = passDesc.scene->m_globalLightProbe;
+					cbDest->sceneProbeData = passDesc.scene->m_environmentSky;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 				});
 
@@ -113,9 +113,9 @@ namespace RenderJob
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
 			// Issue scene draws
-			for (int meshIndex = 0; meshIndex < passDesc.scene->m_entities.m_meshList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
 			{
-				const FMesh& mesh = passDesc.scene->m_entities.m_meshList[meshIndex];
+				const FMesh& mesh = passDesc.scene->m_sceneMeshes.m_entityList[meshIndex];
 				SCOPED_COMMAND_LIST_EVENT(cmdList, mesh.m_name.c_str(), 0);
 
 				for (const FMeshPrimitive& primitive : mesh.m_primitives)
@@ -206,7 +206,7 @@ namespace RenderJob
 						int m_materialIndex;
 					} primCb =
 					{
-						passDesc.scene->m_entities.m_transformList[meshIndex],
+						passDesc.scene->m_sceneMeshes.m_transformList[meshIndex],
 						primitive.m_indexAccessor,
 						primitive.m_positionAccessor,
 						primitive.m_uvAccessor,

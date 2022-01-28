@@ -157,7 +157,7 @@ namespace RenderJob
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
-					cbDest->envmapTextureIndex = passDesc.scene->m_globalLightProbe.m_envmapTextureIndex;
+					cbDest->envmapTextureIndex = passDesc.scene->m_environmentSky.m_envmapTextureIndex;
 					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;

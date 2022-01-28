@@ -187,7 +187,7 @@ namespace Demo
 		return s_suspendRendering;
 	}
 
-	const FScene* GetScene()
+	FScene* GetScene()
 	{
 		return &s_scene;
 	}
@@ -505,6 +505,57 @@ void Demo::UpdateUI(float deltaTime)
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
+		int lightCount = GetScene()->m_sceneLights.m_entityList.size();
+		if (lightCount > 0)
+		{
+			if (ImGui::CollapsingHeader("Lights"))
+			{
+				for (int i = 0; i < lightCount; ++i)
+				{
+					// Add indent
+					ImGui::TreePush();
+
+					int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
+					FLight& light = GetScene()->m_lightList[lightIndex];
+					if (ImGui::CollapsingHeader(light.m_name.c_str()))
+					{
+						switch (light.m_type)
+						{
+						case FLight::Directional:
+							ImGui::LabelText("Type", "Directional Light");
+							break;
+						case FLight::Point:
+							ImGui::LabelText("Type", "Point Light");
+							break;
+						case FLight::Spot:
+							ImGui::LabelText("Type", "Spot Light");
+							break;
+						}
+
+						static float color[3] = { light.m_color.x, light.m_color.y, light.m_color.z };
+						ImGui::SliderFloat3("Color", &color[0], 0.0f, 1.0f);
+						ImGui::SliderFloat("Intensity", &light.m_intensity, 0.f, 500.f);
+
+						if (light.m_type != FLight::Directional)
+						{
+							ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
+						}
+
+						if (light.m_type == FLight::Spot)
+						{
+							ImGui::SliderFloat("Inner Cone Angle", &light.m_spotAngles.x, 0.f, 100.f);
+							ImGui::SliderFloat("Outer Cone Angle", &light.m_spotAngles.y, 0.f, 100.f);
+						}
+					}
+
+					// Remove indent
+					ImGui::TreePop();
+				}
+			}
+		}
+
+		// --------------------------------------------------------------------------------------------------------------------------------------------
+
 		if (ImGui::CollapsingHeader("Debug"))
 		{
 			if (ImGui::TreeNode("View Modes"))
@@ -658,7 +709,8 @@ void FScene::ReloadModel(const std::wstring& filename)
 	LoadMeshBufferViews(model);
 	LoadMeshAccessors(model);
 	LoadMaterials(model);
-	m_entities.Resize(model.meshes.size());
+	LoadLights(model);
+	m_sceneMeshes.Resize(model.meshes.size());
 	
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
 	Matrix RH2LH = Matrix
@@ -687,10 +739,10 @@ void FScene::ReloadModel(const std::wstring& filename)
 	}*/
 
 	// Scene bounds
-	std::vector<DirectX::BoundingBox> meshWorldBounds(m_entities.m_objectSpaceBoundsList.size());
+	std::vector<DirectX::BoundingBox> meshWorldBounds(m_sceneMeshes.m_objectSpaceBoundsList.size());
 	for (int i = 0; i < meshWorldBounds.size(); ++i)
 	{
-		m_entities.m_objectSpaceBoundsList[i].Transform(meshWorldBounds[i], m_entities.m_transformList[i]);
+		m_sceneMeshes.m_objectSpaceBoundsList[i].Transform(meshWorldBounds[i], m_sceneMeshes.m_transformList[i]);
 	}
 
 	m_sceneBounds = meshWorldBounds[0];
@@ -711,7 +763,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
-	m_globalLightProbe = Demo::s_textureCache.CacheHDRI(filename);
+	m_environmentSky = Demo::s_textureCache.CacheHDRI(filename);
 	m_environmentFilename = filename;
 }
 
@@ -750,6 +802,14 @@ void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 		LoadMesh(node.mesh, model, nodeTransform * parentTransform);
 	}
 
+	auto lightIt = node.extensions.find("KHR_lights_punctual");
+	if (lightIt != node.extensions.cend())
+	{
+		int lightIndex = lightIt->second.Get("light").GetNumberAsInt();
+		m_sceneLights.m_entityList.push_back(lightIndex);
+		m_sceneLights.m_transformList.push_back(nodeTransform * parentTransform);
+	}
+
 	for (const int childIndex : node.children)
 	{
 		LoadNode(childIndex, model, nodeTransform * parentTransform);
@@ -776,7 +836,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	};
 
 	const tinygltf::Mesh& mesh = model.meshes[meshIndex];
-	FMesh& outMesh = m_entities.m_meshList[meshIndex];
+	FMesh& outMesh = m_sceneMeshes.m_entityList[meshIndex];
 	outMesh.m_name = s2ws(mesh.name);
 	outMesh.m_primitives.resize(mesh.primitives.size());
 
@@ -840,8 +900,8 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		DirectX::BoundingBox::CreateMerged(meshBounds, meshBounds, primitiveBounds);
 	}
 
-	m_entities.m_transformList[meshIndex] = parentTransform;
-	m_entities.m_objectSpaceBoundsList[meshIndex] = meshBounds;
+	m_sceneMeshes.m_transformList[meshIndex] = parentTransform;
+	m_sceneMeshes.m_objectSpaceBoundsList[meshIndex] = meshBounds;
 }
 
 void FScene::LoadMeshBuffers(const tinygltf::Model& model)
@@ -937,14 +997,14 @@ void FScene::CreateGpuPrimitiveBuffers()
 	// Packed buffer that contains an array of FGpuPrimitive(s)
 	{
 		std::vector<FGpuPrimitive> primitives;
-		for (int meshIndex = 0; meshIndex < m_entities.m_meshList.size(); ++meshIndex)
+		for (int meshIndex = 0; meshIndex < m_sceneMeshes.m_entityList.size(); ++meshIndex)
 		{
-			const FMesh& mesh = m_entities.m_meshList[meshIndex];
+			const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
 			for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
 			{
 				const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
 				FGpuPrimitive newPrimitive = {};
-				newPrimitive.m_localToWorld = m_entities.m_transformList[meshIndex];
+				newPrimitive.m_localToWorld = m_sceneMeshes.m_transformList[meshIndex];
 				newPrimitive.m_indexAccessor = primitive.m_indexAccessor;
 				newPrimitive.m_positionAccessor = primitive.m_positionAccessor;
 				newPrimitive.m_uvAccessor = primitive.m_uvAccessor;
@@ -973,7 +1033,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 	// Buffer that contains primitive count for each mesh. This is used to calculate an offset to read from the above buffer
 	{
 		std::vector<uint32_t> primitiveCounts;
-		for (const auto& mesh : m_entities.m_meshList)
+		for (const auto& mesh : m_sceneMeshes.m_entityList)
 		{
 			primitiveCounts.push_back(mesh.m_primitives.size());
 		}
@@ -1000,9 +1060,9 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-	for (int meshIndex = 0; meshIndex < m_entities.m_meshList.size(); ++meshIndex)
+	for (int meshIndex = 0; meshIndex < m_sceneMeshes.m_entityList.size(); ++meshIndex)
 	{
-		const FMesh& mesh = m_entities.m_meshList[meshIndex];
+		const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
 		auto search = m_blasList.find(mesh.m_name);
 		if (search == m_blasList.cend())
 		{
@@ -1111,7 +1171,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		instance.AccelerationStructure = m_blasList[mesh.m_name]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
 		// Transpose and convert to 3x4 matrix
-		const Matrix& localToWorld = m_entities.m_transformList[meshIndex];
+		const Matrix& localToWorld = m_sceneMeshes.m_transformList[meshIndex];
 		decltype(instance.Transform)& dest = instance.Transform;
 		dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
 		dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
@@ -1712,10 +1772,54 @@ void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Mat
 	m_cameras.push_back(newCamera);
 }
 
+void FScene::LoadLights(const tinygltf::Model& model)
+{
+	SCOPED_CPU_EVENT("load_lights", PIX_COLOR_DEFAULT);
+
+	// Load lights and initialize CPU-side copy
+	m_lightList.resize(model.lights.size());
+
+	concurrency::parallel_for(0, (int)model.lights .size(), [&](int i)
+	{
+		const tinygltf::Light& light = model.lights[i];
+		m_lightList[i].m_name = light.name;
+		m_lightList[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
+		m_lightList[i].m_intensity = light.intensity;
+		m_lightList[i].m_range = light.range;
+		m_lightList[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
+
+		if (light.type == "directional")
+			m_lightList[i].m_type = FLight::Directional;
+		else if (light.type == "point")
+			m_lightList[i].m_type = FLight::Point;
+		else if (light.type == "spot")
+			m_lightList[i].m_type = FLight::Spot;
+	});
+
+	if (!m_lightList.empty())
+	{
+		const size_t bufferSize = m_lightList.size() * sizeof(FLight);
+		FResourceUploadContext uploader{ bufferSize };
+
+		m_packedLightsBuffer = RenderBackend12::CreateBindlessBuffer(
+			L"scene_lights",
+			BindlessResourceType::Buffer,
+			bufferSize,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			(const uint8_t*)m_lightList.data(),
+			&uploader);
+
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	}
+}
+
 void FScene::Clear()
 {
 	m_cameras.clear();
-	m_entities.Clear();
+	m_sceneMeshes.Clear();
+	m_sceneLights.Clear();
 	m_meshBuffers.clear();
 	m_blasList.clear();
 	m_materialList.clear();
