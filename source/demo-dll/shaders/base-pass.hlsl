@@ -24,6 +24,10 @@ struct FrameCbLayout
 	int envBrdfTextureIndex;
 	LightProbeData sceneLightProbe;
 	int sceneBvhIndex;
+	int lightCount;
+	int sceneLightPropertiesBufferIndex;
+	int sceneLightIndicesBufferIndex;
+	int sceneLightsTransformsBufferIndex;
 };
 
 struct ViewCbLayout
@@ -123,10 +127,9 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
 
 	FLight sun;
-	sun.type = Light::Directional;
-	sun.positionOrDirection = normalize(float3(1, 1, -1));
-	sun.intensity = 100000.f;
-	sun.shadowcasting = true;
+	sun.direction = normalize(float3(1, 1, -1));
+	sun.properties.type = 0;
+	sun.properties.intensity = 100000.f;
 
 	radiance += GetDirectRadiance(sun, input.worldPos.xyz, p, N, V, sceneBvh);
 #endif

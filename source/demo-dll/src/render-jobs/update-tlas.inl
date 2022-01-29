@@ -20,8 +20,9 @@ namespace RenderJob
 			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
 			{
 				const FMesh& mesh = scene->m_sceneMeshes.m_entityList[meshIndex];
+				const std::string& meshName = scene->m_sceneMeshes.m_entityNames[meshIndex];
 
-				const auto& search = scene->m_blasList.find(mesh.m_name);
+				const auto& search = scene->m_blasList.find(meshName);
 				DebugAssert(search != scene->m_blasList.end());
 
 				D3D12_RAYTRACING_INSTANCE_DESC instance = {};

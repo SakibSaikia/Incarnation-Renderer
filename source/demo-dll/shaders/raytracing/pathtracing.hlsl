@@ -58,7 +58,7 @@ struct GlobalCbLayout
     int sceneBvhIndex;
     float cameraAperture;
     float cameraFocalLength;
-    float _pad0;
+    int lightCount;
     int destUavIndex;
     float4x4 projectionToWorld;
     float4x4 sceneRotation;
@@ -68,7 +68,9 @@ struct GlobalCbLayout
     int scenePrimitiveCountsIndex;
     uint currentSampleIndex;
     uint sqrtSampleCount;
-
+    int sceneLightPropertiesBufferIndex;
+    int sceneLightIndicesBufferIndex;
+    int sceneLightsTransformsBufferIndex;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -182,10 +184,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
 #if DIRECT_LIGHTING
     FLight sun;
-    sun.type = Light::Directional;
-    sun.positionOrDirection = normalize(float3(1, 1, -1));
-    sun.intensity = 100000.f;
-    sun.shadowcasting = true;
+    sun.direction = normalize(float3(1, 1, -1));
+    sun.properties.type = 0;
+    sun.properties.intensity = 100000.f;
     payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, matInfo, N, V, g_sceneBvh);
 #endif
 

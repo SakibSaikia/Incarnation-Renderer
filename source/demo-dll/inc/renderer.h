@@ -31,7 +31,6 @@ struct FMeshPrimitive
 // Corresponds to GLTF Mesh
 struct FMesh
 {
-	std::wstring m_name;
 	std::vector<FMeshPrimitive> m_primitives;
 };
 
@@ -40,12 +39,14 @@ template<class T>
 struct TSceneEntities
 {
 	std::vector<T> m_entityList;
+	std::vector<std::string> m_entityNames;
 	std::vector<Matrix> m_transformList;
 	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
 
 	void Resize(const size_t count)
 	{
 		m_entityList.resize(count);
+		m_entityNames.resize(count);
 		m_transformList.resize(count);
 		m_objectSpaceBoundsList.resize(count);
 	}
@@ -53,6 +54,7 @@ struct TSceneEntities
 	void Clear()
 	{
 		m_entityList.clear();
+		m_entityNames.clear();
 		m_transformList.clear();
 		m_objectSpaceBoundsList.clear();
 	}
@@ -67,7 +69,7 @@ struct FCamera
 
 struct FLight
 {
-	enum Type
+	enum Type : int
 	{
 		Directional,
 		Point,
@@ -77,7 +79,6 @@ struct FLight
 		Rect
 	};
 
-	std::string m_name;
 	Type m_type;
 	Vector3 m_color;
 	float m_intensity;
@@ -119,15 +120,17 @@ struct FScene
 	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
 	std::unique_ptr<FBindlessShaderResource> m_packedPrimitives;
 	std::unique_ptr<FBindlessShaderResource> m_packedPrimitiveCounts;
-	std::unordered_map<std::wstring, std::unique_ptr<FBindlessShaderResource>> m_blasList;
+	std::unordered_map<std::string, std::unique_ptr<FBindlessShaderResource>> m_blasList;
 	std::unique_ptr<FBindlessShaderResource> m_tlas;
 	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Lights
-	std::vector<FLight> m_lightList;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightsBuffer;
+	std::vector<FLight> m_lights;
+	std::unique_ptr<FBindlessShaderResource> m_packedLightProperties;
+	std::unique_ptr<FBindlessShaderResource> m_packedLightIndices;
+	std::unique_ptr<FBindlessShaderResource> m_packedLightTransforms;
 	FLightProbe m_environmentSky;
 
 	// Transform
@@ -140,6 +143,7 @@ private:
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
 	void CreateGpuPrimitiveBuffers();
+	void CreateGpuLightBuffers();
 	void LoadMaterials(const tinygltf::Model& model);
 	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN, const DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN);

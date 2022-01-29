@@ -128,7 +128,7 @@ namespace RenderJob
 				int sceneBvhIndex;
 				float cameraAperture;
 				float cameraFocalLength;
-				float _pad0;
+				int lightCount;
 				int destUavIndex;
 				Matrix projectionToWorld;
 				Matrix sceneRotation;
@@ -138,6 +138,9 @@ namespace RenderJob
 				int scenePrimitiveCountsIndex;
 				uint32_t currentSampleIndex;
 				uint32_t sqrtSampleCount;
+				int sceneLightPropertiesBufferIndex;
+				int sceneLightIndicesBufferIndex;
+				int sceneLightsTransformsBufferIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
@@ -146,6 +149,8 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
+					const int lightCount = passDesc.scene->m_lights.size();
+
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
 					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
 					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
@@ -154,6 +159,7 @@ namespace RenderJob
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->cameraAperture = Config::g_pathtracing_cameraAperture;
 					cbDest->cameraFocalLength = Config::g_pathtracing_cameraFocalLength;
+					cbDest->lightCount = passDesc.scene->m_lights.size();
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
@@ -162,6 +168,9 @@ namespace RenderJob
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
 					cbDest->sqrtSampleCount = std::sqrt(Config::g_maxSampleCount);
+					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
+					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
+					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

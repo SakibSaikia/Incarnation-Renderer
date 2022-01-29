@@ -10,16 +10,6 @@
 	#define TEX_SAMPLE(t,s,uv) (t.Sample(s,uv))
 #endif
 
-namespace Light
-{
-	enum Type
-	{
-		Directional,
-		Point,
-		Spot
-	};
-}
-
 struct FMaterialProperties
 {
 	float3 emissive;
@@ -37,12 +27,19 @@ struct FMaterialProperties
 	float3 clearcoatNormalmap;
 };
 
+struct FLightProperties
+{
+	int type;
+	float3 color;
+	float intensity;
+	float range;
+	float2 spotAngles;
+};
+
 struct FLight
 {
-	Light::Type type;
-	float3 positionOrDirection;
-	float intensity;
-	bool shadowcasting;
+	FLightProperties properties;
+	float3 direction;
 };
 
 FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, SamplerState s)
@@ -144,10 +141,10 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 
 float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
 {
-	const float3 L = light.positionOrDirection;
+	const float3 L = light.direction;
 
+	// Shadow ray
 	float lightVisibility = 1.f;
-	if (light.shadowcasting)
 	{
 		RayDesc ray;
 		ray.Origin = worldPos;
@@ -193,7 +190,7 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matI
 			float3 Fd = albedo * Fd_Lambert();
 			float3 Fr = (D * F * G) / max(4.f * NoV * NoL, 0.001);
 
-			float irradiance = light.intensity * NoL;
+			float irradiance = light.properties.intensity * NoL;
 			radiance += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
 		}
 	}

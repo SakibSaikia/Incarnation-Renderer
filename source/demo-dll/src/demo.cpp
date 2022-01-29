@@ -516,8 +516,10 @@ void Demo::UpdateUI(float deltaTime)
 					ImGui::TreePush();
 
 					int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
-					FLight& light = GetScene()->m_lightList[lightIndex];
-					if (ImGui::CollapsingHeader(light.m_name.c_str()))
+					const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
+
+					FLight& light = GetScene()->m_lights[lightIndex];
+					if (ImGui::CollapsingHeader(lightName.c_str()))
 					{
 						switch (light.m_type)
 						{
@@ -751,9 +753,9 @@ void FScene::ReloadModel(const std::wstring& filename)
 		DirectX::BoundingBox::CreateMerged(m_sceneBounds, m_sceneBounds, bb);
 	}
 
-	// Raytracing Acceleration Structures
 	CreateAccelerationStructures(model);
 	CreateGpuPrimitiveBuffers();
+	CreateGpuLightBuffers();
 
 	// Wait for all loading jobs to finish
 	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
@@ -807,6 +809,7 @@ void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 	{
 		int lightIndex = lightIt->second.Get("light").GetNumberAsInt();
 		m_sceneLights.m_entityList.push_back(lightIndex);
+		m_sceneLights.m_entityNames.push_back(model.lights[lightIndex].name);
 		m_sceneLights.m_transformList.push_back(nodeTransform * parentTransform);
 	}
 
@@ -837,7 +840,6 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 	const tinygltf::Mesh& mesh = model.meshes[meshIndex];
 	FMesh& outMesh = m_sceneMeshes.m_entityList[meshIndex];
-	outMesh.m_name = s2ws(mesh.name);
 	outMesh.m_primitives.resize(mesh.primitives.size());
 
 	DirectX::BoundingBox meshBounds = {};
@@ -901,6 +903,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	}
 
 	m_sceneMeshes.m_transformList[meshIndex] = parentTransform;
+	m_sceneMeshes.m_entityNames[meshIndex] = mesh.name;
 	m_sceneMeshes.m_objectSpaceBoundsList[meshIndex] = meshBounds;
 }
 
@@ -1055,6 +1058,35 @@ void FScene::CreateGpuPrimitiveBuffers()
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
+void FScene::CreateGpuLightBuffers()
+{
+	if (!m_sceneLights.m_entityList.empty())
+	{
+		const size_t bufferSize = m_sceneLights.m_entityList.size() * sizeof(int) + m_sceneLights.m_transformList.size() * sizeof(Matrix);
+		FResourceUploadContext uploader{ bufferSize };
+
+		m_packedLightIndices = RenderBackend12::CreateBindlessBuffer(
+			L"scene_light_indices",
+			BindlessResourceType::Buffer,
+			bufferSize,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			(const uint8_t*)m_sceneLights.m_entityList.data(),
+			&uploader);
+
+		m_packedLightTransforms = RenderBackend12::CreateBindlessBuffer(
+			L"scene_light_transforms",
+			BindlessResourceType::Buffer,
+			bufferSize,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			(const uint8_t*)m_sceneLights.m_transformList.data(),
+			&uploader);
+
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	}
+}
+
 void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -1063,7 +1095,8 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	for (int meshIndex = 0; meshIndex < m_sceneMeshes.m_entityList.size(); ++meshIndex)
 	{
 		const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
-		auto search = m_blasList.find(mesh.m_name);
+		const std::string& meshName = m_sceneMeshes.m_entityNames[meshIndex];
+		auto search = m_blasList.find(meshName);
 		if (search == m_blasList.cend())
 		{
 			std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> primitiveDescs;
@@ -1139,8 +1172,8 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 					false);
 
 				std::wstringstream s;
-				s << mesh.m_name << L"_blas";
-				m_blasList[mesh.m_name] = RenderBackend12::CreateBindlessBuffer(
+				s << s2ws(meshName) << L"_blas";
+				m_blasList[meshName] = RenderBackend12::CreateBindlessBuffer(
 					s.str(),
 					BindlessResourceType::AccelerationStructure,
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes),
@@ -1149,9 +1182,9 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 				buildDesc.Inputs = blasInputsDesc;
 				buildDesc.ScratchAccelerationStructureData = blasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-				buildDesc.DestAccelerationStructureData = m_blasList[mesh.m_name]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				buildDesc.DestAccelerationStructureData = m_blasList[meshName]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 				cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-				m_blasList[mesh.m_name]->m_resource->UavBarrier(cmdList);
+				m_blasList[meshName]->m_resource->UavBarrier(cmdList);
 			}
 		}
 
@@ -1168,7 +1201,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		instance.InstanceContributionToHitGroupIndex = 0;
 		instance.InstanceMask = 1;
 		instance.Flags = bDoubleSided ? D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE : D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-		instance.AccelerationStructure = m_blasList[mesh.m_name]->m_resource->m_d3dResource->GetGPUVirtualAddress();
+		instance.AccelerationStructure = m_blasList[meshName]->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
 		// Transpose and convert to 3x4 matrix
 		const Matrix& localToWorld = m_sceneMeshes.m_transformList[meshIndex];
@@ -1777,36 +1810,35 @@ void FScene::LoadLights(const tinygltf::Model& model)
 	SCOPED_CPU_EVENT("load_lights", PIX_COLOR_DEFAULT);
 
 	// Load lights and initialize CPU-side copy
-	m_lightList.resize(model.lights.size());
+	m_lights.resize(model.lights.size());
 
 	concurrency::parallel_for(0, (int)model.lights .size(), [&](int i)
 	{
 		const tinygltf::Light& light = model.lights[i];
-		m_lightList[i].m_name = light.name;
-		m_lightList[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
-		m_lightList[i].m_intensity = light.intensity;
-		m_lightList[i].m_range = light.range;
-		m_lightList[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
+		m_lights[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
+		m_lights[i].m_intensity = light.intensity;
+		m_lights[i].m_range = light.range;
+		m_lights[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
 
 		if (light.type == "directional")
-			m_lightList[i].m_type = FLight::Directional;
+			m_lights[i].m_type = FLight::Directional;
 		else if (light.type == "point")
-			m_lightList[i].m_type = FLight::Point;
+			m_lights[i].m_type = FLight::Point;
 		else if (light.type == "spot")
-			m_lightList[i].m_type = FLight::Spot;
+			m_lights[i].m_type = FLight::Spot;
 	});
 
-	if (!m_lightList.empty())
+	if (!m_lights.empty())
 	{
-		const size_t bufferSize = m_lightList.size() * sizeof(FLight);
+		const size_t bufferSize = m_lights.size() * sizeof(FLight);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedLightsBuffer = RenderBackend12::CreateBindlessBuffer(
-			L"scene_lights",
+		m_packedLightProperties = RenderBackend12::CreateBindlessBuffer(
+			L"scene_light_properties",
 			BindlessResourceType::Buffer,
 			bufferSize,
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-			(const uint8_t*)m_lightList.data(),
+			(const uint8_t*)m_lights.data(),
 			&uploader);
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);

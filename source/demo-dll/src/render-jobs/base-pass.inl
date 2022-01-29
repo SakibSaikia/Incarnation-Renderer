@@ -55,6 +55,10 @@ namespace RenderJob
 				int envBrdfTextureIndex;
 				FLightProbe sceneProbeData;
 				int sceneBvhIndex;
+				int lightCount;
+				int sceneLightPropertiesBufferIndex;
+				int sceneLightIndicesBufferIndex;
+				int sceneLightsTransformsBufferIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -63,6 +67,8 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
+					const int lightCount = passDesc.scene->m_lights.size();
+
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
@@ -71,6 +77,10 @@ namespace RenderJob
 					cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
 					cbDest->sceneProbeData = passDesc.scene->m_environmentSky;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
+					cbDest->lightCount = lightCount;
+					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
+					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
+					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -116,7 +126,7 @@ namespace RenderJob
 			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
 			{
 				const FMesh& mesh = passDesc.scene->m_sceneMeshes.m_entityList[meshIndex];
-				SCOPED_COMMAND_LIST_EVENT(cmdList, mesh.m_name.c_str(), 0);
+				SCOPED_COMMAND_LIST_EVENT(cmdList, passDesc.scene->m_sceneMeshes.m_entityNames[meshIndex].c_str(), 0);
 
 				for (const FMeshPrimitive& primitive : mesh.m_primitives)
 				{
