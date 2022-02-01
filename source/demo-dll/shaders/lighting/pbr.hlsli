@@ -1,11 +1,7 @@
 ﻿#ifndef __PBR_HLSLI_
 #define __PBR_HLSLI_
 
-#include "sampling.hlsli"
-
-// Adapted from google.github.io/filament/Filament.html
-
-#define PI 3.14159265f
+#include "common/sampling.hlsli"
 
 // When using correlated Smith, make sure that NoL is not clamped to (0.0, 1.0) as otherwise
 // this function can generate an inf response when NoL is 0.
@@ -66,7 +62,7 @@ float G_Smith_IBL(float NoV, float NoL, float roughness)
 // Lambert Diffuse BRDF
 float Fd_Lambert() 
 {
-    return 1.0 / PI;
+    return k_InvPi;
 }
 
 // Burley Diffuse BRDF
@@ -75,7 +71,7 @@ float Fd_Burley(float NoV, float NoL, float LoH, float roughness)
     float f90 = 0.5 + 2.0 * roughness * LoH * LoH;
     float lightScatter = F_Schlick(NoL, 1.0, f90);
     float viewScatter = F_Schlick(NoV, 1.0, f90);
-    return lightScatter * viewScatter * (1.0 / PI);
+    return lightScatter * viewScatter * k_InvPi;
 }
 
 // https://learnopengl.com/PBR/Theory
@@ -86,7 +82,7 @@ float D_GGX(float NoH, float Roughness)
 
     float nom = a2;
     float denom = (NoH * NoH * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
+    denom = k_Pi * denom * denom;
 
     return nom / denom;
 }

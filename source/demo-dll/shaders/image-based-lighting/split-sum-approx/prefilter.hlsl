@@ -1,5 +1,5 @@
 #include "lighting/pbr.hlsli"
-#include "sampling.hlsli"
+#include "common/sampling.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1
@@ -80,7 +80,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 float VoH = max(dot(V, H), 0.0);
                 float D = D_GGX(NoH, Roughness);
                 float pdf = (D * NoH / (4.0 * VoH)) + 0.0001;
-                float saTexel = 4.f * PI / (6.0 * Resolution * Resolution);
+                float saTexel = 4.f * k_Pi / (6.0 * Resolution * Resolution);
                 float saSample = 1.f / (float(NumSamples) * pdf + 0.0001);
                 float mipLevel = (Roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel));
                 

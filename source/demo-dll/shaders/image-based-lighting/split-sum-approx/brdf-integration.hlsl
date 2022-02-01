@@ -3,7 +3,7 @@
 // https://learnopengl.com/PBR/IBL/Specular-IBL
 
 #include "lighting/pbr.hlsli"
-#include "sampling.hlsli"
+#include "common/sampling.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1

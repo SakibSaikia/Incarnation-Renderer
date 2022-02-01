@@ -1,7 +1,7 @@
 #ifndef __SAMPLING_HLSLI_
 #define __SAMPLING_HLSLI_
 
-#define PI 3.14159265f
+#include "common/math.hlsli"
 
 // A pseudorandom foating point number generator.
 // Maps an integer value to a pseudorandom foating point number in the [0,1) interval where the sequence is determined by a second integer.
@@ -38,7 +38,7 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
     float a = Roughness * Roughness;
 
     // Construct spherical coordinates from input Low Descrepancy Sequence Xi
-    float Phi = 2 * PI * Xi.x;
+    float Phi = 2 * k_Pi * Xi.x;
     float CosTheta = sqrt((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
     float SinTheta = sqrt(1.f - CosTheta * CosTheta);
 
@@ -56,11 +56,16 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
     return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
-float3 SampleDirectionHemisphere(float2 u)
+float3 UniformSampleHemisphere(float2 u)
 {
     float r = sqrt(max(0.0f, 1.0f - u.x * u.x));
-    float phi = 2.f * PI * u.y;
+    float phi = 2.f * k_Pi * u.y;
     return float3(r * cos(phi), r * sin(phi), u.x);
+}
+
+float UniformHemispherePdf()
+{
+    return k_Inv2Pi;
 }
 
 uint CMJ_Permute(uint i, uint l, uint p)
@@ -130,12 +135,12 @@ float2 SquareToConcentricDiskMapping(float x, float y)
         if (a > b)                   // region 1, also |a| > |b|
         {
             r = a;
-            phi = (PI / 4.0f) * (b / a);
+            phi = k_PiOver4 * (b / a);
         }
         else                        // region 2, also |b| > |a|
         {
             r = b;
-            phi = (PI / 4.0f) * (2.0f - (a / b));
+            phi = k_PiOver4 * (2.0f - (a / b));
         }
     }
     else                            // region 3 or 4
@@ -143,13 +148,13 @@ float2 SquareToConcentricDiskMapping(float x, float y)
         if (a < b)                   // region 3, also |a| >= |b|, a != 0
         {
             r = -a;
-            phi = (PI / 4.0f) * (4.0f + (b / a));
+            phi = k_PiOver4 * (4.0f + (b / a));
         }
         else                        // region 4, |b| >= |a|, but a==0 and b==0 could occur.
         {
             r = -b;
             if (b != 0)
-                phi = (PI / 4.0f) * (6.0f - (a / b));
+                phi = k_PiOver4 * (6.0f - (a / b));
             else
                 phi = 0;
         }

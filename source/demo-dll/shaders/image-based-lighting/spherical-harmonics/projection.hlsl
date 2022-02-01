@@ -1,10 +1,9 @@
+#include "common/math.hlsli"
 #include "image-based-lighting/spherical-harmonics/common.hlsli"
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "RootConstants(b0, num32BitConstants=6, visibility = SHADER_VISIBILITY_ALL),"
-
-static const float PI = 3.14159265f;
 
 struct CbLayout
 {
@@ -23,8 +22,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
 {
     // theta = elevation angle
     // phi = azimuth angle
-    float theta = PI * dispatchThreadId.y / (float)g_constants.hdriHeight;
-    float phi = 2.f * PI * dispatchThreadId.x / (float)g_constants.hdriWidth;
+    float theta = k_Pi * dispatchThreadId.y / (float)g_constants.hdriHeight;
+    float phi = 2.f * k_Pi * dispatchThreadId.x / (float)g_constants.hdriWidth;
 
     SH9 sh = ShEvaluate(theta, phi);
 

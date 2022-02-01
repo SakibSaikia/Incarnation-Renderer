@@ -136,7 +136,7 @@ RayDesc GenerateIndirectRadianceRay(
         {
             float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
             float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 L = SampleDirectionHemisphere(hemisphereSample);
+            float3 L = UniformSampleHemisphere(hemisphereSample);
             L = normalize(mul(L, tangentToWorld));
 
             RayDesc ray;
