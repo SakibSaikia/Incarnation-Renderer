@@ -3,6 +3,108 @@
 
 #include "common/math.hlsli"
 
+// ------------------
+// References : 
+// * https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations
+// ------------------
+
+// Distorts areas on the disk. Use concentric mapping instead!
+float2 UniformSampleDisk(float2 u)
+{
+    float r = sqrt(u.x);
+    float theta = 2.f * k_Pi * u.y;
+    return r * float2(cos(theta), sin(theta));
+}
+
+// Area preserving transformation from square to disk based off the algorithm "A Low Distortion Map Between Disk and Square" by Peter Shirley and Kenneth Chiu.
+float2 ConcentricSampleDisk(float2 u)
+{
+    // Map uniform random numbers to [-1,1]
+    float2 uOffset = 2.f * u - 1.xx;
+
+    // Handle degeneracy at the origin
+    if (uOffset.x == 0.f && uOffset.y == 0.f)
+    {
+        return 0.xx;
+    }
+
+    // Apply concentric mapping to point
+    float theta, r;
+    if (abs(uOffset.x) > abs(uOffset.y))
+    {
+        r = uOffset.x;
+        theta = k_PiOver4 * (uOffset.y / uOffset.x);
+    }
+    else
+    {
+        r = uOffset.y;
+        theta = k_PiOver2 - k_PiOver4 * (uOffset.x / uOffset.y);
+    }
+
+    return r * float2(cos(theta), sin(theta));
+}
+
+float3 UniformSampleHemisphere(float2 u)
+{
+    float z = u.x;
+    float r = sqrt(max(0.f, 1.f - z * z));
+    float phi = 2.f * k_Pi * u.y;
+    return float3(r * cos(phi), r * sin(phi), z);
+}
+
+float UniformHemispherePdf()
+{
+    return k_Inv2Pi;
+}
+
+// Use Malley's mathod to generate points on a disk and project them up to the unit hemisphere
+float3 CosineSampleHemisphere(float2 u)
+{
+    float2 d = ConcentricSampleDisk(u);
+    float z = sqrt(max(0.f, 1.f - d.x * d.x - d.y * d.y));
+    return float3(d.x, d.y, z);
+}
+
+float CosineHemispherePdf(float cosTheta)
+{
+    return cosTheta * k_InvPi;
+}
+
+float3 UniformSampleSphere(float2 u)
+{
+    float z = 1.f - 2.f * u.x;
+    float r = sqrt(max(0.f, 1.f - z * z));
+    float phi = 2.f * k_Pi * u.y;
+    return float3(r * cos(phi), r * sin(phi), z);
+}
+
+float UniformSpherePdf()
+{
+    return k_Inv4Pi;
+}
+
+float3 UniformSampleCone(float2 u, float cosThetaMax)
+{
+    float cosTheta = (1.f - u.x) + u.x * cosThetaMax;
+    float sinTheta = sqrt(1.f - cosTheta * cosTheta);
+    float phi = u.y * 2.f * k_Pi;
+    return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+}
+
+float UniformConePdf(float cosThetaMax)
+{
+    return 1.f / (2.f * k_Pi * (1.f - cosThetaMax));
+}
+
+// Returns barycentric coordinates u & v. 
+// w = 1.f - u - v
+// The pdf is one over the triangles area.
+float2 UniformSampleTriangle(float2 u)
+{
+    float s = sqrt(u.x);
+    return float2(1.f - s, u.y * s);
+}
+
 // A pseudorandom foating point number generator.
 // Maps an integer value to a pseudorandom foating point number in the [0,1) interval where the sequence is determined by a second integer.
 // https://graphics.pixar.com/library/MultiJitteredSampling/paper.pdf
@@ -56,18 +158,6 @@ float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
     return normalize(tangent * H.x + bitangent * H.y + N * H.z);
 }
 
-float3 UniformSampleHemisphere(float2 u)
-{
-    float r = sqrt(max(0.0f, 1.0f - u.x * u.x));
-    float phi = 2.f * k_Pi * u.y;
-    return float3(r * cos(phi), r * sin(phi), u.x);
-}
-
-float UniformHemispherePdf()
-{
-    return k_Inv2Pi;
-}
-
 uint CMJ_Permute(uint i, uint l, uint p)
 {
     uint w = l - 1;
@@ -117,53 +207,6 @@ float2 CorrelatedMultiJitteredSampling(uint sampleIdx, uint numSamplesX, uint nu
     float jx = CMJ_RandFloat(sampleIdx, pattern * 0x967a889b);
     float jy = CMJ_RandFloat(sampleIdx, pattern * 0x368cc8b7);
     return float2((sx + (sy + jx) / numSamplesY) / numSamplesX, (sampleIdx + jy) / N);
-}
-
-// Maps a value inside the square [0,1]x[0,1] to a value in a disk of radius 1 using concentric squares.
-// This mapping preserves area, bi continuity, and minimizes deformation.
-// Based off the algorithm "A Low Distortion Map Between Disk and Square" by Peter Shirley and Kenneth Chiu.
-float2 SquareToConcentricDiskMapping(float x, float y)
-{
-    float phi = 0.0f;
-    float r = 0.0f;
-
-    float a = 2.0f * x - 1.0f;
-    float b = 2.0f * y - 1.0f;
-
-    if (a > -b)                      // region 1 or 2
-    {
-        if (a > b)                   // region 1, also |a| > |b|
-        {
-            r = a;
-            phi = k_PiOver4 * (b / a);
-        }
-        else                        // region 2, also |b| > |a|
-        {
-            r = b;
-            phi = k_PiOver4 * (2.0f - (a / b));
-        }
-    }
-    else                            // region 3 or 4
-    {
-        if (a < b)                   // region 3, also |a| >= |b|, a != 0
-        {
-            r = -a;
-            phi = k_PiOver4 * (4.0f + (b / a));
-        }
-        else                        // region 4, |b| >= |a|, but a==0 and b==0 could occur.
-        {
-            r = -b;
-            if (b != 0)
-                phi = k_PiOver4 * (6.0f - (a / b));
-            else
-                phi = 0;
-        }
-    }
-
-    float2 result;
-    result.x = r * cos(phi);
-    result.y = r * sin(phi);
-    return result;
 }
 
 #endif

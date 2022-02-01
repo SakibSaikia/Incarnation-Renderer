@@ -38,7 +38,7 @@ RayDesc GenerateCameraRay(float2 index, float4x4 cameraMatrix, float4x4 projecti
     // Generate secondary ray used for tracing by sampling a disk around the camera origin based on the aperture
     float3 cameraRight = cameraMatrix[0].xyz;
     float3 cameraUp = cameraMatrix[1].xyz;
-    float2 offset = SquareToConcentricDiskMapping(randomSample.x, randomSample.y);
+    float2 offset = ConcentricSampleDisk(randomSample);
     float3 rayOrigin = cameraPos + aperture * offset.x * cameraRight + aperture * offset.y * cameraUp;
 
     // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
