@@ -3,7 +3,7 @@
 // https://learnopengl.com/PBR/IBL/Specular-IBL
 
 #include "lighting/pbr.hlsli"
-#include "common/sampling.hlsli"
+#include "common/uniform-sampling.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1
@@ -39,7 +39,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const uint NumSamples = g_computeConstants.sampleCount;
 
         float3 V = float3(sqrt(1.f - NoV * NoV), 0.f, NoV);
-        float3 N = float3(0.f, 0.f, 1.f);
 
         float A = 0.f;
         float B = 0.f;
@@ -47,7 +46,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         for (uint i = 0; i < NumSamples; i++)
         {
             float2 Xi = Hammersley(i, NumSamples);
-            float3 H = ImportanceSampleGGX(Xi, Roughness, N);
+            float3 H = SampleGGX(Xi, Roughness);
             float3 L = normalize(reflect(-V, H));
 
             float NoL = saturate(L.z);

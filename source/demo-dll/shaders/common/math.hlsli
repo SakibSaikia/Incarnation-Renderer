@@ -20,4 +20,23 @@ float Degrees(float rad)
     return (180 / k_Pi) * rad;
 }
 
+// Conversion from spherical coordinates to cartesian coordinates
+float3 SphericalDirection(float sinTheta, float cosTheta, float phi)
+{
+    return float3(
+        sinTheta * cos(phi),
+        sinTheta * sin(phi),
+        cosTheta);
+}
+
+// Returns tangent basis around world normal direction N
+float3x3 TangentToWorld(float3 N)
+{
+    float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 T = normalize(cross(up, N));
+    float3 B = cross(N, T);
+
+    return float3x3(T, B, N);
+}
+
 #endif // __MATH_HLSLI_

@@ -1,5 +1,5 @@
-#ifndef __SAMPLING_HLSLI_
-#define __SAMPLING_HLSLI_
+#ifndef __UNIFORM_SAMPLING_HLSLI_
+#define __UNIFORM_SAMPLING_HLSLI_
 
 #include "common/math.hlsli"
 
@@ -134,30 +134,6 @@ float2 Hammersley(uint i, float numSamples)
     return float2(float(i) / numSamples, float(bits) / exp2(32));
 }
 
-// Real Shading in Unreal Engine 4 coursenotes by Brian Karis, Epic Games
-float3 ImportanceSampleGGX(float2 Xi, float Roughness, float3 N)
-{
-    float a = Roughness * Roughness;
-
-    // Construct spherical coordinates from input Low Descrepancy Sequence Xi
-    float Phi = 2 * k_Pi * Xi.x;
-    float CosTheta = sqrt((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
-    float SinTheta = sqrt(1.f - CosTheta * CosTheta);
-
-    // Convert from spherical coordinates to cartesian coordinates
-    float3 H;
-    H.x = SinTheta * cos(Phi);
-    H.y = SinTheta * sin(Phi);
-    H.z = CosTheta;
-
-    // Convert from tangent space to world space sample vector
-    float3 up = abs(N.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
-    float3 tangent = normalize(cross(up, N));
-    float3 bitangent = cross(N, tangent);
-
-    return normalize(tangent * H.x + bitangent * H.y + N * H.z);
-}
-
 uint CMJ_Permute(uint i, uint l, uint p)
 {
     uint w = l - 1;
@@ -209,4 +185,4 @@ float2 CorrelatedMultiJitteredSampling(uint sampleIdx, uint numSamplesX, uint nu
     return float2((sx + (sy + jx) / numSamplesY) / numSamplesX, (sampleIdx + jy) / N);
 }
 
-#endif
+#endif // __UNIFORM_SAMPLING_HLSLI_

@@ -76,7 +76,8 @@ RayDesc GenerateIndirectRadianceRay(
             // GGX sample half vectors around the normal based on roughness.
             // Reflect the ray direction (V) about H to get the new direction for indirect lighting L
             float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 H = ImportanceSampleGGX(ggxSample, matInfo.roughness, N);
+            float3 H = SampleGGX(ggxSample, matInfo.roughness);
+            H = normalize(mul(H, tangentToWorld));
             float3 L = normalize(reflect(-V, H));
             float VoH = saturate(dot(V, H));
             float3 F = F_Schlick(VoH, F0);
@@ -93,7 +94,8 @@ RayDesc GenerateIndirectRadianceRay(
     else // Dielectric
     {
         float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-        float3 H = ImportanceSampleGGX(ggxSample, matInfo.roughness, N);
+        float3 H = SampleGGX(ggxSample, matInfo.roughness);
+        H = normalize(mul(H, tangentToWorld));
         float VoH = saturate(dot(V, H));
         float3 F = F_Schlick(VoH, F0);
 
@@ -121,7 +123,8 @@ RayDesc GenerateIndirectRadianceRay(
             float3 tint = matInfo.basecolor;
             float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
             float3 transmittedRayDir = WorldRayDirection();
-            float3 rayDir = normalize(ImportanceSampleGGX(ggxSample, matInfo.roughness, transmittedRayDir));
+            float3 rayDir = SampleGGX(ggxSample, matInfo.roughness);
+            rayDir = normalize(mul(rayDir, TangentToWorld(transmittedRayDir)));
 
             RayDesc ray;
             ray.Origin = hitPosition;

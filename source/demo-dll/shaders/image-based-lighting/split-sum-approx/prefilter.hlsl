@@ -1,5 +1,5 @@
 #include "lighting/pbr.hlsli"
-#include "common/sampling.hlsli"
+#include "common/uniform-sampling.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
 #define THREAD_GROUP_SIZE_X 1
@@ -64,11 +64,13 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float Roughness = g_computeConstants.roughness;
         const float Resolution = float(g_computeConstants.cubemapSize);
         TextureCube EnvMap = ResourceDescriptorHeap[g_computeConstants.envmapIndex];
+        float3x3 Transform = TangentToWorld(N);
 
         for (uint i = 0; i < NumSamples; i++)
         {
             float2 Xi = Hammersley(i, NumSamples);
-            float3 H = ImportanceSampleGGX(Xi, Roughness, N);
+            float3 H = SampleGGX(Xi, Roughness);
+            H = normalize(mul(H, Transform));
             float3 L = normalize(reflect(-V, H));
             float NoL = saturate(dot(N, L));
 

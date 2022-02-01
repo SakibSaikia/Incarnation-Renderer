@@ -1,7 +1,7 @@
 ﻿#ifndef __PBR_HLSLI_
 #define __PBR_HLSLI_
 
-#include "common/sampling.hlsli"
+#include "common/bxdf-sampling.hlsli"
 
 // When using correlated Smith, make sure that NoL is not clamped to (0.0, 1.0) as otherwise
 // this function can generate an inf response when NoL is 0.
