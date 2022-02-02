@@ -140,17 +140,64 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 	{
 		float3 lightPosition = lightTransform[3].xyz;
 		float3 lightVec = lightPosition - worldPos;
-		L = normalize(lightVec);
-		float distSquared = dot(lightVec, lightVec);
+		float distanceSquared = dot(lightVec, lightVec);
+		float distance = sqrt(distanceSquared);
+		L = lightVec / distance;
 
-		if ((light.m_range == 0.f) || (distSquared < light.m_range * light.m_range))
+		// See attenuation calculation in https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual
+		float radialAttenuation;
+		if (light.m_range > 0.f)
 		{
-			radianceIn = 10000 * light.m_intensity * light.m_color / dot(lightVec, lightVec);
+			float radialAttenuation = max(min(1.f, 1.f - pow(distance / light.m_range, 4)), 0.f) / distanceSquared;
 		}
+		else
+		{
+			radialAttenuation = 1.f / max(distanceSquared, 0.0001);
+		}
+
+		// Gltf specifies point light intensity as luminious indensity in candela (lm/sr)
+		// Note that if intensity is specified as luminous power, we need an additional divide by 4Pi as in 
+		// https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+		radianceIn = 10000 * light.m_intensity * light.m_color * radialAttenuation;
 	}
 	else if (light.m_type == Light::Spot)
 	{
+		float3x3 lightRotation = float3x3(lightTransform[0].xyz, lightTransform[1].xyz, lightTransform[2].xyz);
+		float3 spotPosition = lightTransform[3].xyz;
+		float3 spotDirection = normalize(mul(float3(0, 0, -1), lightRotation));
+		float3 lightVec = spotPosition - worldPos;
+		float distanceSquared = dot(lightVec, lightVec);
+		float distance = sqrt(distanceSquared);
+		L = lightVec / distance;
 
+		// Angular atttenuation
+		float angularAttenuation = 0.f;
+		float cd = dot(spotDirection, L);
+		float cosineOuterAngle = cos(light.m_spotAngles.y);
+		if (cd > cosineOuterAngle)
+		{
+			float cosineInnerAngle = cos(light.m_spotAngles.x);
+			float lightAngleScale = 1.f / max(0.001f, cosineInnerAngle - cosineOuterAngle);
+			float lightAngleOffset = -cosineOuterAngle * lightAngleScale;
+			angularAttenuation = saturate(cd * lightAngleScale + lightAngleOffset);
+			angularAttenuation *= angularAttenuation;
+		}
+
+		// Radial attenuation
+		float radialAttenuation = 0.f;
+		if (angularAttenuation > 0.f)
+		{
+			if (light.m_range > 0.f)
+			{
+				float radialAttenuation = max(min(1.f, 1.f - pow(distance / light.m_range, 4)), 0.f) / distanceSquared;
+			}
+			else
+			{
+				radialAttenuation = 1.f / max(distanceSquared, 0.0001);
+			}
+		}
+
+		radianceIn = 10000 * light.m_intensity * light.m_color * angularAttenuation * radialAttenuation;
 	}
 
 	float3 radianceOut = matInfo.emissive * 20000;

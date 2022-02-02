@@ -536,17 +536,21 @@ void Demo::UpdateUI(float deltaTime)
 
 						static float color[3] = { light.m_color.x, light.m_color.y, light.m_color.z };
 						ImGui::SliderFloat3("Color", &color[0], 0.0f, 1.0f);
-						ImGui::SliderFloat("Intensity", &light.m_intensity, 0.f, 500.f);
 
 						if (light.m_type != Light::Directional)
 						{
+							ImGui::SliderFloat("Intensity (cd)", &light.m_intensity, 0.f, 10000.f);
 							ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
+						}
+						else
+						{
+							ImGui::SliderFloat("Intensity (lux)", &light.m_intensity, 0.f, 10000.f);
 						}
 
 						if (light.m_type == Light::Spot)
 						{
-							ImGui::SliderFloat("Inner Cone Angle", &light.m_spotAngles.x, 0.f, 100.f);
-							ImGui::SliderFloat("Outer Cone Angle", &light.m_spotAngles.y, 0.f, 100.f);
+							ImGui::SliderFloat("Inner Cone Angle (rad)", &light.m_spotAngles.x, 0.f, 3.14159f);
+							ImGui::SliderFloat("Outer Cone Angle (rad)", &light.m_spotAngles.y, 0.f, 3.14159f);
 						}
 					}
 
