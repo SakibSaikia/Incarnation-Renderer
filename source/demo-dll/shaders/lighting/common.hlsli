@@ -2,7 +2,7 @@
 #define __LIGHTING_COMMON_HLSLI_
 
 #include "pbr.hlsli"
-#include "mesh-material.h"
+#include "common/mesh-material.hlsli"
 
 #if RAY_TRACING
 	#define TEX_SAMPLE(t,s,uv) (t.SampleLevel(s, uv, 0))
@@ -25,21 +25,6 @@ struct FMaterialProperties
 	float clearcoatRoughness;
 	bool bHasClearcoatNormalmap;
 	float3 clearcoatNormalmap;
-};
-
-struct FLightProperties
-{
-	int type;
-	float3 color;
-	float intensity;
-	float range;
-	float2 spotAngles;
-};
-
-struct FLight
-{
-	FLightProperties properties;
-	float3 direction;
 };
 
 FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, SamplerState s)
@@ -139,42 +124,68 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 	return output;
 }
 
-float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
+float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
 {
-	const float3 L = light.direction;
+	float3 L;
+	float3 radianceIn = 0.f;
 
-	// Shadow ray
-	float lightVisibility = 1.f;
+	// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md
+	if (light.m_type == Light::Directional)
 	{
-		RayDesc ray;
-		ray.Origin = worldPos;
-		ray.Direction = L;
-		ray.TMin = 0.1f;
-		ray.TMax = 1000.f;
+		float3x3 lightRotation = float3x3(lightTransform[0].xyz, lightTransform[1].xyz, lightTransform[2].xyz);
+		L = normalize(mul(float3(0, 0, -1), lightRotation));
+		radianceIn = 10000 * light.m_intensity * light.m_color;
+	}
+	else if (light.m_type == Light::Point)
+	{
+		float3 lightPosition = lightTransform[3].xyz;
+		float3 lightVec = lightPosition - worldPos;
+		L = normalize(lightVec);
+		float distSquared = dot(lightVec, lightVec);
 
-		RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES> q;
-		q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
-
-		if (!q.Proceed())
+		if ((light.m_range == 0.f) || (distSquared < light.m_range * light.m_range))
 		{
-			// If Proceed() returns false, it means that traversal is complete. Check status and update light visibility.
-			lightVisibility = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
-		}
-		else
-		{
-			// This means that further evaluation is needed. For now, set light visibility to 0.f for non-opaque
-			// triangles. In future, evaluate alpha map for non-opaque geo before setting visibility.
-			lightVisibility = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
+			radianceIn = 10000 * light.m_intensity * light.m_color / dot(lightVec, lightVec);
 		}
 	}
-
-	float3 radiance = matInfo.emissive * 20000;
-	if (lightVisibility > 0.f)
+	else if (light.m_type == Light::Spot)
 	{
-		float NoL = dot(N, L);
-		float NoV = dot(N, V);
-		if (NoL > 0.f)
+
+	}
+
+	float3 radianceOut = matInfo.emissive * 20000;
+	float NoL = saturate(dot(N, L));
+	if (NoL > 0.f && any(radianceIn > 0.f))
+	{
+		// Shadow ray
+		float lightVisibility = 1.f;
 		{
+			RayDesc ray;
+			ray.Origin = worldPos;
+			ray.Direction = L;
+			ray.TMin = 0.1f;
+			ray.TMax = 1000.f;
+
+			RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES> q;
+			q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
+
+			if (!q.Proceed())
+			{
+				// If Proceed() returns false, it means that traversal is complete. Check status and update light visibility.
+				lightVisibility = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
+			}
+			else
+			{
+				// This means that further evaluation is needed. For now, set light visibility to 0.f for non-opaque
+				// triangles. In future, evaluate alpha map for non-opaque geo before setting visibility.
+				lightVisibility = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
+			}
+		}
+
+		if (lightVisibility > 0.f)
+		{
+			float NoV = dot(N, V);
+
 			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
 			float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
 
@@ -190,12 +201,12 @@ float3 GetDirectRadiance(FLight light, float3 worldPos, FMaterialProperties matI
 			float3 Fd = albedo * Fd_Lambert();
 			float3 Fr = (D * F * G) / max(4.f * NoV * NoL, 0.001);
 
-			float irradiance = light.properties.intensity * NoL;
-			radiance += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
+			float3 irradiance = radianceIn * NoL;
+			radianceOut += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
 		}
 	}
 
-	return radiance;
+	return radianceOut;
 }
 
 #endif

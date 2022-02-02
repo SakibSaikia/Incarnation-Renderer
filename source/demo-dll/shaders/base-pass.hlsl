@@ -126,12 +126,16 @@ float4 ps_main(vs_to_ps input) : SV_Target
 #if DIRECT_LIGHTING
 	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
 
-	FLight sun;
-	sun.direction = normalize(float3(1, 1, -1));
-	sun.properties.type = 0;
-	sun.properties.intensity = 100000.f;
-
-	radiance += GetDirectRadiance(sun, input.worldPos.xyz, p, N, V, sceneBvh);
+	ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_frameConstants.sceneLightIndicesBufferIndex];
+	ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_frameConstants.sceneLightPropertiesBufferIndex];
+	ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_frameConstants.sceneLightsTransformsBufferIndex];
+	for (int lightIndex = 0; lightIndex < g_frameConstants.lightCount; ++lightIndex)
+	{
+		int lightId = lightIndicesBuffer.Load<int>(lightIndex * sizeof(int));
+		FLight light = lightPropertiesBuffer.Load<FLight>(lightId * sizeof(FLight));
+		float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightId * sizeof(float4x4));
+		radiance += GetDirectRadiance(light, lightTransform, input.worldPos.xyz, p, N, V, sceneBvh);
+	}
 #endif
 
 	// Diffuse IBL

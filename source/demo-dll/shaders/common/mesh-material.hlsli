@@ -1,90 +1,4 @@
-#pragma once
-
-#ifndef __cplusplus
-	#define uint32_t	uint
-	#define Vector3		float3
-	#define Vector4		float4
-	#define Matrix		float4x4
-#else
-	#include <SimpleMath.h>
-	using namespace DirectX::SimpleMath;
-#endif
-
-namespace AlphaMode
-{
-	enum Type
-	{
-		Opaque,
-		Masked,
-		Blend
-	};
-}
-
-
-// Corresponds to GLTF BufferView
-struct FMeshBufferView
-{
-	int m_bufferSrvIndex;
-	uint32_t m_byteOffset;
-	uint32_t m_byteLength;
-};
-
-// Corresponds to GLTF Accessor
-struct FMeshAccessor
-{
-	int m_bufferViewIndex;
-	uint32_t m_byteOffset;
-	uint32_t m_byteStride;
-};
-
-struct FGpuPrimitive
-{
-	Matrix m_localToWorld;
-	int m_indexAccessor;
-	int m_positionAccessor;
-	int m_uvAccessor;
-	int m_normalAccessor;
-	int m_tangentAccessor;
-	int m_materialIndex;
-	int m_indicesPerTriangle;
-};
-
-struct FMaterial
-{
-	Vector3 m_emissiveFactor;
-	Vector3 m_baseColorFactor;
-	float m_metallicFactor;
-	float m_roughnessFactor;
-	float m_aoStrength;
-	float m_transmissionFactor;
-	float m_clearcoatFactor;
-	float m_clearcoatRoughnessFactor;
-
-	int m_emissiveTextureIndex;
-	int m_baseColorTextureIndex;
-	int m_metallicRoughnessTextureIndex;
-	int m_normalTextureIndex;
-	int m_aoTextureIndex;
-	int m_transmissionTextureIndex;
-	int m_clearcoatTextureIndex;
-	int m_clearcoatRoughnessTextureIndex;
-	int m_clearcoatNormalTextureIndex;
-
-	int m_emissiveSamplerIndex;
-	int m_baseColorSamplerIndex;
-	int m_metallicRoughnessSamplerIndex;
-	int m_normalSamplerIndex;
-	int m_aoSamplerIndex;
-	int m_transmissionSamplerIndex;
-	int m_clearcoatSamplerIndex;
-	int m_clearcoatRoughnessSamplerIndex;
-	int m_clearcoatNormalSamplerIndex;
-
-	int m_alphaMode;
-	bool m_doubleSided;
-};
-
-#ifndef __cplusplus
+#include "gpu-shared-types.h"
 
 namespace MeshMaterial
 {
@@ -215,13 +129,13 @@ namespace MeshMaterial
 		[branch]
 		switch (accessor.m_byteStride)
 		{
-		case sizeof(float3):
-			return buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
-		case sizeof(float4):
-			temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
-			return temp.xyz;
-		default:
-			return 0.f.xxx;
+			case sizeof(float3) :
+				return buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
+				case sizeof(float4) :
+					temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
+					return temp.xyz;
+				default:
+					return 0.f.xxx;
 		}
 	}
 
@@ -242,16 +156,16 @@ namespace MeshMaterial
 		[branch]
 		switch (accessor.m_byteStride)
 		{
-			case sizeof(float2):
+			case sizeof(float2) :
 				return buffer.Load<float2>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float2));
-			case sizeof(float3) :
-				temp.xyz = buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
-				return temp.xy;
-			case sizeof(float4) :
-				temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
-				return temp.xy;
-			default:
-				return 0.f.xx;
+				case sizeof(float3) :
+					temp.xyz = buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
+					return temp.xy;
+					case sizeof(float4) :
+						temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
+						return temp.xy;
+					default:
+						return 0.f.xx;
 		}
 	}
 
@@ -276,5 +190,3 @@ namespace MeshMaterial
 		return primitivesBuffer.Load<FGpuPrimitive>((primitiveOffset + geometryIndex) * sizeof(FGpuPrimitive));
 	}
 }
-#endif // __HLSL
-

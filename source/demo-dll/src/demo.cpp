@@ -8,7 +8,7 @@
 #include <common.h>
 #include <sstream>
 #include <mesh-utils.h>
-#include <mesh-material.h>
+#include <gpu-shared-types.h>
 #include <concurrent_unordered_map.h>
 #include <ppltasks.h>
 #include <ppl.h>
@@ -523,13 +523,13 @@ void Demo::UpdateUI(float deltaTime)
 					{
 						switch (light.m_type)
 						{
-						case FLight::Directional:
+						case Light::Directional:
 							ImGui::LabelText("Type", "Directional Light");
 							break;
-						case FLight::Point:
+						case Light::Point:
 							ImGui::LabelText("Type", "Point Light");
 							break;
-						case FLight::Spot:
+						case Light::Spot:
 							ImGui::LabelText("Type", "Spot Light");
 							break;
 						}
@@ -538,12 +538,12 @@ void Demo::UpdateUI(float deltaTime)
 						ImGui::SliderFloat3("Color", &color[0], 0.0f, 1.0f);
 						ImGui::SliderFloat("Intensity", &light.m_intensity, 0.f, 500.f);
 
-						if (light.m_type != FLight::Directional)
+						if (light.m_type != Light::Directional)
 						{
 							ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
 						}
 
-						if (light.m_type == FLight::Spot)
+						if (light.m_type == Light::Spot)
 						{
 							ImGui::SliderFloat("Inner Cone Angle", &light.m_spotAngles.x, 0.f, 100.f);
 							ImGui::SliderFloat("Outer Cone Angle", &light.m_spotAngles.y, 0.f, 100.f);
@@ -1062,13 +1062,14 @@ void FScene::CreateGpuLightBuffers()
 {
 	if (!m_sceneLights.m_entityList.empty())
 	{
-		const size_t bufferSize = m_sceneLights.m_entityList.size() * sizeof(int) + m_sceneLights.m_transformList.size() * sizeof(Matrix);
-		FResourceUploadContext uploader{ bufferSize };
+		const size_t indexBufferSize = m_sceneLights.m_entityList.size() * sizeof(int);
+		const size_t transformsBufferSize = m_sceneLights.m_transformList.size() * sizeof(Matrix);
+		FResourceUploadContext uploader{ indexBufferSize + transformsBufferSize };
 
 		m_packedLightIndices = RenderBackend12::CreateBindlessBuffer(
 			L"scene_light_indices",
 			BindlessResourceType::Buffer,
-			bufferSize,
+			indexBufferSize,
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
 			&uploader);
@@ -1076,7 +1077,7 @@ void FScene::CreateGpuLightBuffers()
 		m_packedLightTransforms = RenderBackend12::CreateBindlessBuffer(
 			L"scene_light_transforms",
 			BindlessResourceType::Buffer,
-			bufferSize,
+			transformsBufferSize,
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_sceneLights.m_transformList.data(),
 			&uploader);
@@ -1821,11 +1822,11 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		m_lights[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
 
 		if (light.type == "directional")
-			m_lights[i].m_type = FLight::Directional;
+			m_lights[i].m_type = Light::Directional;
 		else if (light.type == "point")
-			m_lights[i].m_type = FLight::Point;
+			m_lights[i].m_type = Light::Point;
 		else if (light.type == "spot")
-			m_lights[i].m_type = FLight::Spot;
+			m_lights[i].m_type = Light::Spot;
 	});
 
 	if (!m_lights.empty())

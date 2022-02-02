@@ -2,7 +2,7 @@
 
 #include <SimpleMath.h>
 #include <ppltasks.h>
-#include <mesh-material.h>
+#include <gpu-shared-types.h>
 #include <spookyhash_api.h>
 using namespace DirectX::SimpleMath;
 
@@ -65,25 +65,6 @@ struct FCamera
 	std::string m_name;
 	Matrix m_viewTransform;
 	Matrix m_projectionTransform;
-};
-
-struct FLight
-{
-	enum Type : int
-	{
-		Directional,
-		Point,
-		Spot,
-		Sphere,
-		Disk,
-		Rect
-	};
-
-	Type m_type;
-	Vector3 m_color;
-	float m_intensity;
-	float m_range;
-	Vector2 m_spotAngles;
 };
 
 struct FLightProbe

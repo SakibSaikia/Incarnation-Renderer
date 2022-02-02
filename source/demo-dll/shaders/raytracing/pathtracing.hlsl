@@ -183,11 +183,16 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float3 V = -WorldRayDirection();
 
 #if DIRECT_LIGHTING
-    FLight sun;
-    sun.direction = normalize(float3(1, 1, -1));
-    sun.properties.type = 0;
-    sun.properties.intensity = 100000.f;
-    payload.color.xyz += payload.attenuation * GetDirectRadiance(sun, hitPosition, matInfo, N, V, g_sceneBvh);
+    ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightIndicesBufferIndex];
+    ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightPropertiesBufferIndex];
+    ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightsTransformsBufferIndex];
+    for (int lightIndex = 0; lightIndex < g_globalConstants.lightCount; ++lightIndex)
+    {
+        int lightId = lightIndicesBuffer.Load<int>(lightIndex * sizeof(int));
+        FLight light = lightPropertiesBuffer.Load<FLight>(lightId * sizeof(FLight));
+        float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightId * sizeof(float4x4));
+        payload.color.xyz += payload.attenuation * GetDirectRadiance(light, lightTransform, hitPosition, matInfo, N, V, g_sceneBvh);
+    }
 #endif
 
     if (payload.pathLength < MAX_RECURSION_DEPTH)
