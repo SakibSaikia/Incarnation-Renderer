@@ -105,12 +105,14 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
 	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisotropicSampler);
 
-#if VIEWMODE == 2
-	return p.roughness.xxxx;
-#elif VIEWMODE == 3
-	return p.metallic.xxxx;
-#elif VIEWMODE == 1
+#if VIWEMODE == 1 // Lighting Only
 	p.basecolor = 0.5.xxx;
+#elif VIEWMODE == 2 // Roughness
+	return p.roughness.xxxx;
+#elif VIEWMODE == 3 // Metallic
+	return p.metallic.xxxx;
+#elif VIEWMODE == 4 // Base COlor
+	return float4(p.basecolor, 1.f);
 #endif
 
 	// Tangent space transform

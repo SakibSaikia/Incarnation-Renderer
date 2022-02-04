@@ -570,6 +570,7 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::RadioButton("Lighting Only", &Config::g_viewmode, (int)Viewmode::LightingOnly);
 				ImGui::RadioButton("Roughness", &Config::g_viewmode, (int)Viewmode::Roughness);
 				ImGui::RadioButton("Metallic", &Config::g_viewmode, (int)Viewmode::Metallic);
+				ImGui::RadioButton("Base Color", &Config::g_viewmode, (int)Viewmode::BaseColor);
 				ImGui::TreePop();
 			}
 

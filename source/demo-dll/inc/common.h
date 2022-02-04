@@ -8,7 +8,8 @@ enum class Viewmode
 	Normal,
 	LightingOnly,
 	Roughness,
-	Metallic
+	Metallic,
+	BaseColor
 };
 
 struct Config

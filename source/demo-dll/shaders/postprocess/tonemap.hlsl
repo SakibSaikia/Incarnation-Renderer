@@ -33,7 +33,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	Texture2D hdrTex = ResourceDescriptorHeap[g_hdrInputTextureIndex];
 	float3 hdrColor = hdrTex.Sample(g_pointSampler, input.uv).rgb;
 
-#if VIEWMODE == 2 || VIEWMODE == 3
+#if VIEWMODE == 2 || VIEWMODE == 3 || VIEWMODE == 4
 	return float4(hdrColor, 1.f);
 #endif
 
