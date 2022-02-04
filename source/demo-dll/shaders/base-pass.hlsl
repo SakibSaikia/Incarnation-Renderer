@@ -127,7 +127,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	}
 
 	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
-	float3 radiance = 0.f;
+	float3 radiance = p.emissive * 20000;
 	
 #if DIRECT_LIGHTING
 	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];

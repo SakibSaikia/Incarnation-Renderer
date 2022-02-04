@@ -200,7 +200,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 		radianceIn = 10000 * light.m_intensity * light.m_color * angularAttenuation * radialAttenuation;
 	}
 
-	float3 radianceOut = matInfo.emissive * 20000;
+	float3 radianceOut = 0;
 	float NoL = saturate(dot(N, L));
 	if (NoL > 0.f && any(radianceIn > 0.f))
 	{
