@@ -3,6 +3,14 @@
 #include <locale>
 #include <codecvt>
 
+enum class Viewmode
+{
+	Normal,
+	LightingOnly,
+	Roughness,
+	Metallic
+};
+
 struct Config
 {
 	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
@@ -12,7 +20,7 @@ struct Config
 	static inline float g_fov = 0.25f * DirectX::XM_PI;
 	static inline float g_exposure = 13.f;
 	static inline float g_cameraSpeed = 5.f;
-	static inline bool g_lightingOnlyView = false;
+	static inline int g_viewmode = 0;
 	static inline bool g_enableDirectLighting = true;
 	static inline bool g_enableDiffuseIBL = true;
 	static inline bool g_enableSpecularIBL = true;

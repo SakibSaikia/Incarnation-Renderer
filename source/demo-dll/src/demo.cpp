@@ -566,7 +566,10 @@ void Demo::UpdateUI(float deltaTime)
 		{
 			if (ImGui::TreeNode("View Modes"))
 			{
-				ImGui::Checkbox("Lighting Only", &Config::g_lightingOnlyView);
+				ImGui::RadioButton("Normal", &Config::g_viewmode, (int)Viewmode::Normal);
+				ImGui::RadioButton("Lighting Only", &Config::g_viewmode, (int)Viewmode::LightingOnly);
+				ImGui::RadioButton("Roughness", &Config::g_viewmode, (int)Viewmode::Roughness);
+				ImGui::RadioButton("Metallic", &Config::g_viewmode, (int)Viewmode::Metallic);
 				ImGui::TreePop();
 			}
 

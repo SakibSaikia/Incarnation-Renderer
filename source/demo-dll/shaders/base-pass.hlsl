@@ -105,7 +105,11 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
 	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisotropicSampler);
 
-#if LIGHTING_ONLY
+#if VIEWMODE == 2
+	return p.roughness.xxxx;
+#elif VIEWMODE == 3
+	return p.metallic.xxxx;
+#elif VIEWMODE == 1
 	p.basecolor = 0.5.xxx;
 #endif
 

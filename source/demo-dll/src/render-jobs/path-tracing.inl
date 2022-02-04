@@ -27,7 +27,7 @@ namespace RenderJob
 
 			std::wstringstream s;
 			s << L"RAY_TRACING=1" <<
-				L" LIGHTING_ONLY=" << (Config::g_lightingOnlyView ? L"1" : L"0") << 
+				L" VIEWMODE=" << (int)Config::g_viewmode << 
 				L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0");
 
 			// Compile the lib

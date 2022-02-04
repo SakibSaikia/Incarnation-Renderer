@@ -150,7 +150,7 @@ namespace RenderJob
 						D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
 						std::wstringstream s;
-						s << L"LIGHTING_ONLY=" << (Config::g_lightingOnlyView ? L"1" : L"0") <<
+						s << L"VIEWMODE=" << (int)Config::g_viewmode <<
 							L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0") <<
 							L" DIFFUSE_IBL=" << (Config::g_enableDiffuseIBL ? L"1" : L"0") <<
 							L" SPECULAR_IBL=" << (Config::g_enableSpecularIBL ? L"1" : L"0");
