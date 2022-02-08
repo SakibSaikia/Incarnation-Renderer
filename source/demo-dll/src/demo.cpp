@@ -409,6 +409,8 @@ void Demo::UpdateUI(float deltaTime)
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
+	bool bResetPathtracelAccumulation = false;
+
 	ImGui::Begin("Menu");
 	{
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -422,15 +424,9 @@ void Demo::UpdateUI(float deltaTime)
 		{
 			ImGui::Checkbox("Pathtracing", &Config::g_pathTrace);
 
-			bool bReset = false;
-			bReset |= ImGui::SliderInt("Max. Sample Count", (int*) &Config::g_maxSampleCount, 1, 1024);
-			bReset |= ImGui::SliderFloat("Camera Aperture", &Config::g_pathtracing_cameraAperture, 0.f, 0.1f);
-			bReset |= ImGui::SliderFloat("Camera Focal Length", &Config::g_pathtracing_cameraFocalLength, 1.f, 15.f);
-
-			if (bReset)
-			{
-				Demo::ResetPathtraceAccumulation();
-			}
+			bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*) &Config::g_maxSampleCount, 1, 1024);
+			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &Config::g_pathtracing_cameraAperture, 0.f, 0.1f);
+			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &Config::g_pathtracing_cameraFocalLength, 1.f, 15.f);
 		}
 
 		// -----------------------------------------------------------------------------------------------------------------------------------------
@@ -472,7 +468,7 @@ void Demo::UpdateUI(float deltaTime)
 					{
 						curHdriIndex = n;
 						Config::g_environmentFilename = s_hdriList[n];
-						Demo::ResetPathtraceAccumulation();
+						bResetPathtracelAccumulation = true;
 					}
 
 					if (bSelected)
@@ -564,6 +560,7 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Debug"))
 		{
+			int currentViewMode = Config::g_viewmode;
 			if (ImGui::TreeNode("View Modes"))
 			{
 				ImGui::RadioButton("Normal", &Config::g_viewmode, (int)Viewmode::Normal);
@@ -573,6 +570,8 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::RadioButton("Base Color", &Config::g_viewmode, (int)Viewmode::BaseColor);
 				ImGui::TreePop();
 			}
+
+			bResetPathtracelAccumulation |= (Config::g_viewmode != currentViewMode);
 
 			if (ImGui::TreeNode("Light Components"))
 			{
@@ -584,9 +583,13 @@ void Demo::UpdateUI(float deltaTime)
 		}
 	}
 	ImGui::End();
-
 	ImGui::EndFrame();
 	ImGui::Render();
+
+	if (bResetPathtracelAccumulation)
+	{
+		Demo::ResetPathtraceAccumulation();
+	}
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -1995,7 +1998,6 @@ void FView::UpdateViewTransform()
 	m_viewTransform(2, 3) = 0.0f;
 	m_viewTransform(3, 3) = 1.0f;
 
-	// If the view is updated reset the pathtrace sample index
 	Demo::ResetPathtraceAccumulation();
 }
 
