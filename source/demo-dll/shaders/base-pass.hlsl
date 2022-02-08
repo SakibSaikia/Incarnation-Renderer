@@ -111,8 +111,10 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	return p.roughness.xxxx;
 #elif VIEWMODE == 3 // Metallic
 	return p.metallic.xxxx;
-#elif VIEWMODE == 4 // Base COlor
+#elif VIEWMODE == 4 // Base Color
 	return float4(p.basecolor, 1.f);
+#elif VIEWMODE == 5 // Emissive
+		return float4(p.emissive, 1.f);
 #endif
 
 	// Tangent space transform

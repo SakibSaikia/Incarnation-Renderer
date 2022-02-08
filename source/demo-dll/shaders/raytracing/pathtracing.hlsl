@@ -180,6 +180,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 #elif VIEWMODE == 4 // Base Color
     payload.color = float4(matInfo.basecolor, 1.f);
     return;
+#elif VIEWMODE == 5 // Emissive
+    payload.color = float4(matInfo.emissive, 1.f);
+    return;
 #endif
 
     // Emissive contribution

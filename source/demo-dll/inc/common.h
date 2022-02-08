@@ -5,12 +5,13 @@
 
 enum class Viewmode
 {
-	Normal,
-	NanCheck,
-	LightingOnly,
-	Roughness,
-	Metallic,
-	BaseColor
+	Normal			= 0,
+	LightingOnly	= 1,
+	Roughness		= 2,
+	Metallic		= 3,
+	BaseColor		= 4,
+	Emissive		= 5,
+	NanCheck		= 6,
 };
 
 struct Config
