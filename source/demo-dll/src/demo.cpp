@@ -416,7 +416,6 @@ void Demo::UpdateUI(float deltaTime)
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::Spacing();
 		ImGui::Checkbox("TAA", &Config::g_enableTAA);
-		ImGui::Checkbox("NaN Check", &Config::g_enableNaNCheck);
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -564,6 +563,7 @@ void Demo::UpdateUI(float deltaTime)
 			if (ImGui::TreeNode("View Modes"))
 			{
 				ImGui::RadioButton("Normal", &Config::g_viewmode, (int)Viewmode::Normal);
+				ImGui::RadioButton("Nan Check", &Config::g_viewmode, (int)Viewmode::NanCheck);
 				ImGui::RadioButton("Lighting Only", &Config::g_viewmode, (int)Viewmode::LightingOnly);
 				ImGui::RadioButton("Roughness", &Config::g_viewmode, (int)Viewmode::Roughness);
 				ImGui::RadioButton("Metallic", &Config::g_viewmode, (int)Viewmode::Metallic);
