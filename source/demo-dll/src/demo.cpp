@@ -346,7 +346,7 @@ void Demo::HeartbeatThread()
 	{
 		if (!s_suspendRendering)
 		{
-			RenderBackend12::RecompileModifiedShaders();
+			RenderBackend12::RecompileModifiedShaders(&Demo::ResetPathtraceAccumulation);
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));

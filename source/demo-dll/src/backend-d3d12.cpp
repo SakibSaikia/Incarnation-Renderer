@@ -1893,8 +1893,10 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 	}
 }
 
-void RenderBackend12::RecompileModifiedShaders()
+void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 {
+	bool bDirty = false;;
+
 	for (auto& [shaderDesc, blob] : s_shaderCache)
 	{
 		winrt::com_ptr<IDxcBlob> preprocessedBlob;
@@ -1916,6 +1918,7 @@ void RenderBackend12::RecompileModifiedShaders()
 			{
 				blob.m_hash = currentHash;
 				blob.m_blob = newBlob;
+				bDirty |= true;
 			}
 		}
 	}
@@ -1940,8 +1943,14 @@ void RenderBackend12::RecompileModifiedShaders()
 			{
 				blob.m_hash = currentHash;
 				blob.m_blob = newBlob;
+				bDirty |= true;
 			}
 		}
+	}
+
+	if (bDirty)
+	{
+		callback();
 	}
 }
 

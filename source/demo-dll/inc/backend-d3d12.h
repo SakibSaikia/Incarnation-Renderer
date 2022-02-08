@@ -314,9 +314,10 @@ namespace RenderBackend12
 	void PresentDisplay();
 
 	// Shaders
+	typedef void (*ShadersDirtiedCallback)();
 	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc);
 	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc);
-	void RecompileModifiedShaders();
+	void RecompileModifiedShaders(ShadersDirtiedCallback);
 
 	// Descriptor Management
 	D3DDescriptorHeap_t* GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type);
