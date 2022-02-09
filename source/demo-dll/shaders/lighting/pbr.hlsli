@@ -74,19 +74,6 @@ float Fd_Burley(float NoV, float NoL, float LoH, float roughness)
     return lightScatter * viewScatter * k_InvPi;
 }
 
-// https://learnopengl.com/PBR/Theory
-float D_GGX(float NoH, float Roughness)
-{
-    float a = Roughness * Roughness;
-    float a2 = a * a;
-
-    float nom = a2;
-    float denom = (NoH * NoH * (a2 - 1.0) + 1.0);
-    denom = k_Pi * denom * denom;
-
-    return nom / denom;
-}
-
 // Computes the exposure normalization factor from the camera's EV100
 float Exposure(int ev100) 
 {

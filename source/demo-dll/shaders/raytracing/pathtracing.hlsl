@@ -186,7 +186,11 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 #endif
 
     // Emissive contribution
-    payload.color.xyz += payload.attenuation * matInfo.emissive * 20000;
+    if (any(matInfo.emissive > 0.f))
+    {
+        payload.color.xyz += payload.attenuation * matInfo.emissive * 20000;
+        return;
+    }
 
     if (matInfo.bHasNormalmap)
     {

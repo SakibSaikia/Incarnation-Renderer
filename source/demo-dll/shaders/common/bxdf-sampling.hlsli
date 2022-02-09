@@ -7,11 +7,28 @@
 // References : 
 // * Real Shading in Unreal Engine 4 coursenotes by Brian Karis, Epic Games
 // * https://www.pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Reflection_Functions
+// * https://learnopengl.com/PBR/Theory
 // ------------------
 
-float3 SampleGGX(float2 u, float Roughness)
+// The GGX distribution function
+float GGX(float NoH, float Roughness)
 {
     float a = Roughness * Roughness;
+    float a2 = a * a;
+    NoH = max(NoH, 0.f);
+    float NoH2 = NoH * NoH;
+
+    float nom = a2;
+    float denom = (NoH2 * (a2 - 1.f) + 1.f);
+    denom = k_Pi * denom * denom;
+
+    return nom / max(denom, 0.0001);
+}
+
+// Sample a direction based on the GGX distribution
+float3 SampleGGX(float2 u, float roughness)
+{
+    float a = roughness * roughness;
 
     // Compute GGX distribution sample
     float Phi = 2 * k_Pi * u.x;
@@ -22,6 +39,12 @@ float3 SampleGGX(float2 u, float Roughness)
     float3 H = SphericalDirection(SinTheta, CosTheta, Phi);
 
     return H;
+}
+
+// The PDF when sampling from a GGX distribution
+float GGXPdf(float NoH, float roughness)
+{
+    return GGX(NoH, roughness) * NoH;
 }
 
 float3 SampleBeckmann(float2 u, float roughness)

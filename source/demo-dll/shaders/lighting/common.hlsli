@@ -240,7 +240,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 			float NoH = saturate(dot(N, H));
 			float VoH = saturate(dot(V, H));
 
-			float D = D_GGX(NoH, matInfo.roughness);
+			float D = GGX(NoH, matInfo.roughness);
 			float3 F = F_Schlick(VoH, F0);
 			float G = G_Smith_Direct(NoV, NoL, matInfo.roughness);
 
@@ -249,7 +249,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 			float3 Fr = (D * F * G) / max(4.f * NoV * NoL, 0.001);
 
 			float3 irradiance = radianceIn * NoL;
-			radianceOut += (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
+			radianceOut = (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
 		}
 	}
 

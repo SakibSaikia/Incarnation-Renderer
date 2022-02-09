@@ -80,7 +80,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
                 // See : https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-20-gpu-based-importance-sampling and https://learnopengl.com/PBR/IBL/Specular-IBL
                 float NoH = max(dot(N, H), 0.0);
                 float VoH = max(dot(V, H), 0.0);
-                float D = D_GGX(NoH, Roughness);
+                float D = GGX(NoH, Roughness);
                 float pdf = (D * NoH / (4.0 * VoH)) + 0.0001;
                 float saTexel = 4.f * k_Pi / (6.0 * Resolution * Resolution);
                 float saSample = 1.f / (float(NumSamples) * pdf + 0.0001);
