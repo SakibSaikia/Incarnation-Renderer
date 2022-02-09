@@ -185,12 +185,10 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     return;
 #endif
 
-    // Emissive contribution
-    if (any(matInfo.emissive > 0.f))
-    {
-        payload.color.xyz += payload.attenuation * matInfo.emissive * 20000;
-        return;
-    }
+    // Emissive contribution. 
+    // Emissive surfaces should not scatter - modulate scattering based on emissive value.
+    payload.color.xyz += payload.attenuation * matInfo.emissive * 20000;
+    payload.attenuation *= saturate(1.f - matInfo.emissive);
 
     if (matInfo.bHasNormalmap)
     {
