@@ -256,4 +256,63 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 	return radianceOut;
 }
 
+float3 GetSkyRadiance(float3 radianceIn, float3 L, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
+{
+	float3 radianceOut = 0;
+	float NoL = saturate(dot(N, L));
+
+	if (NoL > 0.f && any(radianceIn > 0.f))
+	{
+		// Shadow ray
+		float lightVisibility = 1.f;
+		{
+			RayDesc ray;
+			ray.Origin = worldPos;
+			ray.Direction = L;
+			ray.TMin = 0.1f;
+			ray.TMax = 1000.f;
+
+			RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES> q;
+			q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
+
+			if (!q.Proceed())
+			{
+				// If Proceed() returns false, it means that traversal is complete. Check status and update light visibility.
+				lightVisibility = (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT) ? 0.f : 1.f;
+			}
+			else
+			{
+				// This means that further evaluation is needed. For now, set light visibility to 0.f for non-opaque
+				// triangles. In future, evaluate alpha map for non-opaque geo before setting visibility.
+				lightVisibility = q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE ? 0.f : 1.f;
+			}
+		}
+
+		if (lightVisibility > 0.f)
+		{
+			float NoV = dot(N, V);
+
+			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
+			float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+
+			float3 H = normalize(L + V);
+			float NoH = max(0.0001f, dot(N, H));
+			float VoH = max(0.0001f, dot(V, H));
+
+			float D = GGX(NoH, matInfo.roughness);
+			float3 F = F_Schlick(VoH, F0);
+			float G = G_Smith_Direct(NoV, NoL, matInfo.roughness);
+
+			// Diffuse & Specular BRDF
+			float3 Fd = albedo * Fd_Lambert();
+			float3 Fr = (D * F * G) / max(4.f * NoV * NoL, 0.001);
+
+			float3 irradiance = radianceIn * NoL;
+			radianceOut = (Fr + (1.f - F) * Fd) * irradiance * lightVisibility;
+		}
+	}
+
+	return radianceOut / CosineHemispherePdf(L.z);
+}
+
 #endif

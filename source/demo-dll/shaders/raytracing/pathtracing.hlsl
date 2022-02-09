@@ -212,6 +212,13 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     }
 #endif
 
+    // Skylight contribution
+    TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
+    float2 u = SamplePoint(payload.pixelIndex, g_globalConstants.currentSampleIndex, payload.sampleSetIndex, g_globalConstants.sqrtSampleCount);
+    float3 sampleDir = CosineSampleHemisphere(u);
+    float3 radianceIn = envmap.SampleLevel(g_envmapSampler, sampleDir, 0).rgb;
+    payload.color.rgb += payload.attenuation * GetSkyRadiance(radianceIn, sampleDir, hitPosition, matInfo, N, V, g_sceneBvh);
+
     if (payload.pathLength < MAX_RECURSION_DEPTH)
     {
         // The secondary bounce ray has reduced contribution to the output radiance as determined by the attenuation
