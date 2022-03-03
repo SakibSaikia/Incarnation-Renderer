@@ -181,7 +181,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		{
 			float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
 			float3 R = normalize(reflect(-V, N));
-			float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, p.roughness * mipCount).rgb;
+			float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, p.roughness * (mipCount - 1)).rgb;
 			float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, p.roughness), 0.f).rg;
 			float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
 			radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);

@@ -64,95 +64,62 @@ RayDesc GenerateIndirectRadianceRay(
     uint sqrtSampleCount,
     out float3 outAttenuation)
 {
-    float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-
-    RayDesc defaultRay = (RayDesc)0;
-    outAttenuation = 0.f;
-
-    if (matInfo.metallic > 0.5) // Metal
+    // Sample from both a cosine-weighted distribution as well as the microfacet distribution
+    // based on whether u.x is is less than or greater than 0.5 and then remap u.x to cover
+    // the entire [0,1] range. The pdf for this sampling strategy is the avg of the 2 pdf's used.
+    // See: https://www.pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Reflection_Functions 
+    float2 u = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
+    float3 L, H;
+    float t = 0.5f;
+    if (u.x < t)
     {
-        //if (length(reflectance) > randomNoise)
-        {
-            // GGX sample half vectors around the normal based on roughness.
-            // Reflect the ray direction (V) about H to get the new direction for indirect lighting L
-            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 H = SampleGGX(ggxSample, matInfo.roughness);
-            H = normalize(mul(H, tangentToWorld));
-            float3 L = normalize(reflect(-V, H));
-            float VoH = saturate(dot(V, H));
-            float3 F = F_Schlick(VoH, F0);
-
-            RayDesc ray;
-            ray.Origin = hitPosition;
-            ray.Direction = L;
-            ray.TMin = k_rayOffset;
-            ray.TMax = 10000.0;
-            outAttenuation = F;
-            return ray;
-        }
+        // Cosine sample hemisphere
+        u.x = 2.f * u.x;
+        L = CosineSampleHemisphere(u);
+        L = normalize(mul(L, tangentToWorld));
+        H = normalize(L + V);
     }
-    else // Dielectric
+    else
     {
-        float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-        float3 H = SampleGGX(ggxSample, matInfo.roughness);
+        // GGX sample half vectors around the normal based on roughness.
+        // Reflect the ray direction (V) about H to get the new direction for indirect lighting L
+        u.x = 2.f * (u.x - 0.5f);
+        H = SampleGGX(u, matInfo.roughness);
         H = normalize(mul(H, tangentToWorld));
-        float VoH = saturate(dot(V, H));
-        float3 F = F_Schlick(VoH, F0);
-
-        float reflectionProbability = SampleRand(pixelIndex, sampleIndex, sampleSetIndex);
-        if (length(F) > reflectionProbability)
-        {
-            float3 L = normalize(reflect(-V, H));
-
-            RayDesc ray;
-            ray.Origin = hitPosition;
-            ray.Direction = L;
-            ray.TMin = k_rayOffset;
-            ray.TMax = 10000.0;
-            outAttenuation = F;
-            return ray;
-        }
-        else if (matInfo.transmission > 0.f)
-        {
-            // Since the surface is considered to be infinitely thin, we will ignore macroscopic refraction caused by 
-            // the orientation of the surface. However, microfacets on either side of the thin surface will cause light 
-            // to be refracted in random directions, effectively blurring the transmitted light. 
-            // That is, the roughness of the surface directly causes the transmitted light to become blurred. 
-            // This microfacet lobe is exactly the same as the specular lobe except sampled along the line of sight through the surface.
-            // The BaseColor is used to define the light that is transmitted (not absorbed) by a transparent surface.
-            float3 tint = matInfo.basecolor;
-            float2 ggxSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 transmittedRayDir = WorldRayDirection();
-            float3 rayDir = SampleGGX(ggxSample, matInfo.roughness);
-            rayDir = normalize(mul(rayDir, TangentToWorld(transmittedRayDir)));
-
-            RayDesc ray;
-            ray.Origin = hitPosition;
-            ray.Direction = rayDir;
-            ray.TMin = k_rayOffset;
-            ray.TMax = 10000.0;
-            outAttenuation = tint;
-            return ray;
-
-        }
-        else
-        {
-            float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
-            float2 hemisphereSample = SamplePoint(pixelIndex, sampleIndex, sampleSetIndex, sqrtSampleCount);
-            float3 L = UniformSampleHemisphere(hemisphereSample);
-            L = normalize(mul(L, tangentToWorld));
-
-            RayDesc ray;
-            ray.Origin = hitPosition;
-            ray.Direction = L;
-            ray.TMin = k_rayOffset;
-            ray.TMax = 10000.0;
-            outAttenuation = albedo; // The PDF of sampling a cosine hemisphere is NdotL / Pi, which cancels out those terms from the diffuse BRDF and the irradiance integral
-            return ray;
-        }
+        L = normalize(reflect(-V, H));
     }
 
-    return defaultRay;
+    float NoL = max(dot(N, L), 0.001);
+    float NoV = max(dot(N, V), 0.001);
+    float NoH = max(dot(N, H), 0.001);
+    float VoH = max(dot(V, H), 0.001);
+
+    // Avg. the two pdf's. Note that the GGX distribution gives the distribution of normals around the 
+    // half vector, but the reflection integral is with respect to the incoming light vector. These
+    // distributions are not the same and we must transform the half vector PDF to the light direction PDF
+    // by dividing by 4 * VoH. See: https://www.pbr-book.org/3ed-2018/Light_Transport_I_Surface_Reflection/Sampling_Reflection_Functions
+    float pdf = t * CosineHemispherePdf(NoL) + (1.f - t) * GGXPdf(NoH, matInfo.roughness) / (4.f * VoH);
+
+    // Eavluate BRDF
+    float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
+    float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+    float D = GGX(NoH, matInfo.roughness);
+    float3 F = F_Schlick(VoH, F0);
+    float G = G_Smith_Direct(NoV, NoL, matInfo.roughness);
+
+    // Diffuse & Specular BRDF
+    float3 Fd = albedo * Fd_Lambert();
+    float3 Fr = (D * F * G) / max(4.f * NoV * NoL, 0.001);
+    float3 brdf = (Fr + (1.f - F) * Fd);
+
+    // Importance-sampled ray
+    RayDesc ray;
+    ray.Origin = hitPosition;
+    ray.Direction = L;
+    ray.TMin = k_rayOffset;
+    ray.TMax = 10000.0;
+    outAttenuation = brdf * NoL / pdf;
+    return ray;
 }
 
 // Retrieve attribute at a hit position interpolated from the hit's barycentrics.
