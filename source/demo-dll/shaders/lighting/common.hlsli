@@ -231,10 +231,10 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 
 		if (lightVisibility > 0.f)
 		{
-			float NoV = dot(N, V);
+			float NoV = saturate(dot(N, V));
 
 			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-			float3 albedo = (1.f - matInfo.metallic) * (1.f - matInfo.transmission) * matInfo.basecolor;
+			float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
 
 			float3 H = normalize(L + V);
 			float NoH = saturate(dot(N, H));
@@ -242,7 +242,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 
 			float D = GGX(NoH, matInfo.roughness);
 			float3 F = F_Schlick(VoH, F0);
-			float G = G_Smith_Direct(NoV, NoL, matInfo.roughness);
+			float G = G_SmithGGXCorrelated(NoV, NoL, matInfo.roughness);
 
 			// Diffuse & Specular BRDF
 			float3 Fd = albedo * Fd_Lambert();

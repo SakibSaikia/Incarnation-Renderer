@@ -10,7 +10,7 @@ float G_SmithGGXCorrelated(float NoV, float NoL, float roughness)
     float a2 = roughness * roughness;
     float GGXV = NoL * sqrt(NoV * NoV * (1.0 - a2) + a2);
     float GGXL = NoV * sqrt(NoL * NoL * (1.0 - a2) + a2);
-    return 0.5 / (GGXV + GGXL);
+    return 0.5 / max(GGXV + GGXL, 0.00001);
 }
 
 float3 F_Schlick(float u, float3 f0, float f90)
