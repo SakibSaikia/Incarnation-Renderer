@@ -6,7 +6,7 @@
     "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
-	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)," \
+	"StaticSampler(s1, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)," \
 	"StaticSampler(s2, space = 1, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_ANISOTROPIC, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
 struct LightProbeData
@@ -132,8 +132,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	float3 radiance = p.emissive * 20000;
 
 #if VIEWMODE == 7 // Reflections
-	if (dot(V, N) > 0.f && 
-		g_frameConstants.sceneLightProbe.envmapTextureIndex != -1)
+	if (g_frameConstants.sceneLightProbe.envmapTextureIndex != -1)
 	{
 		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.envmapTextureIndex];
 		float3 R = normalize(reflect(-V, N));
@@ -186,17 +185,15 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 		float texWidth, texHeight, mipCount;
 		prefilteredEnvMap.GetDimensions(0, texWidth, texHeight, mipCount);
-		float NoV = saturate(dot(N, V));
 
-		if (NoV > 0.f)
-		{
-			float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
-			float3 R = normalize(reflect(-V, N));
-			float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, p.roughness * (mipCount - 1)).rgb;
-			float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, p.roughness), 0.f).rg;
-			float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
-			radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
-		}
+		// FIXME - The env BRDF texture has a few lines of black near (0,0). So, apply a threshhold here for now.
+		float NoV = max(dot(N, V), 0.01);
+		float3 F0 = p.metallic * p.basecolor + (1.f - p.metallic) * 0.04;
+		float3 R = normalize(reflect(-V, N));
+		float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, p.roughness * (mipCount - 1)).rgb;
+		float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, p.roughness), 0.f).rg;
+		float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
+		radiance += lerp(specularIBL, p.ao * specularIBL, p.aoblend);
 	}
 #endif
 

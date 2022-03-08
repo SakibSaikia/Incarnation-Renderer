@@ -200,8 +200,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     float3 V = -WorldRayDirection();
 
 #if VIEWMODE == 7 // Reflections
-    if (dot(V, N) > 0.f && 
-        payload.pathLength < 2)
+    if (payload.pathLength < 2)
     {
         float3 R = normalize(reflect(-V, N));
         RayDesc ray;
