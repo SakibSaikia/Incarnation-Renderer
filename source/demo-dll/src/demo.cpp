@@ -569,6 +569,7 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::RadioButton("Metallic", &Config::g_viewmode, (int)Viewmode::Metallic);
 				ImGui::RadioButton("Base Color", &Config::g_viewmode, (int)Viewmode::BaseColor);
 				ImGui::RadioButton("Emissive", &Config::g_viewmode, (int)Viewmode::Emissive);
+				ImGui::RadioButton("Reflections", &Config::g_viewmode, (int)Viewmode::Reflections);
 				ImGui::TreePop();
 			}
 

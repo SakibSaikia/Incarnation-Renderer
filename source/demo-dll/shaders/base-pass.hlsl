@@ -114,7 +114,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 #elif VIEWMODE == 4 // Base Color
 	return float4(p.basecolor, 1.f);
 #elif VIEWMODE == 5 // Emissive
-		return float4(p.emissive, 1.f);
+	return float4(p.emissive, 1.f);
 #endif
 
 	// Tangent space transform
@@ -130,6 +130,17 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
 	float3 radiance = p.emissive * 20000;
+
+#if VIEWMODE == 7 // Reflections
+	if (dot(V, N) > 0.f && 
+		g_frameConstants.sceneLightProbe.envmapTextureIndex != -1)
+	{
+		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.envmapTextureIndex];
+		float3 R = normalize(reflect(-V, N));
+		float3 reflectionColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, 0).rgb;
+		return float4(reflectionColor, 0.f);
+	}
+#endif
 	
 #if DIRECT_LIGHTING
 	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];

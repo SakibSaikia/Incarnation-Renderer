@@ -12,6 +12,7 @@ enum class Viewmode
 	BaseColor		= 4,
 	Emissive		= 5,
 	NanCheck		= 6,
+	Reflections		= 7
 };
 
 struct Config

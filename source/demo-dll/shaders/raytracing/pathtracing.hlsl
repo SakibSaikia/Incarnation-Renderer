@@ -199,6 +199,21 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     // For secondary rays, this points back to the origin of the bounce (which is the viewer for that ray)
     float3 V = -WorldRayDirection();
 
+#if VIEWMODE == 7 // Reflections
+    if (dot(V, N) > 0.f && 
+        payload.pathLength < 2)
+    {
+        float3 R = normalize(reflect(-V, N));
+        RayDesc ray;
+        ray.Origin = hitPosition;
+        ray.Direction = R;
+        ray.TMin = k_rayOffset;
+        ray.TMax = 10000.0;
+        TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
+        return;
+    }
+#endif
+
 #if DIRECT_LIGHTING
     ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightIndicesBufferIndex];
     ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightPropertiesBufferIndex];
