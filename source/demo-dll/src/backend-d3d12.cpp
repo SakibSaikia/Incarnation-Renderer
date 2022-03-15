@@ -4,7 +4,6 @@
 #include <ppltasks.h>
 #include <concurrent_unordered_map.h>
 #include <concurrent_queue.h>
-#include <common.h>
 #include <profiling.h>
 #include <spookyhash_api.h>
 #include <imgui.h>
@@ -1512,7 +1511,7 @@ namespace
 	}
 }
 
-bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
+bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY, const FConfig& config)
 {
 	UINT dxgiFactoryFlags = 0;
 
@@ -1723,7 +1722,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	AssertIfFailed(swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
 
 	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	rtvDesc.Format = Config::g_backBufferFormat;
+	rtvDesc.Format = config.BackBufferFormat;
 	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 
 	// Back buffers

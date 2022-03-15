@@ -1,7 +1,6 @@
 #include <demo.h>
 #include <backend-d3d12.h>
 #include <profiling.h>
-#include <common.h>
 #include <renderer.h>
 #include <ppltasks.h>
 #include <sstream>
@@ -12,7 +11,6 @@
 namespace Demo
 {
 	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
-	std::unique_ptr<FBindlessShaderResource> s_whiteNoise;
 	std::unique_ptr<FBindlessUav> s_taaAccumulationBuffer;
 	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
@@ -153,7 +151,6 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 {
 
 	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
-	s_whiteNoise = GenerateWhiteNoiseTextures(Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseTextureSize, Config::g_whiteNoiseArrayCount);
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateBindlessUavTexture(L"hdr_history_buffer_rt", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 	s_taaAccumulationBuffer = RenderBackend12::CreateBindlessUavTexture(L"taa_accumulation_buffer_raster", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
@@ -170,14 +167,17 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 void Demo::TeardownRenderer()
 {
 	s_envBRDF.reset(nullptr);
-	s_whiteNoise.reset(nullptr);
 	s_pathtraceHistoryBuffer.reset(nullptr);
 	s_taaAccumulationBuffer.reset(nullptr);
 }
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	if (Demo::IsRenderingSuspended())
+	// Create a immutable copy of the render state for render jobs to use
+	const FRenderState renderState = Demo::GetRenderState();
+	const FConfig& c = renderState.m_config;
+
+	if (renderState.m_suspendRendering)
 		return;
 
 	SCOPED_CPU_EVENT("render", PIX_COLOR_DEFAULT);
@@ -194,11 +194,11 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, true, true);
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
-	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, GetScene()));
+	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
 
-	if (Config::g_pathTrace)
+	if (c.PathTrace)
 	{
-		if (s_pathtraceCurrentSampleIndex < Config::g_maxSampleCount)
+		if (s_pathtraceCurrentSampleIndex < c.MaxSampleCount)
 		{
 			RenderJob::PathTracingDesc pathtraceDesc = {};
 			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
@@ -206,8 +206,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
 			pathtraceDesc.resX = resX;
 			pathtraceDesc.resY = resY;
-			pathtraceDesc.scene = GetScene();
-			pathtraceDesc.view = GetView();
+			pathtraceDesc.scene = renderState.m_scene;
+			pathtraceDesc.view = renderState.m_view;
+			pathtraceDesc.renderConfig = c;
 			renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 			// Accumulate samples
@@ -217,13 +218,13 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
 		tonemapDesc.source = Demo::s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
-		tonemapDesc.format = Config::g_backBufferFormat;
+		tonemapDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
 	}
 	else
 	{
-		Vector2 pixelJitter = Config::g_enableTAA ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+		Vector2 pixelJitter = c.EnableTAA ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
@@ -232,16 +233,17 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.format = hdrFormat;
 		baseDesc.resX = resX;
 		baseDesc.resY = resY;
-		baseDesc.scene = GetScene();
-		baseDesc.view = GetView();
+		baseDesc.scene = renderState.m_scene;
+		baseDesc.view = renderState.m_view;
 		baseDesc.jitter = pixelJitter;
+		baseDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
 		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
 		
-		if (Config::g_enableTAA)
+		if (c.EnableTAA)
 		{
-			const FView* view = GetView();
+			const FView* view = renderState.m_view;
 			Matrix viewProjectionTransform = view->m_viewTransform * view->m_projectionTransform;
 
 			// TAA Resolve
@@ -254,13 +256,14 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
 			resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
 			resolveDesc.depthTextureIndex = depthBuffer->m_srvIndex;
+			resolveDesc.renderConfig = c;
 			renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
 			// Tonemap
 			RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
 			tonemapDesc.source = Demo::s_taaAccumulationBuffer.get();
 			tonemapDesc.target = RenderBackend12::GetBackBuffer();
-			tonemapDesc.format = Config::g_backBufferFormat;
+			tonemapDesc.renderConfig = c;
 			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
 			// Save view projection transform for next frame's reprojection
@@ -272,7 +275,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
 			tonemapDesc.source = hdrRasterSceneColor.get();
 			tonemapDesc.target = RenderBackend12::GetBackBuffer();
-			tonemapDesc.format = Config::g_backBufferFormat;
+			tonemapDesc.renderConfig = c;
 			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 		}
 	}
@@ -280,7 +283,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	frameIndex++;
 
 	// UI
-	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), Config::g_backBufferFormat };
+	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), c };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{

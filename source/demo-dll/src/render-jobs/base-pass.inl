@@ -10,6 +10,7 @@ namespace RenderJob
 		const FScene* scene;
 		const FView* view;
 		Vector2 jitter;
+		FConfig renderConfig;
 	};
 
 	concurrency::task<void> BasePass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
@@ -104,7 +105,7 @@ namespace RenderJob
 					cbDest->viewTransform = passDesc.view->m_viewTransform;
 					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 					cbDest->eyePos = passDesc.view->m_position;
-					cbDest->exposure = Config::g_exposure;
+					cbDest->exposure = passDesc.renderConfig.Exposure;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -150,10 +151,10 @@ namespace RenderJob
 						D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
 						std::wstringstream s;
-						s << L"VIEWMODE=" << (int)Config::g_viewmode <<
-							L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0") <<
-							L" DIFFUSE_IBL=" << (Config::g_enableDiffuseIBL ? L"1" : L"0") <<
-							L" SPECULAR_IBL=" << (Config::g_enableSpecularIBL ? L"1" : L"0");
+						s << L"VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
+							L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0") <<
+							L" DIFFUSE_IBL=" << (passDesc.renderConfig.EnableDiffuseIBL ? L"1" : L"0") <<
+							L" SPECULAR_IBL=" << (passDesc.renderConfig.EnableSpecularIBL ? L"1" : L"0");
 
 						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
 						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });

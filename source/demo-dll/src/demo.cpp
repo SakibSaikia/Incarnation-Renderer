@@ -5,7 +5,6 @@
 #include <renderer.h>
 #include <imgui.h>
 #include <backends/imgui_impl_win32.h>
-#include <common.h>
 #include <sstream>
 #include <mesh-utils.h>
 #include <gpu-shared-types.h>
@@ -171,6 +170,7 @@ struct FController
 
 namespace Demo
 {
+	FConfig s_globalConfig;
 	FScene s_scene;
 	FView s_view;
 	FController s_controller;
@@ -181,6 +181,16 @@ namespace Demo
 
 	std::vector<std::wstring> s_modelList;
 	std::vector<std::wstring> s_hdriList;
+
+	FRenderState GetRenderState()
+	{
+		FRenderState s;
+		s.m_config = s_globalConfig;
+		s.m_suspendRendering = s_suspendRendering;
+		s.m_scene = &s_scene;
+		s.m_view = &s_view;
+		return s;
+	}
 
 	bool IsRenderingSuspended()
 	{
@@ -222,7 +232,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 {
 	s_aspectRatio = resX / (float)resY;
 
-	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY);
+	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY, s_globalConfig);
 	ok = ok && ShaderCompiler::Initialize();
 
 	InitializeRenderer(resX, resY);
@@ -265,7 +275,7 @@ void Demo::Tick(float deltaTime)
 
 	// Reload scene model if required
 	if (s_scene.m_modelFilename.empty() ||
-		s_scene.m_modelFilename != Config::g_modelFilename)
+		s_scene.m_modelFilename != s_globalConfig.ModelFilename)
 	{
 		// Async loading of model. Create a temp scene on the stack 
 		// and replace the main scene once loading has finished.
@@ -273,11 +283,11 @@ void Demo::Tick(float deltaTime)
 		// --> The modelFilename is updated immediately to prevent subsequent reloads before the async reloading has finished.
 		// TODO: support cancellation if a different model load is triggered
 		std::shared_ptr<FScene> newScene = std::make_shared<FScene>();
-		s_scene.m_modelFilename = Config::g_modelFilename;
+		s_scene.m_modelFilename = s_globalConfig.ModelFilename;
 		concurrency::task<void> loadSceneTask = concurrency::create_task([newScene]()
 		{
-			newScene->ReloadModel(Config::g_modelFilename);
-			newScene->ReloadEnvironment(Config::g_environmentFilename);
+			newScene->ReloadModel(s_globalConfig.ModelFilename);
+			newScene->ReloadEnvironment(s_globalConfig.EnvironmentFilename);
 		}).then([newScene]()
 		{
 			SCOPED_PAUSE_RENDERING;
@@ -299,10 +309,10 @@ void Demo::Tick(float deltaTime)
 
 	// Reload scene environment if required
 	if (s_scene.m_environmentFilename.empty() ||
-		s_scene.m_environmentFilename != Config::g_environmentFilename)
+		s_scene.m_environmentFilename != s_globalConfig.EnvironmentFilename)
 	{
 		SCOPED_PAUSE_RENDERING;
-		s_scene.ReloadEnvironment(Config::g_environmentFilename);
+		s_scene.ReloadEnvironment(s_globalConfig.EnvironmentFilename);
 	}
 
 	// Tick components
@@ -415,17 +425,17 @@ void Demo::UpdateUI(float deltaTime)
 	{
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::Spacing();
-		ImGui::Checkbox("TAA", &Config::g_enableTAA);
+		ImGui::Checkbox("TAA", &s_globalConfig.EnableTAA);
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
 		if (ImGui::CollapsingHeader("Path Tracing"))
 		{
-			ImGui::Checkbox("Pathtracing", &Config::g_pathTrace);
+			ImGui::Checkbox("Pathtracing", &s_globalConfig.PathTrace);
 
-			bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*) &Config::g_maxSampleCount, 1, 1024);
-			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &Config::g_pathtracing_cameraAperture, 0.f, 0.1f);
-			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &Config::g_pathtracing_cameraFocalLength, 1.f, 15.f);
+			bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*) &s_globalConfig.MaxSampleCount, 1, 1024);
+			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &s_globalConfig.Pathtracing_CameraAperture, 0.f, 0.1f);
+			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &s_globalConfig.Pathtracing_CameraFocalLength, 1.f, 15.f);
 		}
 
 		// -----------------------------------------------------------------------------------------------------------------------------------------
@@ -433,7 +443,7 @@ void Demo::UpdateUI(float deltaTime)
 		if (ImGui::CollapsingHeader("Scene"))
 		{
 			// Model
-			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), Config::g_modelFilename) - s_modelList.begin();
+			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), s_globalConfig.ModelFilename) - s_modelList.begin();
 			std::string comboLabel = ws2s(s_modelList[curModelIndex]);
 			if (ImGui::BeginCombo("Model", comboLabel.c_str(), ImGuiComboFlags_None))
 			{
@@ -443,7 +453,7 @@ void Demo::UpdateUI(float deltaTime)
 					if (ImGui::Selectable(ws2s(s_modelList[n]).c_str(), bSelected))
 					{
 						curModelIndex = n;
-						Config::g_modelFilename = s_modelList[n];
+						s_globalConfig.ModelFilename = s_modelList[n];
 					}
 
 					if (bSelected)
@@ -456,7 +466,7 @@ void Demo::UpdateUI(float deltaTime)
 			}
 
 			// Background Environment
-			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), Config::g_environmentFilename) - s_hdriList.begin();
+			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), s_globalConfig.EnvironmentFilename) - s_hdriList.begin();
 			comboLabel = ws2s(s_hdriList[curHdriIndex]);
 			if (ImGui::BeginCombo("Environment", comboLabel.c_str(), ImGuiComboFlags_None))
 			{
@@ -466,7 +476,7 @@ void Demo::UpdateUI(float deltaTime)
 					if (ImGui::Selectable(ws2s(s_hdriList[n]).c_str(), bSelected))
 					{
 						curHdriIndex = n;
-						Config::g_environmentFilename = s_hdriList[n];
+						s_globalConfig.EnvironmentFilename = s_hdriList[n];
 						bResetPathtracelAccumulation = true;
 					}
 
@@ -484,13 +494,13 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Camera"))
 		{
-			ImGui::SliderFloat("Speed", &Config::g_cameraSpeed, 1.0f, 20.0f);
+			ImGui::SliderFloat("Speed", &s_globalConfig.CameraSpeed, 1.0f, 20.0f);
 
-			static float fovDeg = DirectX::XMConvertToDegrees(Config::g_fov);
+			static float fovDeg = DirectX::XMConvertToDegrees(s_globalConfig.Fov);
 			ImGui::SliderFloat("FOV", &fovDeg, 0.0f, 140.0f);
-			Config::g_fov = DirectX::XMConvertToRadians(fovDeg);
+			s_globalConfig.Fov = DirectX::XMConvertToRadians(fovDeg);
 
-			ImGui::SliderFloat("Exposure", &Config::g_exposure, 1.0f, 20.0f);
+			ImGui::SliderFloat("Exposure", &s_globalConfig.Exposure, 1.0f, 20.0f);
 
 			if (ImGui::Button("Reset"))
 			{
@@ -559,27 +569,27 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Debug"))
 		{
-			int currentViewMode = Config::g_viewmode;
+			int currentViewMode = s_globalConfig.Viewmode;
 			if (ImGui::TreeNode("View Modes"))
 			{
-				ImGui::RadioButton("Normal", &Config::g_viewmode, (int)Viewmode::Normal);
-				ImGui::RadioButton("Nan Check", &Config::g_viewmode, (int)Viewmode::NanCheck);
-				ImGui::RadioButton("Lighting Only", &Config::g_viewmode, (int)Viewmode::LightingOnly);
-				ImGui::RadioButton("Roughness", &Config::g_viewmode, (int)Viewmode::Roughness);
-				ImGui::RadioButton("Metallic", &Config::g_viewmode, (int)Viewmode::Metallic);
-				ImGui::RadioButton("Base Color", &Config::g_viewmode, (int)Viewmode::BaseColor);
-				ImGui::RadioButton("Emissive", &Config::g_viewmode, (int)Viewmode::Emissive);
-				ImGui::RadioButton("Reflections", &Config::g_viewmode, (int)Viewmode::Reflections);
+				ImGui::RadioButton("Normal", &s_globalConfig.Viewmode, (int)Viewmode::Normal);
+				ImGui::RadioButton("Nan Check", &s_globalConfig.Viewmode, (int)Viewmode::NanCheck);
+				ImGui::RadioButton("Lighting Only", &s_globalConfig.Viewmode, (int)Viewmode::LightingOnly);
+				ImGui::RadioButton("Roughness", &s_globalConfig.Viewmode, (int)Viewmode::Roughness);
+				ImGui::RadioButton("Metallic", &s_globalConfig.Viewmode, (int)Viewmode::Metallic);
+				ImGui::RadioButton("Base Color", &s_globalConfig.Viewmode, (int)Viewmode::BaseColor);
+				ImGui::RadioButton("Emissive", &s_globalConfig.Viewmode, (int)Viewmode::Emissive);
+				ImGui::RadioButton("Reflections", &s_globalConfig.Viewmode, (int)Viewmode::Reflections);
 				ImGui::TreePop();
 			}
 
-			bResetPathtracelAccumulation |= (Config::g_viewmode != currentViewMode);
+			bResetPathtracelAccumulation |= (s_globalConfig.Viewmode != currentViewMode);
 
 			if (ImGui::TreeNode("Light Components"))
 			{
-				ImGui::Checkbox("Direct Lighting", &Config::g_enableDirectLighting);
-				ImGui::Checkbox("Diffuse IBL", &Config::g_enableDiffuseIBL);
-				ImGui::Checkbox("Specular IBL", &Config::g_enableSpecularIBL);
+				ImGui::Checkbox("Direct Lighting", &s_globalConfig.EnableDirectLighting);
+				ImGui::Checkbox("Diffuse IBL", &s_globalConfig.EnableDiffuseIBL);
+				ImGui::Checkbox("Specular IBL", &s_globalConfig.EnableSpecularIBL);
 				ImGui::TreePop();
 			}
 		}
@@ -615,7 +625,7 @@ bool LoadImageCallback(
 	std::filesystem::path destFilename = dirPath / srcFilename.stem();
 	destFilename += std::filesystem::path{ ".dds" };
 
-	if (Config::g_useContentCache && std::filesystem::exists(destFilename))
+	if (Demo::s_globalConfig.UseContentCache && std::filesystem::exists(destFilename))
 	{
 		// Skip image data initialization. We will load compressed file from the cache instead
 		image->image.clear();
@@ -690,7 +700,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	// Load from model cache if a cached version exists
 	m_modelCachePath = GetContentCachePath(modelFilepath);
 	std::filesystem::path cachedFilepath = std::filesystem::path{ m_modelCachePath } / std::filesystem::path{ ws2s(filename) };
-	if (Config::g_useContentCache && std::filesystem::exists(cachedFilepath))
+	if (Demo::s_globalConfig.UseContentCache && std::filesystem::exists(cachedFilepath))
 	{
 		modelFilepath = cachedFilepath.string();
 	}
@@ -1500,7 +1510,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 			AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
 			// Save to disk
-			if (Config::g_useContentCache)
+			if (Demo::s_globalConfig.UseContentCache)
 			{
 				std::filesystem::path dirPath{ m_textureCachePath };
 				std::filesystem::path srcFilename{ image.uri };
@@ -1755,7 +1765,7 @@ void FScene::ProcessReadbackTexture(FResourceReadbackContext* context, const std
 	AssertIfFailed(DirectX::Compress(mipchain.data(), mipchain.size(), metadata, fmt, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
 
 	// Save to disk
-	if (Config::g_useContentCache)
+	if (Demo::s_globalConfig.UseContentCache)
 	{
 		std::filesystem::path dirPath{ m_textureCachePath };
 		std::filesystem::path srcFilename{ filename };
@@ -1886,27 +1896,28 @@ void FView::Tick(const float deltaTime, const FController* controller)
 
 	bool updateView = false;
 
+
 	// Walk
 	if (controller->MoveForward())
 	{
-		m_position += Config::g_cameraSpeed * deltaTime * m_look;
+		m_position += Demo::s_globalConfig.CameraSpeed * deltaTime * m_look;
 		updateView = true;
 	}
 	else if (controller->MoveBack())
 	{
-		m_position -= Config::g_cameraSpeed * deltaTime * m_look;
+		m_position -= Demo::s_globalConfig.CameraSpeed * deltaTime * m_look;
 		updateView = true;
 	}
 
 	// Strafe
 	if (controller->StrafeLeft())
 	{
-		m_position -= Config::g_cameraSpeed * deltaTime * m_right;
+		m_position -= Demo::s_globalConfig.CameraSpeed * deltaTime * m_right;
 		updateView = true;
 	}
 	else if (controller->StrafeRight())
 	{
-		m_position += Config::g_cameraSpeed * deltaTime * m_right;
+		m_position += Demo::s_globalConfig.CameraSpeed * deltaTime * m_right;
 		updateView = true;
 	}
 
@@ -1936,9 +1947,9 @@ void FView::Tick(const float deltaTime, const FController* controller)
 		UpdateViewTransform();
 	}
 
-	if (m_fov != Config::g_fov)
+	if (m_fov != Demo::s_globalConfig.Fov)
 	{
-		m_fov = Config::g_fov;
+		m_fov = Demo::s_globalConfig.Fov;
 		m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(m_fov, Demo::s_aspectRatio, 1.f);
 	}
 }
@@ -1965,7 +1976,7 @@ void FView::Reset(const FScene* scene)
 		m_look = { 0.f, 0.f, 1.f };
 		UpdateViewTransform();
 
-		m_fov = Config::g_fov;
+		m_fov = Demo::s_globalConfig.Fov;
 		m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(m_fov, Demo::s_aspectRatio, 1.f);
 	}
 }

@@ -15,26 +15,24 @@ enum class Viewmode
 	Reflections		= 7
 };
 
-struct Config
+struct FConfig
 {
-	static inline const DXGI_FORMAT g_backBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	static inline std::wstring g_modelFilename = L"DamagedHelmet.gltf";
-	static inline std::wstring g_environmentFilename = L"lilienstein_2k.hdr";
-	static inline bool g_useContentCache = true;
-	static inline float g_fov = 0.25f * DirectX::XM_PI;
-	static inline float g_exposure = 13.f;
-	static inline float g_cameraSpeed = 5.f;
-	static inline int g_viewmode = 0;
-	static inline bool g_enableDirectLighting = true;
-	static inline bool g_enableDiffuseIBL = true;
-	static inline bool g_enableSpecularIBL = true;
-	static inline bool g_pathTrace = true;
-	static inline bool g_enableTAA = true;
-	static inline uint32_t g_whiteNoiseTextureSize = 256;
-	static inline uint32_t g_whiteNoiseArrayCount = 8;
-	static inline uint32_t g_maxSampleCount = 256;
-	static inline float g_pathtracing_cameraAperture = 0.01f;
-	static inline float g_pathtracing_cameraFocalLength = 7.f;
+	DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	std::wstring ModelFilename = L"DamagedHelmet.gltf";
+	std::wstring EnvironmentFilename = L"lilienstein_2k.hdr";
+	bool UseContentCache = true;
+	float Fov = 0.25f * DirectX::XM_PI;
+	float Exposure = 13.f;
+	float CameraSpeed = 5.f;
+	int Viewmode = 0;
+	bool EnableDirectLighting = true;
+	bool EnableDiffuseIBL = true;
+	bool EnableSpecularIBL = true;
+	bool PathTrace = true;
+	bool EnableTAA = true;
+	uint32_t MaxSampleCount = 256;
+	float Pathtracing_CameraAperture = 0.01f;
+	float Pathtracing_CameraFocalLength = 7.f;
 };
 
 inline void AssertIfFailed(HRESULT hr)

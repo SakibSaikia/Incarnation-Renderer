@@ -5,7 +5,7 @@ namespace RenderJob
 	{
 		SourceType* source;
 		FRenderTexture* target;
-		DXGI_FORMAT format;
+		FConfig renderConfig;
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
@@ -43,7 +43,7 @@ namespace RenderJob
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = passDesc.format;
+			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -53,7 +53,7 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
 				std::wstringstream s;
-				s << L"VIEWMODE=" << (int)Config::g_viewmode;
+				s << L"VIEWMODE=" << (int)passDesc.renderConfig.Viewmode;
 
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"postprocess/tonemap.hlsl", L"vs_main", L"" , L"vs_6_6" });
 				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/tonemap.hlsl", L"ps_main", s.str() , L"ps_6_6"});
@@ -120,7 +120,7 @@ namespace RenderJob
 				float exposure;
 			} rootConstants = { 
 					passDesc.source->m_srvIndex, 
-					Config::g_exposure, 
+					passDesc.renderConfig.Exposure, 
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 

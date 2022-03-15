@@ -36,6 +36,7 @@ using PhysicalAlloc_t = std::vector<uint32_t>;
 
 struct IDxcBlob;
 struct FResource;
+struct FConfig;
 
 enum class BindlessResourceType
 {
@@ -290,7 +291,7 @@ namespace RenderUtils12
 
 namespace RenderBackend12
 {
-	bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY);
+	bool Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY, const FConfig& config);
 	void Teardown();
 	D3DDevice_t* GetDevice();
 	void FlushGPU();

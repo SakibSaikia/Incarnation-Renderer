@@ -9,6 +9,7 @@ namespace RenderJob
 		uint32_t resY;
 		const FScene* scene;
 		const FView* view;
+		FConfig renderConfig;
 	};
 
 	concurrency::task<void> PathTrace(RenderJob::Sync& jobSync, const PathTracingDesc& passDesc)
@@ -27,8 +28,8 @@ namespace RenderJob
 
 			std::wstringstream s;
 			s << L"RAY_TRACING=1" <<
-				L" VIEWMODE=" << (int)Config::g_viewmode << 
-				L" DIRECT_LIGHTING=" << (Config::g_enableDirectLighting ? L"1" : L"0");
+				L" VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
+				L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0");
 
 			// Compile the lib
 			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", s.str() , L"lib_6_6"});
@@ -157,8 +158,8 @@ namespace RenderJob
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-					cbDest->cameraAperture = Config::g_pathtracing_cameraAperture;
-					cbDest->cameraFocalLength = Config::g_pathtracing_cameraFocalLength;
+					cbDest->cameraAperture = passDesc.renderConfig.Pathtracing_CameraAperture;
+					cbDest->cameraFocalLength = passDesc.renderConfig.Pathtracing_CameraFocalLength;
 					cbDest->lightCount = passDesc.scene->m_lights.size();
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
@@ -167,7 +168,7 @@ namespace RenderJob
 					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
-					cbDest->sqrtSampleCount = std::sqrt(Config::g_maxSampleCount);
+					cbDest->sqrtSampleCount = std::sqrt(passDesc.renderConfig.MaxSampleCount);
 					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;

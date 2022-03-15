@@ -10,6 +10,7 @@ namespace RenderJob
 		Matrix invViewProjectionTransform;
 		Matrix prevViewProjectionTransform;
 		uint32_t depthTextureIndex;
+		FConfig renderConfig;
 	};
 
 	concurrency::task<void> TAAResolve(RenderJob::Sync& jobSync, const TAAResolveDesc& passDesc)
@@ -90,7 +91,7 @@ namespace RenderJob
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
 					cb->historyIndex = passDesc.historyIndex;
-					cb->exposure = Config::g_exposure;
+					cb->exposure = passDesc.renderConfig.Exposure;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());

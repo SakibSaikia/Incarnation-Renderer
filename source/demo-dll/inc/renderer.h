@@ -4,6 +4,7 @@
 #include <ppltasks.h>
 #include <gpu-shared-types.h>
 #include <spookyhash_api.h>
+#include <common.h>
 using namespace DirectX::SimpleMath;
 
 namespace tinygltf
@@ -153,11 +154,17 @@ private:
 	void UpdateViewTransform();
 };
 
+struct FRenderState
+{
+	FConfig m_config;
+	bool m_suspendRendering;
+	FScene* m_scene;
+	FView* m_view;
+};
+
 namespace Demo
 {
-	bool IsRenderingSuspended();
-	FScene* GetScene();
-	const FView* GetView();
+	FRenderState GetRenderState();
 	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
 	void TeardownRenderer();
