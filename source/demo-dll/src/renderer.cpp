@@ -29,6 +29,8 @@ namespace Demo
 #include "render-jobs/path-tracing.inl"
 #include "render-jobs/tonemap.inl"
 #include "render-jobs/update-tlas.inl"
+#include "render-jobs/visibility-pass.inl"
+#include "render-jobs/gbuffer-pass.inl"
 
 namespace
 {
@@ -189,9 +191,14 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
+	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
 	std::unique_ptr<FRenderTexture> hdrRasterSceneColor = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster", hdrFormat, resX, resY, 1, 1, 1);
 	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, true, true);
+	std::unique_ptr<FRenderTexture> visBuffer = RenderBackend12::CreateRenderTexture(L"vis_buffer_raster", visBufferFormat, resX, resY, 1, 1, 1);
+	std::unique_ptr<FBindlessUav> gbuffer_basecolor = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_basecolor", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
+	std::unique_ptr<FBindlessUav> gbuffer_normals = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_normals", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1);
+	std::unique_ptr<FBindlessUav> gbuffer_metallicRoughnessAo = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_metallic_roughness_ao", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
@@ -225,6 +232,32 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	else
 	{
 		Vector2 pixelJitter = c.EnableTAA ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+
+		// Visibility Pass
+		RenderJob::VisibilityPassDesc visDesc = {};
+		visDesc.visBufferTarget = visBuffer.get();
+		visDesc.depthStencilTarget = depthBuffer.get();
+		visDesc.visBufferFormat = visBufferFormat;
+		visDesc.resX = resX;
+		visDesc.resY = resY;
+		visDesc.scene = renderState.m_scene;
+		visDesc.view = renderState.m_view;
+		visDesc.jitter = pixelJitter;
+		visDesc.renderConfig = c;
+		renderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
+
+		// GBuffer Pass
+		RenderJob::GBufferPassDesc gbufferDesc = {};
+		gbufferDesc.sourceVisBuffer = visBuffer.get();
+		gbufferDesc.gbufferTargets[0] = gbuffer_basecolor.get();
+		gbufferDesc.gbufferTargets[1] = gbuffer_normals.get();
+		gbufferDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
+		gbufferDesc.resX = resX;
+		gbufferDesc.resY = resY;
+		gbufferDesc.scene = renderState.m_scene;
+		gbufferDesc.view = renderState.m_view;
+		gbufferDesc.renderConfig = c;
+		renderJobs.push_back(RenderJob::GBufferPass(jobSync, gbufferDesc));
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};

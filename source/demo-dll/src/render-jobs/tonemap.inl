@@ -119,7 +119,7 @@ namespace RenderJob
 				int hdrSceneColorTextureIndex;
 				float exposure;
 			} rootConstants = { 
-					passDesc.source->m_srvIndex, 
+					(int)passDesc.source->m_srvIndex, 
 					passDesc.renderConfig.Exposure, 
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);

@@ -131,11 +131,11 @@ namespace MeshMaterial
 		{
 			case sizeof(float3) :
 				return buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
-				case sizeof(float4) :
-					temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
-					return temp.xyz;
-				default:
-					return 0.f.xxx;
+			case sizeof(float4) :
+				temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
+				return temp.xyz;
+			default:
+				return 0.f.xxx;
 		}
 	}
 
@@ -158,14 +158,14 @@ namespace MeshMaterial
 		{
 			case sizeof(float2) :
 				return buffer.Load<float2>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float2));
-				case sizeof(float3) :
-					temp.xyz = buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
-					return temp.xy;
-					case sizeof(float4) :
-						temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
-						return temp.xy;
-					default:
-						return 0.f.xx;
+			case sizeof(float3) :
+				temp.xyz = buffer.Load<float3>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float3));
+				return temp.xy;
+			case sizeof(float4) :
+				temp = buffer.Load<float4>(accessor.m_byteOffset + view.m_byteOffset + index * sizeof(float4));
+				return temp.xy;
+			default:
+				return 0.f.xx;
 		}
 	}
 

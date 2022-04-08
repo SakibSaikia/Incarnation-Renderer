@@ -1,10 +1,10 @@
 namespace RenderJob
 {
-	struct BasePassDesc
+	struct VisibilityPassDesc
 	{
-		FRenderTexture* colorTarget;
+		FRenderTexture* visBufferTarget;
 		FRenderTexture* depthStencilTarget;
-		DXGI_FORMAT format;
+		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;
 		const FScene* scene;
@@ -13,24 +13,24 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> BasePass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
+	concurrency::task<void> VisibilityPass(RenderJob::Sync& jobSync, const VisibilityPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
+		size_t visBufferTransitionToken = passDesc.visBufferTarget->m_resource->GetTransitionToken();
 		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
-			SCOPED_CPU_EVENT("record_base_pass", PIX_COLOR_DEFAULT);
+			SCOPED_CPU_EVENT("record_visibility_pass", PIX_COLOR_DEFAULT);
 
 			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"base_pass_job");
+			cmdList->SetName(L"visibility_pass_job");
 
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "base_pass", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "visibility_pass", 0);
 
-			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.visBufferTarget->m_resource->Transition(cmdList, visBufferTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 			// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
@@ -43,7 +43,7 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"geo-raster/base-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"geo-raster/visibility-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
 
 			// Frame constant buffer
@@ -52,14 +52,7 @@ namespace RenderJob
 				Matrix sceneRotation;
 				int sceneMeshAccessorsIndex;
 				int sceneMeshBufferViewsIndex;
-				int sceneMaterialBufferIndex;
-				int envBrdfTextureIndex;
-				FLightProbe sceneProbeData;
-				int sceneBvhIndex;
-				int lightCount;
-				int sceneLightPropertiesBufferIndex;
-				int sceneLightIndicesBufferIndex;
-				int sceneLightsTransformsBufferIndex;
+				int scenePrimitivesIndex;
 			};
 
 			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
@@ -68,20 +61,11 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_lights.size();
-
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
-					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
-					cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
-					cbDest->sceneProbeData = passDesc.scene->m_environmentSky;
-					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-					cbDest->lightCount = lightCount;
-					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
-					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
-					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
+					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -92,7 +76,6 @@ namespace RenderJob
 				Matrix viewTransform;
 				Matrix projectionTransform;
 				Vector3 eyePos;
-				float exposure;
 			};
 
 			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
@@ -104,8 +87,6 @@ namespace RenderJob
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewTransform = passDesc.view->m_viewTransform;
 					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
-					cbDest->eyePos = passDesc.view->m_position;
-					cbDest->exposure = passDesc.renderConfig.Exposure;
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -115,22 +96,24 @@ namespace RenderJob
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_renderTextureIndices[0]) };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.visBufferTarget->m_renderTextureIndices[0]) };
 			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthStencilTarget->m_renderTextureIndices[0]);
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
 
-			float clearColor[] = { .8f, .8f, 1.f, 0.f };
+			float clearColor[] = { 0.f, 0.f, 0.f, 0.f };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
 			// Issue scene draws
+			uint32_t objectId = 0;
 			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
 			{
 				const FMesh& mesh = passDesc.scene->m_sceneMeshes.m_entityList[meshIndex];
 				SCOPED_COMMAND_LIST_EVENT(cmdList, passDesc.scene->m_sceneMeshes.m_entityNames[meshIndex].c_str(), 0);
 
-				for (const FMeshPrimitive& primitive : mesh.m_primitives)
+				for(int primIndex = 0; primIndex < mesh.m_primitives.size(); ++primIndex, ++objectId)
 				{
+					const FMeshPrimitive& primitive = mesh.m_primitives[primIndex];
 					d3dCmdList->IASetPrimitiveTopology(primitive.m_topology);
 
 					// PSO
@@ -141,7 +124,7 @@ namespace RenderJob
 					psoDesc.SampleMask = UINT_MAX;
 					psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 					psoDesc.NumRenderTargets = 1;
-					psoDesc.RTVFormats[0] = passDesc.format;
+					psoDesc.RTVFormats[0] = passDesc.visBufferFormat;
 					psoDesc.SampleDesc.Count = 1;
 					psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
@@ -150,14 +133,8 @@ namespace RenderJob
 						D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 						D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-						std::wstringstream s;
-						s << L"VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
-							L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0") <<
-							L" DIFFUSE_IBL=" << (passDesc.renderConfig.EnableDiffuseIBL ? L"1" : L"0") <<
-							L" SPECULAR_IBL=" << (passDesc.renderConfig.EnableSpecularIBL ? L"1" : L"0");
-
-						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
-						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
+						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
+						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", L"ps_main", L"" , L"ps_6_6"});
 
 						vs.pShaderBytecode = vsBlob->GetBufferPointer();
 						vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -211,19 +188,13 @@ namespace RenderJob
 						Matrix localToWorldTransform;
 						int m_indexAccessor;
 						int m_positionAccessor;
-						int m_uvAccessor;
-						int m_normalAccessor;
-						int m_tangentAccessor;
-						int m_materialIndex;
+						uint32_t m_objectId;
 					} primCb =
 					{
 						passDesc.scene->m_sceneMeshes.m_transformList[meshIndex],
 						primitive.m_indexAccessor,
 						primitive.m_positionAccessor,
-						primitive.m_uvAccessor,
-						primitive.m_normalAccessor,
-						primitive.m_tangentAccessor,
-						primitive.m_materialIndex
+						objectId
 					};
 
 					d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(PrimitiveCbLayout) / 4, &primCb, 0);

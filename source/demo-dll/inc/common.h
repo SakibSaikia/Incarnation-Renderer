@@ -28,7 +28,7 @@ struct FConfig
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = true;
-	bool PathTrace = true;
+	bool PathTrace = false;
 	bool EnableTAA = true;
 	uint32_t MaxSampleCount = 256;
 	float Pathtracing_CameraAperture = 0.01f;
