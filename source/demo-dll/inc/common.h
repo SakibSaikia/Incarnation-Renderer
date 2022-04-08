@@ -12,7 +12,9 @@ enum class Viewmode
 	BaseColor		= 4,
 	Emissive		= 5,
 	NanCheck		= 6,
-	Reflections		= 7
+	Reflections		= 7,
+	ObjectIds		= 8,
+	TriangleIds		= 9
 };
 
 struct FConfig

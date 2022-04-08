@@ -580,6 +580,8 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::RadioButton("Base Color", &s_globalConfig.Viewmode, (int)Viewmode::BaseColor);
 				ImGui::RadioButton("Emissive", &s_globalConfig.Viewmode, (int)Viewmode::Emissive);
 				ImGui::RadioButton("Reflections", &s_globalConfig.Viewmode, (int)Viewmode::Reflections);
+				ImGui::RadioButton("Object IDs", &s_globalConfig.Viewmode, (int)Viewmode::ObjectIds);
+				ImGui::RadioButton("Triangle IDs", &s_globalConfig.Viewmode, (int)Viewmode::TriangleIds);
 				ImGui::TreePop();
 			}
 

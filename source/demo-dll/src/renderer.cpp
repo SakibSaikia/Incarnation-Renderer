@@ -31,6 +31,7 @@ namespace Demo
 #include "render-jobs/update-tlas.inl"
 #include "render-jobs/visibility-pass.inl"
 #include "render-jobs/gbuffer-pass.inl"
+#include "render-jobs/debug-visualization.inl"
 
 namespace
 {
@@ -231,7 +232,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
-		Vector2 pixelJitter = c.EnableTAA ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+		Vector2 pixelJitter = c.EnableTAA && c.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 		// Visibility Pass
 		RenderJob::VisibilityPassDesc visDesc = {};
@@ -273,43 +274,56 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
 		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
-		
-		if (c.EnableTAA)
+		if (c.Viewmode != (int)Viewmode::Normal)
 		{
-			const FView* view = renderState.m_view;
-			Matrix viewProjectionTransform = view->m_viewTransform * view->m_projectionTransform;
-
-			// TAA Resolve
-			RenderJob::TAAResolveDesc resolveDesc = {};
-			resolveDesc.source = hdrRasterSceneColor.get();
-			resolveDesc.target = Demo::s_taaAccumulationBuffer.get();
-			resolveDesc.resX = resX;
-			resolveDesc.resY = resY;
-			resolveDesc.historyIndex = (uint32_t)frameIndex;
-			resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
-			resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
-			resolveDesc.depthTextureIndex = depthBuffer->m_srvIndex;
-			resolveDesc.renderConfig = c;
-			renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
-
-			// Tonemap
-			RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
-			tonemapDesc.source = Demo::s_taaAccumulationBuffer.get();
-			tonemapDesc.target = RenderBackend12::GetBackBuffer();
-			tonemapDesc.renderConfig = c;
-			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
-
-			// Save view projection transform for next frame's reprojection
-			s_prevViewProjectionTransform = viewProjectionTransform;
+			// Debug Viz
+			RenderJob::DebugVizDesc desc = {};
+			desc.visBuffer = visBuffer.get();
+			desc.target = RenderBackend12::GetBackBuffer();
+			desc.renderConfig = c;
+			desc.resX = resX;
+			desc.resY = resY;
+			renderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
 		}
 		else
 		{
-			// Tonemap
-			RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
-			tonemapDesc.source = hdrRasterSceneColor.get();
-			tonemapDesc.target = RenderBackend12::GetBackBuffer();
-			tonemapDesc.renderConfig = c;
-			renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+			if (c.EnableTAA)
+			{
+				const FView* view = renderState.m_view;
+				Matrix viewProjectionTransform = view->m_viewTransform * view->m_projectionTransform;
+
+				// TAA Resolve
+				RenderJob::TAAResolveDesc resolveDesc = {};
+				resolveDesc.source = hdrRasterSceneColor.get();
+				resolveDesc.target = Demo::s_taaAccumulationBuffer.get();
+				resolveDesc.resX = resX;
+				resolveDesc.resY = resY;
+				resolveDesc.historyIndex = (uint32_t)frameIndex;
+				resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
+				resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
+				resolveDesc.depthTextureIndex = depthBuffer->m_srvIndex;
+				resolveDesc.renderConfig = c;
+				renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
+
+				// Tonemap
+				RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+				tonemapDesc.source = Demo::s_taaAccumulationBuffer.get();
+				tonemapDesc.target = RenderBackend12::GetBackBuffer();
+				tonemapDesc.renderConfig = c;
+				renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+
+				// Save view projection transform for next frame's reprojection
+				s_prevViewProjectionTransform = viewProjectionTransform;
+			}
+			else
+			{
+				// Tonemap
+				RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
+				tonemapDesc.source = hdrRasterSceneColor.get();
+				tonemapDesc.target = RenderBackend12::GetBackBuffer();
+				tonemapDesc.renderConfig = c;
+				renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+			}
 		}
 	}
 
