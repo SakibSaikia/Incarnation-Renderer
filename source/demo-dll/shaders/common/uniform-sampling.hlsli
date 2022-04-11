@@ -120,6 +120,21 @@ float RandFloat(uint i, uint p)
     return i * (1.0f / 4294967808.0f);
 }
 
+float Halton(uint sampleIndex, uint base)
+{
+    float result = 0.f;
+    float f = 1.f;
+
+    while (sampleIndex > 0)
+    {
+        f = f / base;
+        result += f * (sampleIndex % base);
+        sampleIndex = sampleIndex / base;
+    }
+
+    return result;
+}
+
 // Hammersley Low Discrepancy Sequence used for biased Monte Carlo Estimation
 // (Quasi-Monte Carlo Integration)
 // https://google.github.io/filament/Filament.html#annex/hammersleysequence

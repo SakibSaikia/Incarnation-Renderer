@@ -1,5 +1,6 @@
 #include "common/math.hlsli"
 #include "common/color-space.hlsli"
+#include "common/uniform-sampling.hlsli"
 #include "geo-raster/encoding.hlsli"
 
 #define rootsig \
@@ -41,8 +42,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		uint objectId, triangleId;
 		DecodeVisibilityBuffer(visbufferValue, objectId, triangleId);
 		return g_viewmode == 8 ? 
-			hsv2rgb(float3(objectId * 10.f, 0.85f, 0.95f)).rgbr :
-			hsv2rgb(float3(triangleId * 20.f, 0.85f, 0.95f)).rgbr;
+			hsv2rgb(float3(Halton(objectId, 3) * 360.f, 0.85f, 0.95f)).rgbr :
+			hsv2rgb(float3(Halton(triangleId, 5) * 360.f, 0.85f, 0.95f)).rgbr;
 	}
 
 	return 0.xxxx;
