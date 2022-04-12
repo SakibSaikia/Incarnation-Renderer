@@ -1,18 +1,25 @@
 #include "common/math.hlsli"
 #include "common/color-space.hlsli"
 #include "common/uniform-sampling.hlsli"
+#include "common/mesh-material.hlsli"
+#include "gpu-shared-types.h"
 #include "geo-raster/encoding.hlsli"
 
 #define rootsig \
 	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_POINT, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP), " \
-    "RootConstants(b0, num32BitConstants=4, visibility = SHADER_VISIBILITY_PIXEL)"
+    "RootConstants(b0, num32BitConstants=9, visibility = SHADER_VISIBILITY_PIXEL)"
 
 SamplerState g_pointSampler : register(s0);
 
 cbuffer cb : register(b0)
 {
 	int g_visbufferTextureIndex;
+	int g_gbufferNormalsTextureIndex;
+	int g_indirectArgsBufferIndex;
+	int g_sceneMeshAccessorsIndex;
+	int g_sceneMeshBufferViewsIndex;
+	int g_scenePrimitivesIndex;
 	int g_viewmode;
 	uint g_resX;
 	uint g_resY;
@@ -34,16 +41,66 @@ vs_to_ps vs_main(uint id : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	if (g_viewmode == 8 || g_viewmode == 9)
+	// Object IDs
+	if (g_viewmode == 8)
 	{
 		Texture2D<int> visbufferTex = ResourceDescriptorHeap[g_visbufferTextureIndex];
 		int visbufferValue = visbufferTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
 
 		uint objectId, triangleId;
 		DecodeVisibilityBuffer(visbufferValue, objectId, triangleId);
-		return g_viewmode == 8 ? 
-			hsv2rgb(float3(Halton(objectId, 3) * 360.f, 0.85f, 0.95f)).rgbr :
-			hsv2rgb(float3(Halton(triangleId, 5) * 360.f, 0.85f, 0.95f)).rgbr;
+
+		if (floor(input.uv.x * 1280.f) == 640 && floor(input.uv.y * 720.f) == 360)
+		{
+			// Use object id to retrieve the primitive info
+			ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
+			const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+
+			FIndexedDrawWithRootConstants cmd = (FIndexedDrawWithRootConstants)0;
+			cmd.rootConstants[0] = visbufferValue;
+			cmd.drawArguments.IndexCountPerInstance = primitive.m_indexCount;
+			cmd.drawArguments.InstanceCount = 1;
+			cmd.drawArguments.StartIndexLocation = 0;
+			cmd.drawArguments.BaseVertexLocation = 0;
+			cmd.drawArguments.StartInstanceLocation = 0;
+
+			RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_indirectArgsBufferIndex];
+			argsBuffer.Store(0, cmd);
+		}
+
+		return hsv2rgb(float3(Halton(objectId, 3) * 360.f, 0.85f, 0.95f)).rgbr;
+	}
+	// Triangle IDs
+	else if (g_viewmode == 9)
+	{
+		Texture2D<int> visbufferTex = ResourceDescriptorHeap[g_visbufferTextureIndex];
+		int visbufferValue = visbufferTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
+
+		uint objectId, triangleId;
+		DecodeVisibilityBuffer(visbufferValue, objectId, triangleId);
+
+		// Use object id to retrieve the primitive info
+		ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
+		const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+
+		FIndexedDrawWithRootConstants cmd = (FIndexedDrawWithRootConstants)0;
+		cmd.rootConstants[0] = visbufferValue;
+		cmd.drawArguments.IndexCountPerInstance = primitive.m_indicesPerTriangle;
+		cmd.drawArguments.InstanceCount = 1;
+		cmd.drawArguments.StartIndexLocation = triangleId * primitive.m_indicesPerTriangle;
+		cmd.drawArguments.BaseVertexLocation = 0;
+		cmd.drawArguments.StartInstanceLocation = 0;
+
+		RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_indirectArgsBufferIndex];
+		argsBuffer.Store<FIndexedDrawWithRootConstants>(0, cmd);
+
+		return hsv2rgb(float3(Halton(triangleId, 5) * 360.f, 0.85f, 0.95f)).rgbr;
+	}
+	// Normals
+	else if (g_viewmode == 10)
+	{
+		Texture2D gbufferNormalsTex = ResourceDescriptorHeap[g_gbufferNormalsTextureIndex];
+		return gbufferNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
 	}
 
 	return 0.xxxx;

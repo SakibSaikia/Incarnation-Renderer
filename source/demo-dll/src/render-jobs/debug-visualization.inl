@@ -3,18 +3,23 @@ namespace RenderJob
 	struct DebugVizDesc
 	{
 		FRenderTexture* visBuffer;
+		FBindlessUav* gbufferNormals;
 		FRenderTexture* target;
+		FBindlessUav* indirectArgsBuffer;
 		FConfig renderConfig;
 		uint32_t resX;
 		uint32_t resY;
+		const FScene* scene;
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
 	concurrency::task<void> DebugViz(RenderJob::Sync& jobSync, const DebugVizDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
-		size_t sourceTransitionToken = passDesc.visBuffer->m_resource->GetTransitionToken();
+		size_t visBufferTransitionToken = passDesc.visBuffer->m_resource->GetTransitionToken();
 		size_t targetTransitionToken = passDesc.target->m_resource->GetTransitionToken();
+		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormals->m_resource->GetTransitionToken();
+		size_t indirectArgsTransitionToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
 		{
@@ -117,11 +122,21 @@ namespace RenderJob
 			struct
 			{
 				int visBufferTextureIndex;
+				int gbufferNormalsTextureIndex;
+				int indirectArgsBufferIndex;
+				int sceneMeshAccessorsIndex;
+				int sceneMeshBufferViewsIndex;
+				int scenePrimitivesIndex;
 				int viewmode;
-				int resX;
-				int resY;
+				uint32_t resX;
+				uint32_t resY;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_srvIndex,
+					(int)passDesc.gbufferNormals->m_srvIndex,
+					(int)passDesc.indirectArgsBuffer->m_uavIndices[0],
+					passDesc.scene->m_packedMeshAccessors->m_srvIndex,
+					passDesc.scene->m_packedMeshBufferViews->m_srvIndex,
+					passDesc.scene->m_packedPrimitives->m_srvIndex,
 					passDesc.renderConfig.Viewmode,
 					passDesc.resX,
 					passDesc.resY
@@ -129,8 +144,10 @@ namespace RenderJob
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
 			// Transitions
-			passDesc.visBuffer->m_resource->Transition(cmdList, sourceTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.visBuffer->m_resource->Transition(cmdList, visBufferTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.gbufferNormals->m_resource->Transition(cmdList, gbufferNormalsTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.target->m_resource->Transition(cmdList, targetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.indirectArgsBuffer->m_resource->Transition(cmdList, indirectArgsTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
 

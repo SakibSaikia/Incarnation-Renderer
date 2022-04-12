@@ -578,6 +578,7 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::RadioButton("Roughness", &s_globalConfig.Viewmode, (int)Viewmode::Roughness);
 				ImGui::RadioButton("Metallic", &s_globalConfig.Viewmode, (int)Viewmode::Metallic);
 				ImGui::RadioButton("Base Color", &s_globalConfig.Viewmode, (int)Viewmode::BaseColor);
+				ImGui::RadioButton("Normalmap", &s_globalConfig.Viewmode, (int)Viewmode::Normalmap);
 				ImGui::RadioButton("Emissive", &s_globalConfig.Viewmode, (int)Viewmode::Emissive);
 				ImGui::RadioButton("Reflections", &s_globalConfig.Viewmode, (int)Viewmode::Reflections);
 				ImGui::RadioButton("Object IDs", &s_globalConfig.Viewmode, (int)Viewmode::ObjectIds);
@@ -1039,6 +1040,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 				newPrimitive.m_normalAccessor = primitive.m_normalAccessor;
 				newPrimitive.m_tangentAccessor = primitive.m_tangentAccessor;
 				newPrimitive.m_materialIndex = primitive.m_materialIndex;
+				newPrimitive.m_indexCount = primitive.m_indexCount;
 				newPrimitive.m_indicesPerTriangle = 3;
 				primitives.push_back(newPrimitive);
 			}

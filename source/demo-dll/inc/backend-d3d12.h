@@ -32,6 +32,7 @@ using D3DPipelineState_t = ID3D12PipelineState;
 using D3DRootSignature_t = ID3D12RootSignature;
 using D3DStateObject_t = ID3D12StateObject;
 using D3DStateObjectProperties_t = ID3D12StateObjectProperties;
+using D3DCommandSignature_t = ID3D12CommandSignature;
 using PhysicalAlloc_t = std::vector<uint32_t>;
 
 struct IDxcBlob;
@@ -324,6 +325,9 @@ namespace RenderBackend12
 	D3DDescriptorHeap_t* GetDescriptorHeap(const D3D12_DESCRIPTOR_HEAP_TYPE type);
 	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex, bool bShaderVisible = true);
 	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
+
+	// Command Signatures
+	D3DCommandSignature_t* CacheCommandSignature(const D3D12_COMMAND_SIGNATURE_DESC desc, D3DRootSignature_t* rootsig);
 
 	// Feature Support
 	uint32_t GetLaneCount();

@@ -14,7 +14,8 @@ enum class Viewmode
 	NanCheck		= 6,
 	Reflections		= 7,
 	ObjectIds		= 8,
-	TriangleIds		= 9
+	TriangleIds		= 9,
+	Normalmap		= 10
 };
 
 struct FConfig

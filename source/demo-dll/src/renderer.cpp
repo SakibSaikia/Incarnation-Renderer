@@ -32,6 +32,7 @@ namespace Demo
 #include "render-jobs/visibility-pass.inl"
 #include "render-jobs/gbuffer-pass.inl"
 #include "render-jobs/debug-visualization.inl"
+#include "render-jobs/highlight-pass.inl"
 
 namespace
 {
@@ -200,6 +201,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FBindlessUav> gbuffer_basecolor = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_basecolor", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> gbuffer_normals = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_normals", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> gbuffer_metallicRoughnessAo = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_metallic_roughness_ao", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
+	std::unique_ptr<FBindlessUav> meshHighlightIndirectArgs = RenderBackend12::CreateBindlessUavBuffer(L"mesh_highlight_indirect_args", sizeof(FIndexedDrawWithRootConstants));
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
@@ -279,11 +281,28 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			// Debug Viz
 			RenderJob::DebugVizDesc desc = {};
 			desc.visBuffer = visBuffer.get();
+			desc.gbufferNormals = gbuffer_normals.get();
 			desc.target = RenderBackend12::GetBackBuffer();
+			desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 			desc.renderConfig = c;
 			desc.resX = resX;
 			desc.resY = resY;
+			desc.scene = renderState.m_scene;
 			renderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
+
+			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
+			{
+				RenderJob::HighlightPassDesc desc = {};
+				desc.colorTarget = RenderBackend12::GetBackBuffer();
+				desc.depthStencilTarget = depthBuffer.get();
+				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
+				desc.resX = resX;
+				desc.resY = resY;
+				desc.scene = renderState.m_scene;
+				desc.view = renderState.m_view;
+				desc.renderConfig = c;
+				renderJobs.push_back(RenderJob::HighlightPass(jobSync, desc));
+			}
 		}
 		else
 		{

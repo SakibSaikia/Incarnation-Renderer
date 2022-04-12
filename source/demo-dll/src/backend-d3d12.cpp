@@ -260,6 +260,25 @@ struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>
 };
 
 template<>
+struct std::hash< D3D12_COMMAND_SIGNATURE_DESC>
+{
+	std::size_t operator()(const D3D12_COMMAND_SIGNATURE_DESC& key, const D3DRootSignature_t* rootsig) const
+	{
+		uint64_t seed1{}, seed2{};
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, &key.ByteStride, sizeof(key.ByteStride));
+		spookyhash_update(&context, &key.NumArgumentDescs, sizeof(key.NumArgumentDescs));
+		spookyhash_update(&context, key.pArgumentDescs, key.NumArgumentDescs * sizeof(D3D12_INDIRECT_ARGUMENT_DESC));
+		spookyhash_update(&context, &key.NodeMask, sizeof(key.NodeMask));
+		spookyhash_update(&context, rootsig, sizeof(rootsig));
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+template<>
 struct std::hash<D3D12_STATE_OBJECT_DESC>
 {
 	std::size_t operator()(const D3D12_STATE_OBJECT_DESC& key) const
@@ -1447,6 +1466,7 @@ namespace RenderBackend12
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
+	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DCommandSignature_t>> s_commandSignaturePool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_samplerIndexPool;
@@ -2028,6 +2048,24 @@ D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_
 		AssertIfFailed(s_d3dDevice->CreateStateObject(&desc, IID_PPV_ARGS(newPSO.put())));
 		s_raytracePSOPool[descHash] = newPSO;
 		return s_raytracePSOPool[descHash].get();
+	}
+}
+
+D3DCommandSignature_t* RenderBackend12::CacheCommandSignature(const D3D12_COMMAND_SIGNATURE_DESC desc, D3DRootSignature_t* rootsig)
+{
+	size_t descHash = std::hash<D3D12_COMMAND_SIGNATURE_DESC>{}(desc, rootsig);
+
+	auto search = s_commandSignaturePool.find(descHash);
+	if (search != s_commandSignaturePool.cend())
+	{
+		return search->second.get();
+	}
+	else
+	{
+		winrt::com_ptr<D3DCommandSignature_t> newSignature;
+		AssertIfFailed(s_d3dDevice->CreateCommandSignature(&desc, rootsig, IID_PPV_ARGS(newSignature.put())));
+		s_commandSignaturePool[descHash] = newSignature;
+		return s_commandSignaturePool[descHash].get();
 	}
 }
 
@@ -2717,6 +2755,7 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Buffer.FirstElement = 0;
 		srvDesc.Buffer.NumElements = size / 4;
 		srvDesc.Buffer.StructureByteStride = 0;

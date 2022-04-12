@@ -92,16 +92,12 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         
         // Use triangle id to retrieve the vertex indices of the triangle
         uint baseTriIndex = triangleId * 3;
-        const uint vertIndices[3] = {
-            MeshMaterial::GetUint(baseTriIndex + 0, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetUint(baseTriIndex + 1, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetUint(baseTriIndex + 2, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex)
-        };
+        const uint3 vertIndices = MeshMaterial::GetUint3(baseTriIndex, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
         const float3 vertPositions[3] = {
-            MeshMaterial::GetFloat3(vertIndices[0], primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat3(vertIndices[1], primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat3(vertIndices[2], primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex)
+            MeshMaterial::GetFloat3(vertIndices.x, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+            MeshMaterial::GetFloat3(vertIndices.y, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+            MeshMaterial::GetFloat3(vertIndices.z, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex)
         };
 
         // Transform the triangle verts to ndc space

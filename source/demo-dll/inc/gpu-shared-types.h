@@ -48,6 +48,7 @@ struct FGpuPrimitive
 	int m_tangentAccessor;
 	int m_materialIndex;
 	int m_indicesPerTriangle;
+	int m_indexCount;
 };
 
 struct FMaterial
@@ -107,3 +108,18 @@ struct FLight
 	Vector2 m_spotAngles;
 };
 
+struct FDrawIndexedInstanced
+{
+	uint32_t IndexCountPerInstance;
+	uint32_t InstanceCount;
+	uint32_t StartIndexLocation;
+	uint32_t BaseVertexLocation;
+	uint32_t StartInstanceLocation;
+	uint32_t __padding[4];
+};
+
+struct FIndexedDrawWithRootConstants
+{
+	uint32_t rootConstants[32];
+	FDrawIndexedInstanced drawArguments;
+};
