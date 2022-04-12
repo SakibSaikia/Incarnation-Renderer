@@ -188,7 +188,7 @@ namespace Demo
 		s.m_config = s_globalConfig;
 		s.m_suspendRendering = s_suspendRendering;
 		s.m_scene = &s_scene;
-		s.m_view = &s_view;
+		s.m_view = s_view;
 		return s;
 	}
 

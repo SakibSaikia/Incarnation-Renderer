@@ -159,7 +159,7 @@ struct FRenderState
 	FConfig m_config;
 	bool m_suspendRendering;
 	FScene* m_scene;
-	FView* m_view;
+	FView m_view;
 };
 
 namespace Demo

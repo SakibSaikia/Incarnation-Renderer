@@ -217,7 +217,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			pathtraceDesc.resX = resX;
 			pathtraceDesc.resY = resY;
 			pathtraceDesc.scene = renderState.m_scene;
-			pathtraceDesc.view = renderState.m_view;
+			pathtraceDesc.view = &renderState.m_view;
 			pathtraceDesc.renderConfig = c;
 			renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
@@ -244,7 +244,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		visDesc.resX = resX;
 		visDesc.resY = resY;
 		visDesc.scene = renderState.m_scene;
-		visDesc.view = renderState.m_view;
+		visDesc.view = &renderState.m_view;
 		visDesc.jitter = pixelJitter;
 		visDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
@@ -258,7 +258,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		gbufferDesc.resX = resX;
 		gbufferDesc.resY = resY;
 		gbufferDesc.scene = renderState.m_scene;
-		gbufferDesc.view = renderState.m_view;
+		gbufferDesc.view = &renderState.m_view;
 		gbufferDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::GBufferPass(jobSync, gbufferDesc));
 
@@ -270,7 +270,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.resX = resX;
 		baseDesc.resY = resY;
 		baseDesc.scene = renderState.m_scene;
-		baseDesc.view = renderState.m_view;
+		baseDesc.view = &renderState.m_view;
 		baseDesc.jitter = pixelJitter;
 		baseDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
@@ -299,7 +299,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				desc.resX = resX;
 				desc.resY = resY;
 				desc.scene = renderState.m_scene;
-				desc.view = renderState.m_view;
+				desc.view = &renderState.m_view;
 				desc.renderConfig = c;
 				renderJobs.push_back(RenderJob::HighlightPass(jobSync, desc));
 			}
@@ -308,8 +308,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		{
 			if (c.EnableTAA)
 			{
-				const FView* view = renderState.m_view;
-				Matrix viewProjectionTransform = view->m_viewTransform * view->m_projectionTransform;
+				const FView& view = renderState.m_view;
+				Matrix viewProjectionTransform = view.m_viewTransform * view.m_projectionTransform;
 
 				// TAA Resolve
 				RenderJob::TAAResolveDesc resolveDesc = {};
