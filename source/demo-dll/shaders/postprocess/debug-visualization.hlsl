@@ -56,12 +56,11 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
 			const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
 
-			FIndexedDrawWithRootConstants cmd = (FIndexedDrawWithRootConstants)0;
+			FDrawWithRootConstants cmd = (FDrawWithRootConstants)0;
 			cmd.rootConstants[0] = visbufferValue;
-			cmd.drawArguments.IndexCountPerInstance = primitive.m_indexCount;
+			cmd.drawArguments.VertexCount = primitive.m_indexCount;
 			cmd.drawArguments.InstanceCount = 1;
-			cmd.drawArguments.StartIndexLocation = 0;
-			cmd.drawArguments.BaseVertexLocation = 0;
+			cmd.drawArguments.StartVertexLocation = 0;
 			cmd.drawArguments.StartInstanceLocation = 0;
 
 			RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_indirectArgsBufferIndex];
@@ -83,16 +82,15 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
 		const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
 
-		FIndexedDrawWithRootConstants cmd = (FIndexedDrawWithRootConstants)0;
+		FDrawWithRootConstants cmd = (FDrawWithRootConstants)0;
 		cmd.rootConstants[0] = visbufferValue;
-		cmd.drawArguments.IndexCountPerInstance = primitive.m_indicesPerTriangle;
+		cmd.drawArguments.VertexCount = primitive.m_indicesPerTriangle;
 		cmd.drawArguments.InstanceCount = 1;
-		cmd.drawArguments.StartIndexLocation = triangleId * primitive.m_indicesPerTriangle;
-		cmd.drawArguments.BaseVertexLocation = 0;
+		cmd.drawArguments.StartVertexLocation = 0;
 		cmd.drawArguments.StartInstanceLocation = 0;
 
 		RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_indirectArgsBufferIndex];
-		argsBuffer.Store<FIndexedDrawWithRootConstants>(0, cmd);
+		argsBuffer.Store(0, cmd);
 
 		return hsv2rgb(float3(Halton(triangleId, 5) * 360.f, 0.85f, 0.95f)).rgbr;
 	}

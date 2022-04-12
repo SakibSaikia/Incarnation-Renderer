@@ -108,18 +108,16 @@ struct FLight
 	Vector2 m_spotAngles;
 };
 
-struct FDrawIndexedInstanced
+struct FDrawInstanced
 {
-	uint32_t IndexCountPerInstance;
+	uint32_t VertexCount;
 	uint32_t InstanceCount;
-	uint32_t StartIndexLocation;
-	uint32_t BaseVertexLocation;
+	uint32_t StartVertexLocation;
 	uint32_t StartInstanceLocation;
-	uint32_t __padding[4];
 };
 
-struct FIndexedDrawWithRootConstants
+struct FDrawWithRootConstants
 {
 	uint32_t rootConstants[32];
-	FDrawIndexedInstanced drawArguments;
+	FDrawInstanced drawArguments;
 };

@@ -201,7 +201,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FBindlessUav> gbuffer_basecolor = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_basecolor", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> gbuffer_normals = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_normals", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> gbuffer_metallicRoughnessAo = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_metallic_roughness_ao", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> meshHighlightIndirectArgs = RenderBackend12::CreateBindlessUavBuffer(L"mesh_highlight_indirect_args", sizeof(FIndexedDrawWithRootConstants));
+	std::unique_ptr<FBindlessUav> meshHighlightIndirectArgs = RenderBackend12::CreateBindlessUavBuffer(L"mesh_highlight_indirect_args", sizeof(FDrawWithRootConstants));
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
