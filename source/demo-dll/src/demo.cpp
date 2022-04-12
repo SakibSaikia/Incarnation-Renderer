@@ -189,6 +189,8 @@ namespace Demo
 		s.m_suspendRendering = s_suspendRendering;
 		s.m_scene = &s_scene;
 		s.m_view = s_view;
+		s.m_mouseX = s_controller.m_mouseCurrentPosition.x;
+		s.m_mouseY = s_controller.m_mouseCurrentPosition.y;
 		return s;
 	}
 

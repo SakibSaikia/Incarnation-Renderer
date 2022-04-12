@@ -7,8 +7,8 @@ namespace RenderJob
 		FRenderTexture* target;
 		FBindlessUav* indirectArgsBuffer;
 		FConfig renderConfig;
-		uint32_t resX;
-		uint32_t resY;
+		uint32_t resX, resY;
+		uint32_t mouseX, mouseY;
 		const FScene* scene;
 	};
 
@@ -130,6 +130,8 @@ namespace RenderJob
 				int viewmode;
 				uint32_t resX;
 				uint32_t resY;
+				uint32_t mouseX;
+				uint32_t mouseY;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_srvIndex,
 					(int)passDesc.gbufferNormals->m_srvIndex,
@@ -139,7 +141,9 @@ namespace RenderJob
 					passDesc.scene->m_packedPrimitives->m_srvIndex,
 					passDesc.renderConfig.Viewmode,
 					passDesc.resX,
-					passDesc.resY
+					passDesc.resY,
+					passDesc.mouseX,
+					passDesc.mouseY
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 

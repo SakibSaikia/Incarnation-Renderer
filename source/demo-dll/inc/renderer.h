@@ -14,7 +14,7 @@ namespace tinygltf
 	class Sampler;
 }
 
-class FController;
+struct FController;
 
 // Corresponds to GLTF Primitive
 struct FMeshPrimitive
@@ -160,6 +160,7 @@ struct FRenderState
 	bool m_suspendRendering;
 	FScene* m_scene;
 	FView m_view;
+	uint32_t m_mouseX, m_mouseY;
 };
 
 namespace Demo

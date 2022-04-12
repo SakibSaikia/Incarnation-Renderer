@@ -5,8 +5,7 @@ namespace RenderJob
 		FRenderTexture* colorTarget;
 		FRenderTexture* depthStencilTarget;
 		FBindlessUav* indirectArgsBuffer;
-		uint32_t resX;
-		uint32_t resY;
+		uint32_t resX, resY;
 		const FScene* scene;
 		const FView* view;
 		FConfig renderConfig;

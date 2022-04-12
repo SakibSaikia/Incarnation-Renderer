@@ -287,6 +287,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			desc.renderConfig = c;
 			desc.resX = resX;
 			desc.resY = resY;
+			desc.mouseX = renderState.m_mouseX;
+			desc.mouseY = renderState.m_mouseY;
 			desc.scene = renderState.m_scene;
 			renderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
 
