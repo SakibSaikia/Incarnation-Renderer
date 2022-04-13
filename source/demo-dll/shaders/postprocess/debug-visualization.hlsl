@@ -59,7 +59,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
 
 			FDrawWithRootConstants cmd = (FDrawWithRootConstants)0;
-			cmd.rootConstants[0] = visbufferValue;
+			cmd.rootConstants[0] = objectId;
+			cmd.rootConstants[1] = 0;
 			cmd.drawArguments.VertexCount = primitive.m_indexCount;
 			cmd.drawArguments.InstanceCount = 1;
 			cmd.drawArguments.StartVertexLocation = 0;
@@ -85,9 +86,11 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			// Use object id to retrieve the primitive info
 			ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
 			const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+			uint startVertIndex = MeshMaterial::GetUint(0, primitive.m_indexAccessor, g_sceneMeshAccessorsIndex, g_sceneMeshBufferViewsIndex);
 
 			FDrawWithRootConstants cmd = (FDrawWithRootConstants)0;
-			cmd.rootConstants[0] = visbufferValue;
+			cmd.rootConstants[0] = objectId;
+			cmd.rootConstants[1] = triangleId * 3;
 			cmd.drawArguments.VertexCount = primitive.m_indicesPerTriangle;
 			cmd.drawArguments.InstanceCount = 1;
 			cmd.drawArguments.StartVertexLocation = 0;

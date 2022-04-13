@@ -25,7 +25,8 @@ struct ViewCbLayout
 
 cbuffer cb : register(b0)
 {
-	uint g_visibilityId;
+	uint g_objectId;
+	uint g_indexOffset;
 };
 
 ConstantBuffer<ViewCbLayout> g_viewConstants : register(b1);
@@ -33,19 +34,15 @@ ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
 
 float4 vs_main(uint index : SV_VertexID) : SV_POSITION
 {
-	// Retrieve object and triangle id for vis buffer
-	uint objectId, triangleId;
-	DecodeVisibilityBuffer(g_visibilityId, objectId, triangleId);
-
 	// Use object id to retrieve the primitive info
 	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_frameConstants.scenePrimitivesBufferIndex];
-	const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+	const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_objectId * sizeof(FGpuPrimitive));
 
 	float4x4 localToWorld = mul(primitive.m_localToWorld, g_frameConstants.sceneRotation);
 	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
 
 	// index
-	uint vertIndex = MeshMaterial::GetUint(index, primitive.m_indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	uint vertIndex = MeshMaterial::GetUint(g_indexOffset + index, primitive.m_indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 
 	// position
 	float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
