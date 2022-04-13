@@ -102,7 +102,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         // Transform the triangle verts to ndc space
         float4x4 localToWorld = mul(primitive.m_localToWorld, sceneRotation);
-        float4x4 localToClip = localToWorld * viewProjTransform;
+        float4x4 localToClip = mul(localToWorld, viewProjTransform);
         float4 p[3] = {
             mul(float4(vertPositions[0], 1.f), localToClip),
             mul(float4(vertPositions[1], 1.f), localToClip),
