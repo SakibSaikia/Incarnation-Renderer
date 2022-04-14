@@ -123,12 +123,12 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         
 
         float4 vertNormals[3] = {
-            mul(float4(MeshMaterial::GetFloat3(vertIndices[0], primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld),
-            mul(float4(MeshMaterial::GetFloat3(vertIndices[1], primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld),
-            mul(float4(MeshMaterial::GetFloat3(vertIndices[2], primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld)
+            mul(float4(MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld),
+            mul(float4(MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld),
+            mul(float4(MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld)
         };
 
-        float3 N = Interpolate(vertNormals[0].xyz, vertNormals[1].xyz, vertNormals[2].xyz, bary);
+        float3 N = normalize(Interpolate(vertNormals[0].xyz, vertNormals[1].xyz, vertNormals[2].xyz, bary));
 
         gbufferNormals[dispatchThreadId.xy] = float4(N.xyz, 0.f);
     }
