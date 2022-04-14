@@ -29,9 +29,9 @@ FBarycentricData CalcBarycentrics(float2 p0, float2 p1, float2 p2, float2 p, flo
 {
     FBarycentricData o = (FBarycentricData)0;
 
-    float area = determinant(float2x2(p2 - p1, p0 - p1));
-    o.m_lambda.x = determinant(float2x2(p - p1, p2 - p1)) / area;
-    o.m_lambda.y = determinant(float2x2(p - p2, p0 - p2)) / area;
+    float area = abs(determinant(float2x2(p2 - p1, p0 - p1)));
+    o.m_lambda.x = abs(determinant(float2x2(p - p1, p2 - p1))) / area;
+    o.m_lambda.y = abs(determinant(float2x2(p - p2, p0 - p2))) / area;
     o.m_lambda.z = 1.f - o.m_lambda.x - o.m_lambda.y;
 
     //o.m_ddx = invD * float3(p1.y - p2.y, p2.y - p0.y, p0.y - p1.y);
