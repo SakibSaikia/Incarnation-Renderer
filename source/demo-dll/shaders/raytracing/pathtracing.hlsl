@@ -1,5 +1,6 @@
 #include "raytracing/common.hlsli"
 #include "lighting/common.hlsli"
+#include "material/common.hlsli"
 
 #define MAX_RECURSION_DEPTH 4
 
@@ -167,7 +168,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     // Material 
     FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, globalMaterialBufferIndex);
-    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv, g_trilinearSampler);
+    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv, g_trilinearSampler, 0, 0);
 
 #if VIEWMODE == 1 // Lighting Only
     matInfo.basecolor = 0.5.xxx;

@@ -1,6 +1,7 @@
 // Reference - http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
 
 #include "common/mesh-material.hlsli"
+#include "material/common.hlsli"
 #include "encoding.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
@@ -14,28 +15,37 @@
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "CBV(b0)," \
-    "StaticSampler(s0, filter = FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP)"
+    "StaticSampler(s0, filter = FILTER_COMPARISON_MIN_MAG_MIP_LINEAR, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP)"
 
-struct FBarycentricData
+struct FBarycentrics
 {
     float3 m_lambda;
     float3 m_ddx;
     float3 m_ddy;
 };
 
-// See: https://cg.ivd.kit.edu/publications/2015/dais/DAIS.pdf
-// See: https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/perspective-correct-interpolation-vertex-attributes
-FBarycentricData CalcBarycentrics(float2 p0, float2 p1, float2 p2, float2 p, float2 res)
+// See: http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
+FBarycentrics CalcBarycentrics(float4 p0, float4 p1, float4 p2, float2 pixelNdc, float2 res)
 {
-    FBarycentricData o = (FBarycentricData)0;
+    FBarycentrics o = (FBarycentrics)0;
 
-    float area = abs(determinant(float2x2(p2 - p1, p0 - p1)));
-    o.m_lambda.x = abs(determinant(float2x2(p - p1, p2 - p1))) / area;
-    o.m_lambda.y = abs(determinant(float2x2(p - p2, p0 - p2))) / area;
-    o.m_lambda.z = 1.f - o.m_lambda.x - o.m_lambda.y;
+    float3 invW = rcp(float3(p0.w, p1.w, p2.w));
 
-    //o.m_ddx = invD * float3(p1.y - p2.y, p2.y - p0.y, p0.y - p1.y);
-    //o.m_ddy = invD * float3(p2.x - p1.x, p0.x - p2.x, p1.x - p0.x);
+    float2 ndc0 = p0.xy * invW.x;
+    float2 ndc1 = p1.xy * invW.y;
+    float2 ndc2 = p2.xy * invW.z;
+
+    float invDet = rcp(determinant(float2x2(ndc2 - ndc1, ndc0 - ndc1)));
+    o.m_ddx = float3(ndc1.y - ndc2.y, ndc2.y - ndc0.y, ndc0.y - ndc1.y) * invDet;
+    o.m_ddy = float3(ndc2.x - ndc1.x, ndc0.x - ndc2.x, ndc1.x - ndc0.x) * invDet;
+
+    float2 deltaVec = pixelNdc - ndc0;
+    float interpInvW = (invW.x + deltaVec.x * dot(invW, o.m_ddx) + deltaVec.y * dot(invW, o.m_ddy));
+    float interpW = rcp(interpInvW);
+
+    o.m_lambda.x = interpW * (invW[0] + deltaVec.x * o.m_ddx.x * invW[0] + deltaVec.y * o.m_ddy.x * invW[0]);
+    o.m_lambda.y = interpW * (0.0f + deltaVec.x * o.m_ddx.y * invW[1] + deltaVec.y * o.m_ddy.y * invW[1]);
+    o.m_lambda.z = interpW * (0.0f + deltaVec.x * o.m_ddx.z * invW[2] + deltaVec.y * o.m_ddy.z * invW[2]);
 
     // The derivatives of the barycentric are scaled by 2/winSize to change the scale from NDC units (-1 to 1) to pixel units
     o.m_ddx *= (2.f / res.x);
@@ -47,10 +57,21 @@ FBarycentricData CalcBarycentrics(float2 p0, float2 p1, float2 p2, float2 p, flo
     return o;
 }
 
-float3 Interpolate(float3 p0, float3 p1, float3 p2, FBarycentricData w)
+float3 BarycentricInterp(float3 p0, float3 p1, float3 p2, float3 w)
 {
     float3x3 p = float3x3(p0, p1, p2);
-    return mul(w.m_lambda, p);
+    return mul(w, p);
+}
+
+float2 BarycentricInterp(float2 p0, float2 p1, float2 p2, float3 w)
+{
+    float3x2 p = float3x2(p0, p1, p2);
+    return mul(w, p);
+}
+
+float BarycentricInterp(float p0, float p1, float p2, float3 w)
+{
+    return dot(w, float3(p0, p1, p2));
 }
 
 cbuffer cb : register(b0)
@@ -70,7 +91,7 @@ cbuffer cb : register(b0)
     float4x4 sceneRotation;
 };
 
-SamplerState g_bilinearSampler : register(s0);
+SamplerState g_trilinearSampler : register(s0);
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
@@ -109,27 +130,50 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             mul(float4(vertPositions[2], 1.f), localToClip)
         };
 
-        // Evaluate triangle barycentrics based on pixel NDC
+        // Calculate screen space barycentrics based on pixel NDC
         float2 screenRes = float2(resX, resY);
-        float2 pixelNdc = (dispatchThreadId.xy + 0.5.xx)/ screenRes;
+        float2 pixelNdc = (dispatchThreadId.xy + 0.5.xx) / screenRes;
         pixelNdc.x = 2.f * pixelNdc.x - 1.f;
         pixelNdc.y = -2.f * pixelNdc.y + 1;
-        FBarycentricData bary = CalcBarycentrics(
-            p[0].xy / p[0].w, 
-            p[1].xy / p[1].w, 
-            p[2].xy / p[2].w, 
+        FBarycentrics lambda = CalcBarycentrics(
+            p[0], 
+            p[1], 
+            p[2], 
             pixelNdc, 
             screenRes);
-        
 
-        float4 vertNormals[3] = {
-            mul(float4(MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld),
-            mul(float4(MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld),
-            mul(float4(MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex), 0.f), localToWorld)
+        float3 vertNormals[3] = {
+            MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+            MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+            MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
         };
 
-        float3 N = normalize(Interpolate(vertNormals[0].xyz, vertNormals[1].xyz, vertNormals[2].xyz, bary));
+        float4 vertTangents[3] = {
+           MeshMaterial::GetFloat4(vertIndices.x, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+           MeshMaterial::GetFloat4(vertIndices.y, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+           MeshMaterial::GetFloat4(vertIndices.z, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex)
+        };
 
-        gbufferNormals[dispatchThreadId.xy] = float4(N.xyz, 0.f);
+        float3 N = normalize(BarycentricInterp(vertNormals[0], vertNormals[1], vertNormals[2], lambda.m_lambda));
+        float3 T = normalize(BarycentricInterp(vertTangents[0].xyz, vertTangents[1].xyz, vertTangents[2].xyz, lambda.m_lambda));
+        float3 B = normalize(cross(N, T) * vertTangents[0].w);
+        float3x3 tangentToWorld = mul(float3x3(T, B, N), (float3x3)localToWorld);
+
+        float2 vertexUVs[3] = {
+            MeshMaterial::GetFloat2(vertIndices.x, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+            MeshMaterial::GetFloat2(vertIndices.y, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+            MeshMaterial::GetFloat2(vertIndices.z, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
+        };
+        float2 UV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_lambda);
+        float2 ddxUV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddx);
+        float2 ddyUV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddy);
+
+        // Evaluate Material
+        FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, sceneMaterialBufferIndex);
+        FMaterialProperties matInfo = EvaluateMaterialProperties(material, UV, g_trilinearSampler, ddxUV, ddyUV);
+
+        N = normalize(mul(matInfo.normalmap, tangentToWorld));
+
+        gbufferNormals[dispatchThreadId.xy] = float4(N, 0.f);
     }
 }
