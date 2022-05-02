@@ -71,13 +71,13 @@ float2 BarycentricInterp(float2 p0, float2 p1, float2 p2, float3 w)
 
 float BarycentricInterp(float p0, float p1, float p2, float3 w)
 {
-    float p = float3(p0, p1, p2);
+    float3 p = float3(p0, p1, p2);
     return dot(w, p);
 }
 
 float BarycentricDeriv(float p0, float p1, float p2, float3 w)
 {
-    float p = float3(p0, p1, p2);
+    float3 p = float3(p0, p1, p2);
     return dot(w * p, 1.xxx);
 }
 
@@ -98,6 +98,21 @@ float2 BarycentricDeriv(float3 p0, float3 p1, float3 p2, float3 w)
     return float3(dot(w * pp1, 1.xxx), dot(w * pp2, 1.xxx), dot(w * pp3, 1.xxx));
 }
 
+// Properties at each triangle vertex. This corresponds to the interpolants in a VS->PS pipeline
+struct FVertexData
+{
+    float3 m_position;
+    float2 m_uv;
+    float3 m_normal;
+    float4 m_tangentAndSign;
+};
+
+// Vertex properties for each vert of the triangle
+struct FTriangleData
+{
+    FVertexData m_vertices[3];
+};
+
 cbuffer cb : register(b0)
 {
     uint gbuffer0UavIndex;
@@ -117,6 +132,33 @@ cbuffer cb : register(b0)
 
 SamplerState g_trilinearSampler : register(s0);
 
+FTriangleData GetTriangleData(int triIndex, FGpuPrimitive primitive)
+{
+    FTriangleData o;
+
+    // Use triangle id to retrieve the vertex indices of the triangle
+    uint baseTriIndex = triIndex * 3;
+    const uint3 vertIndices = MeshMaterial::GetUint3(baseTriIndex, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_position = MeshMaterial::GetFloat3(vertIndices.x, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_position = MeshMaterial::GetFloat3(vertIndices.y, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_position = MeshMaterial::GetFloat3(vertIndices.z, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_uv = MeshMaterial::GetFloat2(vertIndices.x, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_uv = MeshMaterial::GetFloat2(vertIndices.y, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_uv = MeshMaterial::GetFloat2(vertIndices.z, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_normal = MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_normal = MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_normal = MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.x, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.y, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.z, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+
+    return o;
+}
+
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
@@ -134,24 +176,17 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         // Use object id to retrieve the primitive info
         ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[scenePrimitivesIndex];
         const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
-        
-        // Use triangle id to retrieve the vertex indices of the triangle
-        uint baseTriIndex = triangleId * 3;
-        const uint3 vertIndices = MeshMaterial::GetUint3(baseTriIndex, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
-        const float3 vertPositions[3] = {
-            MeshMaterial::GetFloat3(vertIndices.x, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat3(vertIndices.y, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat3(vertIndices.z, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex)
-        };
+        // Fill the vertex data for the triangle
+        FTriangleData tri = GetTriangleData(triangleId, primitive);
 
         // Transform the triangle verts to ndc space
         float4x4 localToWorld = mul(primitive.m_localToWorld, sceneRotation);
         float4x4 localToClip = mul(localToWorld, viewProjTransform);
         float4 p[3] = {
-            mul(float4(vertPositions[0], 1.f), localToClip),
-            mul(float4(vertPositions[1], 1.f), localToClip),
-            mul(float4(vertPositions[2], 1.f), localToClip)
+            mul(float4(tri.m_vertices[0].m_position, 1.f), localToClip),
+            mul(float4(tri.m_vertices[1].m_position, 1.f), localToClip),
+            mul(float4(tri.m_vertices[2].m_position, 1.f), localToClip)
         };
 
         // Calculate screen space barycentrics based on pixel NDC
@@ -159,38 +194,21 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float2 pixelNdc = (dispatchThreadId.xy + 0.5.xx) / screenRes;
         pixelNdc.x = 2.f * pixelNdc.x - 1.f;
         pixelNdc.y = -2.f * pixelNdc.y + 1;
-        FBarycentrics lambda = CalcBarycentrics(
+        FBarycentrics w = CalcBarycentrics(
             p[0], 
             p[1], 
             p[2], 
             pixelNdc, 
             screenRes);
 
-        float3 vertNormals[3] = {
-            MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-        };
-
-        float4 vertTangents[3] = {
-           MeshMaterial::GetFloat4(vertIndices.x, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-           MeshMaterial::GetFloat4(vertIndices.y, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-           MeshMaterial::GetFloat4(vertIndices.z, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex)
-        };
-
-        float3 N = normalize(BarycentricInterp(vertNormals[0], vertNormals[1], vertNormals[2], lambda.m_lambda));
-        float3 T = normalize(BarycentricInterp(vertTangents[0].xyz, vertTangents[1].xyz, vertTangents[2].xyz, lambda.m_lambda));
-        float3 B = normalize(cross(N, T) * vertTangents[0].w);
+        float3 N = normalize(BarycentricInterp(tri.m_vertices[0].m_normal,tri.m_vertices[1].m_normal, tri.m_vertices[2].m_normal, w.m_lambda));
+        float3 T = normalize(BarycentricInterp(tri.m_vertices[0].m_tangentAndSign.xyz, tri.m_vertices[1].m_tangentAndSign.xyz, tri.m_vertices[2].m_tangentAndSign.xyz, w.m_lambda));
+        float3 B = normalize(cross(N, T) * tri.m_vertices[0].m_tangentAndSign.w);
         float3x3 tangentToWorld = mul(float3x3(T, B, N), (float3x3)localToWorld);
 
-        float2 vertexUVs[3] = {
-            MeshMaterial::GetFloat2(vertIndices.x, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat2(vertIndices.y, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-            MeshMaterial::GetFloat2(vertIndices.z, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
-        };
-        float2 UV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_lambda);
-        float2 ddxUV = BarycentricDeriv(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddx);
-        float2 ddyUV = BarycentricDeriv(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddy);
+        float2 UV = BarycentricInterp(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_lambda);
+        float2 ddxUV = BarycentricDeriv(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_ddx);
+        float2 ddyUV = BarycentricDeriv(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_ddy);
 
         // Evaluate Material
         FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, sceneMaterialBufferIndex);
