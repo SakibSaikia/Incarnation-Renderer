@@ -89,7 +89,7 @@ float2 BarycentricDeriv(float2 p0, float2 p1, float2 p2, float3 w)
     return float2(dot(w * pp1, 1.xxx), dot(w * pp2, 1.xxx));
 }
 
-float2 BarycentricDeriv(float3 p0, float3 p1, float3 p2, float3 w)
+float3 BarycentricDeriv(float3 p0, float3 p1, float3 p2, float3 w)
 {
     float3 pp1 = float3(p0.x, p1.x, p2.x);
     float3 pp2 = float3(p0.y, p1.y, p2.y);
@@ -216,6 +216,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         N = normalize(mul(matInfo.normalmap, tangentToWorld));
 
+        gbufferBaseColor[dispatchThreadId.xy] = float4(matInfo.basecolor, 0.f);
         gbufferNormals[dispatchThreadId.xy] = float4(N, 0.f);
+        gbufferMetallicRoughnessAo[dispatchThreadId.xy] = float4(matInfo.metallic, matInfo.roughness, matInfo.ao, matInfo.aoblend);
     }
 }
