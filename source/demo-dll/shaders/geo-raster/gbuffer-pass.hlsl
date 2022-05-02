@@ -71,7 +71,31 @@ float2 BarycentricInterp(float2 p0, float2 p1, float2 p2, float3 w)
 
 float BarycentricInterp(float p0, float p1, float p2, float3 w)
 {
-    return dot(w, float3(p0, p1, p2));
+    float p = float3(p0, p1, p2);
+    return dot(w, p);
+}
+
+float BarycentricDeriv(float p0, float p1, float p2, float3 w)
+{
+    float p = float3(p0, p1, p2);
+    return dot(w * p, 1.xxx);
+}
+
+float2 BarycentricDeriv(float2 p0, float2 p1, float2 p2, float3 w)
+{
+    float3 pp1 = float3(p0.x, p1.x, p2.x);
+    float3 pp2 = float3(p0.y, p1.y, p2.y);
+    
+    return float2(dot(w * pp1, 1.xxx), dot(w * pp2, 1.xxx));
+}
+
+float2 BarycentricDeriv(float3 p0, float3 p1, float3 p2, float3 w)
+{
+    float3 pp1 = float3(p0.x, p1.x, p2.x);
+    float3 pp2 = float3(p0.y, p1.y, p2.y);
+    float3 pp3 = float3(p0.z, p1.z, p2.z);
+
+    return float3(dot(w * pp1, 1.xxx), dot(w * pp2, 1.xxx), dot(w * pp3, 1.xxx));
 }
 
 cbuffer cb : register(b0)
@@ -165,8 +189,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             MeshMaterial::GetFloat2(vertIndices.z, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex),
         };
         float2 UV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_lambda);
-        float2 ddxUV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddx);
-        float2 ddyUV = BarycentricInterp(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddy);
+        float2 ddxUV = BarycentricDeriv(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddx);
+        float2 ddyUV = BarycentricDeriv(vertexUVs[0], vertexUVs[1], vertexUVs[2], lambda.m_ddy);
 
         // Evaluate Material
         FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, sceneMaterialBufferIndex);
