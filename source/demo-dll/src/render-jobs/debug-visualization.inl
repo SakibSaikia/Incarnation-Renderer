@@ -3,7 +3,7 @@ namespace RenderJob
 	struct DebugVizDesc
 	{
 		FRenderTexture* visBuffer;
-		FBindlessUav* gbufferNormals;
+		FBindlessUav* gbuffers[3];
 		FRenderTexture* target;
 		FBindlessUav* indirectArgsBuffer;
 		FConfig renderConfig;
@@ -18,7 +18,9 @@ namespace RenderJob
 		size_t renderToken = jobSync.GetToken();
 		size_t visBufferTransitionToken = passDesc.visBuffer->m_resource->GetTransitionToken();
 		size_t targetTransitionToken = passDesc.target->m_resource->GetTransitionToken();
-		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormals->m_resource->GetTransitionToken();
+		size_t gbuffer0TransitionToken = passDesc.gbuffers[0]->m_resource->GetTransitionToken();
+		size_t gbuffer1TransitionToken = passDesc.gbuffers[1]->m_resource->GetTransitionToken();
+		size_t gbuffer2TransitionToken = passDesc.gbuffers[2]->m_resource->GetTransitionToken();
 		size_t indirectArgsTransitionToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
@@ -122,7 +124,9 @@ namespace RenderJob
 			struct
 			{
 				int visBufferTextureIndex;
-				int gbufferNormalsTextureIndex;
+				int gbuffer0TextureIndex;
+				int gbuffer1TextureIndex;
+				int gbuffer2TextureIndex;
 				int indirectArgsBufferIndex;
 				int sceneMeshAccessorsIndex;
 				int sceneMeshBufferViewsIndex;
@@ -134,7 +138,9 @@ namespace RenderJob
 				uint32_t mouseY;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_srvIndex,
-					(int)passDesc.gbufferNormals->m_srvIndex,
+					(int)passDesc.gbuffers[0]->m_srvIndex,
+					(int)passDesc.gbuffers[1]->m_srvIndex,
+					(int)passDesc.gbuffers[2]->m_srvIndex,
 					(int)passDesc.indirectArgsBuffer->m_uavIndices[0],
 					(int)passDesc.scene->m_packedMeshAccessors->m_srvIndex,
 					(int)passDesc.scene->m_packedMeshBufferViews->m_srvIndex,
@@ -149,7 +155,9 @@ namespace RenderJob
 
 			// Transitions
 			passDesc.visBuffer->m_resource->Transition(cmdList, visBufferTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-			passDesc.gbufferNormals->m_resource->Transition(cmdList, gbufferNormalsTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.gbuffers[0]->m_resource->Transition(cmdList, gbuffer0TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.gbuffers[1]->m_resource->Transition(cmdList, gbuffer1TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.gbuffers[2]->m_resource->Transition(cmdList, gbuffer2TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.target->m_resource->Transition(cmdList, targetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.indirectArgsBuffer->m_resource->Transition(cmdList, indirectArgsTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 

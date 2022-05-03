@@ -8,14 +8,16 @@
 #define rootsig \
 	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_POINT, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP), " \
-    "RootConstants(b0, num32BitConstants=11, visibility = SHADER_VISIBILITY_PIXEL)"
+    "RootConstants(b0, num32BitConstants=13, visibility = SHADER_VISIBILITY_PIXEL)"
 
 SamplerState g_pointSampler : register(s0);
 
 cbuffer cb : register(b0)
 {
 	int g_visbufferTextureIndex;
-	int g_gbufferNormalsTextureIndex;
+	int g_gbuffer0TextureIndex;
+	int g_gbuffer1TextureIndex;
+	int g_gbuffer2TextureIndex;
 	int g_indirectArgsBufferIndex;
 	int g_sceneMeshAccessorsIndex;
 	int g_sceneMeshBufferViewsIndex;
@@ -43,8 +45,26 @@ vs_to_ps vs_main(uint id : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
+	// Roughness
+	if (g_viewmode == 2)
+	{
+		Texture2D gbufferMetallicRoughnessAoTex = ResourceDescriptorHeap[g_gbuffer2TextureIndex];
+		return gbufferMetallicRoughnessAoTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)).gggg;
+	}
+	// Metallic
+	else if (g_viewmode == 3)
+	{
+		Texture2D gbufferMetallicRoughnessAoTex = ResourceDescriptorHeap[g_gbuffer2TextureIndex];
+		return gbufferMetallicRoughnessAoTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)).rrrr;
+	}
+	// Base color
+	else if (g_viewmode == 4)
+	{
+		Texture2D gbufferBaseColorTex = ResourceDescriptorHeap[g_gbuffer0TextureIndex];
+		return gbufferBaseColorTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
+	}
 	// Object IDs
-	if (g_viewmode == 8)
+	else if (g_viewmode == 8)
 	{
 		Texture2D<int> visbufferTex = ResourceDescriptorHeap[g_visbufferTextureIndex];
 		int visbufferValue = visbufferTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
@@ -105,7 +125,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	// Normals
 	else if (g_viewmode == 10)
 	{
-		Texture2D gbufferNormalsTex = ResourceDescriptorHeap[g_gbufferNormalsTextureIndex];
+		Texture2D gbufferNormalsTex = ResourceDescriptorHeap[g_gbuffer1TextureIndex];
 		float3 N = gbufferNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)).xyz;
 		N = N * 0.5f + 0.5.xxx;
 		return float4(N, 1.f);

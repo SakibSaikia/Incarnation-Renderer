@@ -281,7 +281,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			// Debug Viz
 			RenderJob::DebugVizDesc desc = {};
 			desc.visBuffer = visBuffer.get();
-			desc.gbufferNormals = gbuffer_normals.get();
+			desc.gbuffers[0] = gbuffer_basecolor.get();
+			desc.gbuffers[1] = gbuffer_normals.get();
+			desc.gbuffers[2] = gbuffer_metallicRoughnessAo.get();
 			desc.target = RenderBackend12::GetBackBuffer();
 			desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 			desc.renderConfig = c;
