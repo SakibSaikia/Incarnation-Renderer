@@ -169,55 +169,65 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         RWTexture2D<float4> gbufferNormals = ResourceDescriptorHeap[gbuffer1UavIndex];
         RWTexture2D<float4> gbufferMetallicRoughnessAo = ResourceDescriptorHeap[gbuffer2UavIndex];
 
-        // Retrieve object and triangle id for vis buffer
-        uint objectId, triangleId;
-        DecodeVisibilityBuffer(visBufferTex[dispatchThreadId.xy], objectId, triangleId);
+        int visBufferValue = visBufferTex[dispatchThreadId.xy];
+        if (visBufferValue != 0xFFFE0000)
+        {
+            // Retrieve object and triangle id for vis buffer
+            uint objectId, triangleId;
+            DecodeVisibilityBuffer(visBufferValue, objectId, triangleId);
 
-        // Use object id to retrieve the primitive info
-        ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[scenePrimitivesIndex];
-        const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+            // Use object id to retrieve the primitive info
+            ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[scenePrimitivesIndex];
+            const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
 
-        // Fill the vertex data for the triangle
-        FTriangleData tri = GetTriangleData(triangleId, primitive);
+            // Fill the vertex data for the triangle
+            FTriangleData tri = GetTriangleData(triangleId, primitive);
 
-        // Transform the triangle verts to ndc space
-        float4x4 localToWorld = mul(primitive.m_localToWorld, sceneRotation);
-        float4x4 localToClip = mul(localToWorld, viewProjTransform);
-        float4 p[3] = {
-            mul(float4(tri.m_vertices[0].m_position, 1.f), localToClip),
-            mul(float4(tri.m_vertices[1].m_position, 1.f), localToClip),
-            mul(float4(tri.m_vertices[2].m_position, 1.f), localToClip)
-        };
+            // Transform the triangle verts to ndc space
+            float4x4 localToWorld = mul(primitive.m_localToWorld, sceneRotation);
+            float4x4 localToClip = mul(localToWorld, viewProjTransform);
+            float4 p[3] = {
+                mul(float4(tri.m_vertices[0].m_position, 1.f), localToClip),
+                mul(float4(tri.m_vertices[1].m_position, 1.f), localToClip),
+                mul(float4(tri.m_vertices[2].m_position, 1.f), localToClip)
+            };
 
-        // Calculate screen space barycentrics based on pixel NDC
-        float2 screenRes = float2(resX, resY);
-        float2 pixelNdc = (dispatchThreadId.xy + 0.5.xx) / screenRes;
-        pixelNdc.x = 2.f * pixelNdc.x - 1.f;
-        pixelNdc.y = -2.f * pixelNdc.y + 1;
-        FBarycentrics w = CalcBarycentrics(
-            p[0], 
-            p[1], 
-            p[2], 
-            pixelNdc, 
-            screenRes);
+            // Calculate screen space barycentrics based on pixel NDC
+            float2 screenRes = float2(resX, resY);
+            float2 pixelNdc = (dispatchThreadId.xy + 0.5.xx) / screenRes;
+            pixelNdc.x = 2.f * pixelNdc.x - 1.f;
+            pixelNdc.y = -2.f * pixelNdc.y + 1;
+            FBarycentrics w = CalcBarycentrics(
+                p[0],
+                p[1],
+                p[2],
+                pixelNdc,
+                screenRes);
 
-        float3 N = normalize(BarycentricInterp(tri.m_vertices[0].m_normal,tri.m_vertices[1].m_normal, tri.m_vertices[2].m_normal, w.m_lambda));
-        float3 T = normalize(BarycentricInterp(tri.m_vertices[0].m_tangentAndSign.xyz, tri.m_vertices[1].m_tangentAndSign.xyz, tri.m_vertices[2].m_tangentAndSign.xyz, w.m_lambda));
-        float3 B = normalize(cross(N, T) * tri.m_vertices[0].m_tangentAndSign.w);
-        float3x3 tangentToWorld = mul(float3x3(T, B, N), (float3x3)localToWorld);
+            float3 N = normalize(BarycentricInterp(tri.m_vertices[0].m_normal, tri.m_vertices[1].m_normal, tri.m_vertices[2].m_normal, w.m_lambda));
+            float3 T = normalize(BarycentricInterp(tri.m_vertices[0].m_tangentAndSign.xyz, tri.m_vertices[1].m_tangentAndSign.xyz, tri.m_vertices[2].m_tangentAndSign.xyz, w.m_lambda));
+            float3 B = normalize(cross(N, T) * tri.m_vertices[0].m_tangentAndSign.w);
+            float3x3 tangentToWorld = mul(float3x3(T, B, N), (float3x3)localToWorld);
 
-        float2 UV = BarycentricInterp(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_lambda);
-        float2 ddxUV = BarycentricDeriv(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_ddx);
-        float2 ddyUV = BarycentricDeriv(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_ddy);
+            float2 UV = BarycentricInterp(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_lambda);
+            float2 ddxUV = BarycentricDeriv(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_ddx);
+            float2 ddyUV = BarycentricDeriv(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, w.m_ddy);
 
-        // Evaluate Material
-        FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, sceneMaterialBufferIndex);
-        FMaterialProperties matInfo = EvaluateMaterialProperties(material, UV, g_trilinearSampler, ddxUV, ddyUV);
+            // Evaluate Material
+            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, sceneMaterialBufferIndex);
+            FMaterialProperties matInfo = EvaluateMaterialProperties(material, UV, g_trilinearSampler, ddxUV, ddyUV);
 
-        N = normalize(mul(matInfo.normalmap, tangentToWorld));
+            N = normalize(mul(matInfo.normalmap, tangentToWorld));
 
-        gbufferBaseColor[dispatchThreadId.xy] = float4(matInfo.basecolor, 0.f);
-        gbufferNormals[dispatchThreadId.xy] = float4(N, 0.f);
-        gbufferMetallicRoughnessAo[dispatchThreadId.xy] = float4(matInfo.metallic, matInfo.roughness, matInfo.ao, matInfo.aoblend);
+            gbufferBaseColor[dispatchThreadId.xy] = float4(matInfo.basecolor, 0.f);
+            gbufferNormals[dispatchThreadId.xy] = float4(N, 0.f);
+            gbufferMetallicRoughnessAo[dispatchThreadId.xy] = float4(matInfo.metallic, matInfo.roughness, matInfo.ao, matInfo.aoblend);
+        }
+        else
+        {
+            gbufferBaseColor[dispatchThreadId.xy] = 0;
+            gbufferNormals[dispatchThreadId.xy] = 0;
+            gbufferMetallicRoughnessAo[dispatchThreadId.xy] = 0;
+        }
     }
 }

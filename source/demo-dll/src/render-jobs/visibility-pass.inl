@@ -100,7 +100,11 @@ namespace RenderJob
 			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthStencilTarget->m_renderTextureIndices[0]);
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
 
-			float clearColor[] = { 0.f, 0.f, 0.f, 0.f };
+			// Clear to max object ID (see encoding.hlsli). G-Buffer pass skips decoding if it encouters this value.
+			// Float clear values are converted to integers if RT format is int/uint. 
+			// See https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#ClearView
+			uint32_t clearValue = 0xFFFE0000;
+			float clearColor[] = { clearValue, clearValue, clearValue, clearValue };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
