@@ -125,8 +125,8 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	// Normals
 	else if (g_viewmode == 10)
 	{
-		Texture2D gbufferNormalsTex = ResourceDescriptorHeap[g_gbuffer1TextureIndex];
-		float3 N = gbufferNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)).xyz;
+		Texture2D<float2> gbufferNormalsTex = ResourceDescriptorHeap[g_gbuffer1TextureIndex];
+		float3 N = OctDecode(gbufferNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)));
 		N = N * 0.5f + 0.5.xxx;
 		return float4(N, 1.f);
 	}

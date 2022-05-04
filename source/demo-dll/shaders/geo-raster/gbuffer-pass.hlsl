@@ -166,7 +166,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         Texture2D<uint> visBufferTex = ResourceDescriptorHeap[visBufferSrvIndex];
         RWTexture2D<float4> gbufferBaseColor = ResourceDescriptorHeap[gbuffer0UavIndex];
-        RWTexture2D<float4> gbufferNormals = ResourceDescriptorHeap[gbuffer1UavIndex];
+        RWTexture2D<float2> gbufferNormals = ResourceDescriptorHeap[gbuffer1UavIndex];
         RWTexture2D<float4> gbufferMetallicRoughnessAo = ResourceDescriptorHeap[gbuffer2UavIndex];
 
         int visBufferValue = visBufferTex[dispatchThreadId.xy];
@@ -220,7 +220,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             N = normalize(mul(matInfo.normalmap, tangentToWorld));
 
             gbufferBaseColor[dispatchThreadId.xy] = float4(matInfo.basecolor, 0.f);
-            gbufferNormals[dispatchThreadId.xy] = float4(N, 0.f);
+            gbufferNormals[dispatchThreadId.xy] = OctEncode(N);
             gbufferMetallicRoughnessAo[dispatchThreadId.xy] = float4(matInfo.metallic, matInfo.roughness, matInfo.ao, matInfo.aoblend);
         }
         else

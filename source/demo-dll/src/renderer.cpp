@@ -199,7 +199,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, true, true);
 	std::unique_ptr<FRenderTexture> visBuffer = RenderBackend12::CreateRenderTexture(L"vis_buffer_raster", visBufferFormat, resX, resY, 1, 1, 1);
 	std::unique_ptr<FBindlessUav> gbuffer_basecolor = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_basecolor", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> gbuffer_normals = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_normals", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1);
+	std::unique_ptr<FBindlessUav> gbuffer_normals = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_normals", DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> gbuffer_metallicRoughnessAo = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_metallic_roughness_ao", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 	std::unique_ptr<FBindlessUav> meshHighlightIndirectArgs = RenderBackend12::CreateBindlessUavBuffer(L"mesh_highlight_indirect_args", sizeof(FDrawWithRootConstants));
 
