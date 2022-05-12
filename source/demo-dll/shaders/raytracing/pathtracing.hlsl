@@ -168,7 +168,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     // Material 
     FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, globalMaterialBufferIndex);
-    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv, g_trilinearSampler, 0, 0);
+    FMaterialProperties matInfo = EvaluateMaterialProperties(material, uv, g_trilinearSampler);
 
 #if VIEWMODE == 1 // Lighting Only
     matInfo.basecolor = 0.5.xxx;

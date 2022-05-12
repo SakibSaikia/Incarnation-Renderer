@@ -105,7 +105,7 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 float4 ps_main(vs_to_ps input) : SV_Target
 {
 	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
-	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisotropicSampler, 0, 0);
+	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisotropicSampler);
 
 #if VIWEMODE == 1 // Lighting Only
 	p.basecolor = 0.5.xxx;

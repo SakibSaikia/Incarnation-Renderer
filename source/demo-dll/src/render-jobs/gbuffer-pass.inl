@@ -53,7 +53,7 @@ namespace RenderJob
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"geo-raster/gbuffer-pass.hlsl",
 				L"cs_main",
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 CUSTOM_UV_DERIVATIVES=1",
+				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16",
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
