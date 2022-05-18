@@ -82,22 +82,22 @@ struct FScene
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::vector<std::unique_ptr<FShaderResource>> m_meshBuffers;
-	std::unique_ptr<FShaderResource> m_packedMeshBufferViews;
-	std::unique_ptr<FShaderResource> m_packedMeshAccessors;
-	std::unique_ptr<FShaderResource> m_packedPrimitives;
-	std::unique_ptr<FShaderResource> m_packedPrimitiveCounts;
+	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
+	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
+	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
 	std::unordered_map<std::string, std::unique_ptr<FShaderResource>> m_blasList;
 	std::unique_ptr<FShaderResource> m_tlas;
-	std::unique_ptr<FShaderResource> m_packedMaterials;
+	std::unique_ptr<FShaderBuffer> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Lights
 	std::vector<FLight> m_lights;
-	std::unique_ptr<FShaderResource> m_packedLightProperties;
-	std::unique_ptr<FShaderResource> m_packedLightIndices;
-	std::unique_ptr<FShaderResource> m_packedLightTransforms;
+	std::unique_ptr<FShaderBuffer> m_packedLightProperties;
+	std::unique_ptr<FShaderBuffer> m_packedLightIndices;
+	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;
 	FLightProbe m_environmentSky;
 
 	// Transform

@@ -53,6 +53,12 @@ enum class ResourceType
 	Count
 };
 
+enum class ResourceStorageMode
+{
+	Committed,
+	Pooled
+};
+
 enum class DescriptorType
 {
 	Buffer,
@@ -396,7 +402,10 @@ namespace RenderBackend12
 		const std::wstring& name,
 		const BufferType type,
 		const ResourceAccessMode accessMode,
-		const size_t size);
+		const ResourceStorageMode storageMode,
+		const size_t size,
+		const uint8_t* pData = nullptr,
+		FResourceUploadContext* uploadContext = nullptr);
 
 	uint32_t CreateSampler(
 		const D3D12_FILTER filter,

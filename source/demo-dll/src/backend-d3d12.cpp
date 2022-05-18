@@ -2697,7 +2697,10 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const std::wstring& name,
 	const BufferType type,
 	const ResourceAccessMode accessMode,
-	const size_t size)
+	const ResourceStorageMode storageMode,
+	const size_t size,
+	const uint8_t* pData,
+	FResourceUploadContext* uploadContext)
 {
 	// Resource Flags & State
 	D3D12_RESOURCE_FLAGS resourceFlags = {};
@@ -2715,6 +2718,11 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 			resourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		}
 	}
+	else if (accessMode == ResourceAccessMode::GpuReadOnly)
+	{
+		resourceFlags = D3D12_RESOURCE_FLAG_NONE;
+		resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+	}
 
 	// Resource Description
 	D3D12_RESOURCE_DESC desc = {};
@@ -2730,7 +2738,38 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	desc.Flags = resourceFlags;
 
-	FResource* resource = s_sharedResourcePool.GetOrCreate(name, desc, resourceState, nullptr);
+	// Create Resource
+	FResource* resource = {};
+	if (storageMode == ResourceStorageMode::Pooled)
+	{
+		resource = s_sharedResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState, nullptr);
+	}
+	else if (storageMode == ResourceStorageMode::Committed)
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		resource = new FResource;
+		AssertIfFailed(resource->InitCommittedResource(name, heapProps, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
+	}
+
+	// Upload buffer data if specified
+	if (pData)
+	{
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
+		srcData[0].pData = pData;
+		srcData[0].RowPitch = size;
+		srcData[0].SlicePitch = size;
+		uploadContext->UpdateSubresources(
+			resource,
+			srcData,
+			[resource, resourceState](FCommandList* cmdList)
+			{
+				resource->Transition(cmdList, resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+			});
+	}
 
 	// UAV Descriptor
 	uint32_t uavIndex = ~0u;

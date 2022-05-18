@@ -955,11 +955,12 @@ void FScene::LoadMeshBuffers(const tinygltf::Model& model)
 		std::wstringstream s;
 		s << L"scene_mesh_buffer_" << bufferIndex;
 
-		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBindlessBuffer(
+		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBuffer(
 			s.str(),
-			ResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceStorageMode::Committed,
 			model.buffers[bufferIndex].data.size(),
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			model.buffers[bufferIndex].data.data(),
 			&uploader);
 	}
@@ -984,11 +985,12 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 	const size_t bufferSize = views.size() * sizeof(FMeshBufferView);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMeshBufferViews = RenderBackend12::CreateBindlessBuffer(
+	m_packedMeshBufferViews = RenderBackend12::CreateBuffer(
 		L"scene_mesh_buffer_views",
-		ResourceType::Buffer,
+		BufferType::Raw,
+		ResourceAccessMode::GpuReadOnly,
+		ResourceStorageMode::Committed,
 		bufferSize,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*) views.data(),
 		&uploader);
 
@@ -1012,11 +1014,12 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 	const size_t bufferSize = accessors.size() * sizeof(FMeshAccessor);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMeshAccessors = RenderBackend12::CreateBindlessBuffer(
+	m_packedMeshAccessors = RenderBackend12::CreateBuffer(
 		L"scene_mesh_accessors",
-		ResourceType::Buffer,
+		BufferType::Raw,
+		ResourceAccessMode::GpuReadOnly,
+		ResourceStorageMode::Committed,
 		bufferSize,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*) accessors.data(),
 		&uploader);
 
@@ -1055,11 +1058,12 @@ void FScene::CreateGpuPrimitiveBuffers()
 		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedPrimitives = RenderBackend12::CreateBindlessBuffer(
+		m_packedPrimitives = RenderBackend12::CreateBuffer(
 			L"scene_primitives",
-			ResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceStorageMode::Committed,
 			bufferSize,
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)primitives.data(),
 			&uploader);
 
@@ -1077,11 +1081,12 @@ void FScene::CreateGpuPrimitiveBuffers()
 		const size_t bufferSize = primitiveCounts.size() * sizeof(uint32_t);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedPrimitiveCounts = RenderBackend12::CreateBindlessBuffer(
+		m_packedPrimitiveCounts = RenderBackend12::CreateBuffer(
 			L"scene_primitive_counts",
-			ResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceStorageMode::Committed,
 			bufferSize,
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)primitiveCounts.data(),
 			&uploader);
 
@@ -1099,19 +1104,21 @@ void FScene::CreateGpuLightBuffers()
 		const size_t transformsBufferSize = m_sceneLights.m_transformList.size() * sizeof(Matrix);
 		FResourceUploadContext uploader{ indexBufferSize + transformsBufferSize };
 
-		m_packedLightIndices = RenderBackend12::CreateBindlessBuffer(
+		m_packedLightIndices = RenderBackend12::CreateBuffer(
 			L"scene_light_indices",
-			ResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceStorageMode::Committed,
 			indexBufferSize,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
 			&uploader);
 
-		m_packedLightTransforms = RenderBackend12::CreateBindlessBuffer(
+		m_packedLightTransforms = RenderBackend12::CreateBuffer(
 			L"scene_light_transforms",
-			ResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceStorageMode::Committed,
 			transformsBufferSize,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_sceneLights.m_transformList.data(),
 			&uploader);
 
@@ -1204,6 +1211,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 					L"blas_scratch",
 					BufferType::AccelerationStructure,
 					ResourceAccessMode::GpuWriteOnly,
+					ResourceStorageMode::Pooled,
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes));
 
 				std::wstringstream s;
@@ -1275,6 +1283,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 			L"tlas_scratch",
 			BufferType::AccelerationStructure,
 			ResourceAccessMode::GpuWriteOnly,
+			ResourceStorageMode::Pooled,
 			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes));
 
 		m_tlas = RenderBackend12::CreateBindlessBuffer(
@@ -1311,11 +1320,12 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 	const size_t bufferSize = m_materialList.size() * sizeof(FMaterial);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMaterials = RenderBackend12::CreateBindlessBuffer(
+	m_packedMaterials = RenderBackend12::CreateBuffer(
 		L"scene_materials",
-		ResourceType::Buffer,
+		BufferType::Raw,
+		ResourceAccessMode::GpuReadOnly,
+		ResourceStorageMode::Committed,
 		bufferSize,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*)m_materialList.data(),
 		&uploader);
 
@@ -1869,11 +1879,12 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		const size_t bufferSize = m_lights.size() * sizeof(FLight);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedLightProperties = RenderBackend12::CreateBindlessBuffer(
+		m_packedLightProperties = RenderBackend12::CreateBuffer(
 			L"scene_light_properties",
-			ResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceStorageMode::Committed,
 			bufferSize,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_lights.data(),
 			&uploader);
 
