@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct BasePassDesc
 	{
-		FRenderTexture* colorTarget;
-		FRenderTexture* depthStencilTarget;
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
 		DXGI_FORMAT format;
 		uint32_t resX;
 		uint32_t resY;

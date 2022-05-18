@@ -1,16 +1,14 @@
 namespace RenderJob
 {
-	template<typename SourceType>
 	struct TonemapDesc
 	{
-		SourceType* source;
-		FRenderTexture* target;
+		FShaderSurface* source;
+		FShaderSurface* target;
 		FConfig renderConfig;
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	template<typename SourceType>
-	concurrency::task<void> Tonemap(RenderJob::Sync& jobSync, const TonemapDesc<SourceType>& passDesc)
+	concurrency::task<void> Tonemap(RenderJob::Sync& jobSync, const TonemapDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t sourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();

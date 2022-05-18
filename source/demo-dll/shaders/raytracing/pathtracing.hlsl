@@ -1,6 +1,7 @@
 #include "raytracing/common.hlsli"
 #include "lighting/common.hlsli"
 #include "material/common.hlsli"
+#include "common/mesh-material.hlsli"
 
 #define MAX_RECURSION_DEPTH 4
 

@@ -2,7 +2,7 @@ namespace RenderJob
 {
 	struct UIPassDesc
 	{
-		FRenderTexture* colorTarget;
+		FShaderSurface* colorTarget;
 		FConfig renderConfig;
 	};
 

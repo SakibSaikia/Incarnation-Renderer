@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct VisibilityPassDesc
 	{
-		FRenderTexture* visBufferTarget;
-		FRenderTexture* depthStencilTarget;
+		FShaderSurface* visBufferTarget;
+		FShaderSurface* depthStencilTarget;
 		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;

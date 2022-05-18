@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct PathTracingDesc
 	{
-		FBindlessUav* targetBuffer;
-		FBindlessUav* historyBuffer;
+		FShaderSurface* targetBuffer;
+		FShaderSurface* historyBuffer;
 		uint32_t currentSampleIndex;
 		uint32_t resX;
 		uint32_t resY;

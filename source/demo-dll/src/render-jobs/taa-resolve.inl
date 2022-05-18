@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct TAAResolveDesc
 	{
-		FRenderTexture* source;
-		FBindlessUav* target;
+		FShaderSurface* source;
+		FShaderSurface* target;
 		uint32_t resX;
 		uint32_t resY;
 		uint32_t historyIndex;

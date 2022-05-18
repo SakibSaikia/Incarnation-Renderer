@@ -39,7 +39,7 @@ struct IDxcBlob;
 struct FResource;
 struct FConfig;
 
-enum class BindlessResourceType
+enum class ResourceType
 {
 	Buffer,
 	Texture2D,
@@ -53,7 +53,7 @@ enum class BindlessResourceType
 	Count
 };
 
-enum class BindlessDescriptorType
+enum class DescriptorType
 {
 	Buffer,
 	Texture2D,
@@ -65,7 +65,7 @@ enum class BindlessDescriptorType
 	AccelerationStructure
 };
 
-enum class BindlessDescriptorRange : uint32_t
+enum class DescriptorRange : uint32_t
 {
 	BufferBegin,
 	BufferEnd = BufferBegin + 4999,
@@ -84,6 +84,27 @@ enum class BindlessDescriptorRange : uint32_t
 	AccelerationStructureBegin,
 	AccelerationStructureEnd = AccelerationStructureBegin + 4999,
 	TotalCount
+};
+
+enum SurfaceType : uint32_t
+{
+	RenderTarget	= (1 << 0),
+	DepthStencil	= (1 << 1),
+	SwapChain		= (1 << 2),
+	UAV				= (1 << 3)
+};
+
+enum class BufferType
+{
+	Raw,
+	AccelerationStructure
+};
+
+enum class ResourceAccessMode
+{
+	GpuReadOnly,
+	GpuReadWrite,
+	GpuWriteOnly,	// Used for acceleration structure scratch buffers
 };
 
 struct FFenceMarker
@@ -169,13 +190,13 @@ struct FResource
 	size_t GetSizeBytes() const;
 };
 
-struct FBindlessShaderResource
+struct FShaderResource
 {
 	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
 
-	~FBindlessShaderResource();
-	FBindlessShaderResource& operator==(FBindlessShaderResource&& other)
+	~FShaderResource();
+	FShaderResource& operator==(FShaderResource&& other)
 	{
 		// BindlessShaderResources are moved during async level load. 
 		// A custom move assingment is used here because we want to avoid 
@@ -187,14 +208,24 @@ struct FBindlessShaderResource
 	}
 };
 
-struct FBindlessUav
+struct FShaderSurface
 {
+	uint32_t m_type;
 	FResource* m_resource;
-	std::vector<uint32_t> m_uavIndices;					// one for each mip level
-	std::vector<uint32_t> m_nonShaderVisibleUavIndices; // one for each mip level
+	std::vector<uint32_t> m_renderTextureIndices;		// RTV or DSV indices. One for each mip level
+	std::vector<uint32_t> m_uavIndices;					// One for each mip level
+	std::vector<uint32_t> m_nonShaderVisibleUavIndices;	// One for each mip level
 	uint32_t m_srvIndex;
+	~FShaderSurface();
+};
 
-	~FBindlessUav();
+struct FShaderBuffer
+{
+	ResourceAccessMode m_accessMode;
+	FResource* m_resource;
+	uint32_t m_uavIndex;
+	uint32_t m_srvIndex;
+	~FShaderBuffer();
 };
 
 struct FTransientBuffer
@@ -203,17 +234,6 @@ struct FTransientBuffer
 	FFenceMarker m_fenceMarker;
 
 	~FTransientBuffer();
-};
-
-struct FRenderTexture
-{
-	FResource* m_resource;
-	std::vector<uint32_t> m_renderTextureIndices; // one for each mip level
-	uint32_t m_srvIndex;
-	bool m_isDepthStencil;
-	bool m_isSwapChainBuffer;
-
-	~FRenderTexture();
 };
 
 class FResourceUploadContext
@@ -312,7 +332,7 @@ namespace RenderBackend12
 	D3DStateObject_t* FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc);
 
 	// Swap chain and back buffers
-	FRenderTexture* GetBackBuffer();
+	FShaderSurface* GetBackBuffer();
 	void PresentDisplay();
 
 	// Shaders
@@ -339,28 +359,22 @@ namespace RenderBackend12
 		const FCommandList* dependentCL,
 		std::function<void(uint8_t*)> uploadFunc = nullptr);
 
-	std::unique_ptr<FRenderTexture> CreateRenderTexture(
+	std::unique_ptr<FShaderSurface> CreateSurface(
 		const std::wstring& name,
+		const uint32_t surfaceType,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
-		const size_t mipLevels,
-		const size_t depth,
-		const size_t sampleCount,
-		const bool bCreateSRV = true);
+		const size_t mipLevels = 1,
+		const size_t depth = 1,
+		const size_t arraySize = 1,
+		const size_t sampleCount = 1,
+		const bool bCreateSRV = true,
+		const bool bCreateNonShaderVisibleDescriptors = false);
 
-	std::unique_ptr<FRenderTexture> CreateDepthStencilTexture(
-		const std::wstring& name,
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t mipLevels,
-		const size_t sampleCount,
-		const bool bCreateSRV = true);
-
-	std::unique_ptr<FBindlessShaderResource> CreateBindlessTexture(
+	std::unique_ptr<FShaderResource> CreateBindlessTexture(
 		const std::wstring& name, 
-		const BindlessResourceType type,
+		const ResourceType type,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -370,30 +384,21 @@ namespace RenderBackend12
 		const DirectX::Image* images = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FBindlessShaderResource> CreateBindlessBuffer(
+	std::unique_ptr<FShaderResource> CreateBindlessBuffer(
 		const std::wstring& name,
-		const BindlessResourceType type,
+		const ResourceType type,
 		const size_t size,
 		D3D12_RESOURCE_STATES resourceState,
 		const uint8_t* pData = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FBindlessUav> CreateBindlessUavTexture(
+	std::unique_ptr<FShaderBuffer> CreateBuffer(
 		const std::wstring& name,
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t mipLevels,
-		const size_t arraySize,
-		const bool bCreateSRV = true,
-		const bool bRequiresClear = false);
+		const BufferType type,
+		const ResourceAccessMode accessMode,
+		const size_t size);
 
-	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
-		const std::wstring& name,
-		const size_t size,
-		const bool bCreateSRV = true);
-
-	uint32_t CreateBindlessSampler(
+	uint32_t CreateSampler(
 		const D3D12_FILTER filter,
 		const D3D12_TEXTURE_ADDRESS_MODE addressU,
 		const D3D12_TEXTURE_ADDRESS_MODE addressV, 

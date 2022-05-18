@@ -2,9 +2,9 @@ namespace RenderJob
 {
 	struct HighlightPassDesc
 	{
-		FRenderTexture* colorTarget;
-		FRenderTexture* depthStencilTarget;
-		FBindlessUav* indirectArgsBuffer;
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
+		FShaderBuffer* indirectArgsBuffer;
 		uint32_t resX, resY;
 		const FScene* scene;
 		const FView* view;

@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct MSAAResolveDesc
 	{
-		FRenderTexture* colorSource;
-		FRenderTexture* colorTarget;
+		FShaderSurface* colorSource;
+		FShaderSurface* colorTarget;
 		uint32_t resX;
 		uint32_t resY;
 		DXGI_FORMAT format;

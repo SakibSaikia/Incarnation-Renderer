@@ -10,9 +10,9 @@
 
 namespace Demo
 {
-	std::unique_ptr<FBindlessShaderResource> s_envBRDF;
-	std::unique_ptr<FBindlessUav> s_taaAccumulationBuffer;
-	std::unique_ptr<FBindlessUav> s_pathtraceHistoryBuffer;
+	std::unique_ptr<FShaderResource> s_envBRDF;
+	std::unique_ptr<FShaderSurface> s_taaAccumulationBuffer;
+	std::unique_ptr<FShaderSurface> s_pathtraceHistoryBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
 	Matrix s_prevViewProjectionTransform;
 	uint32_t s_pathtraceCurrentSampleIndex = 1;
@@ -51,9 +51,9 @@ namespace
 		return result;
 	}
 
-	std::unique_ptr<FBindlessShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
+	std::unique_ptr<FShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
 	{
-		auto brdfUav = RenderBackend12::CreateBindlessUavTexture(L"env_brdf_uav", DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1);
+		auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);
 
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -108,7 +108,7 @@ namespace
 
 		// Copy from UAV to destination texture
 		brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto brdfTex = RenderBackend12::CreateBindlessTexture(L"env_brdf_tex", BindlessResourceType::Texture2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto brdfTex = RenderBackend12::CreateBindlessTexture(L"env_brdf_tex", ResourceType::Texture2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
 		brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -117,7 +117,7 @@ namespace
 		return std::move(brdfTex);
 	}
 
-	std::unique_ptr<FBindlessShaderResource> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
+	std::unique_ptr<FShaderResource> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
 	{
 		const uint32_t numSamples = width * height * depth;
 		std::vector<uint8_t> noiseSamples(numSamples);
@@ -142,7 +142,7 @@ namespace
 		}
 
 		FResourceUploadContext uploader{ numSamples };
-		auto noiseTexArray = RenderBackend12::CreateBindlessTexture(L"white_noise_array", BindlessResourceType::Texture2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
+		auto noiseTexArray = RenderBackend12::CreateBindlessTexture(L"white_noise_array", ResourceType::Texture2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -156,8 +156,8 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 
 	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
 
-	s_pathtraceHistoryBuffer = RenderBackend12::CreateBindlessUavTexture(L"hdr_history_buffer_rt", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
-	s_taaAccumulationBuffer = RenderBackend12::CreateBindlessUavTexture(L"taa_accumulation_buffer_raster", DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
+	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
+	s_taaAccumulationBuffer = RenderBackend12::CreateSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -194,14 +194,14 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-	std::unique_ptr<FRenderTexture> hdrRasterSceneColor = RenderBackend12::CreateRenderTexture(L"hdr_scene_color_raster", hdrFormat, resX, resY, 1, 1, 1);
-	std::unique_ptr<FRenderTexture> depthBuffer = RenderBackend12::CreateDepthStencilTexture(L"depth_buffer_raster", DXGI_FORMAT_D32_FLOAT, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> hdrRaytraceSceneColor = RenderBackend12::CreateBindlessUavTexture(L"hdr_scene_color_rt", DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, true, true);
-	std::unique_ptr<FRenderTexture> visBuffer = RenderBackend12::CreateRenderTexture(L"vis_buffer_raster", visBufferFormat, resX, resY, 1, 1, 1);
-	std::unique_ptr<FBindlessUav> gbuffer_basecolor = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_basecolor", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> gbuffer_normals = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_normals", DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> gbuffer_metallicRoughnessAo = RenderBackend12::CreateBindlessUavTexture(L"gbuffer_metallic_roughness_ao", DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FBindlessUav> meshHighlightIndirectArgs = RenderBackend12::CreateBindlessUavBuffer(L"mesh_highlight_indirect_args", sizeof(FDrawWithRootConstants));
+	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget, hdrFormat, resX, resY);
+	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT, resX, resY);
+	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true);
+	std::unique_ptr<FShaderSurface> visBuffer = RenderBackend12::CreateSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY);
+	std::unique_ptr<FShaderSurface> gbuffer_basecolor = RenderBackend12::CreateSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
+	std::unique_ptr<FShaderSurface> gbuffer_normals = RenderBackend12::CreateSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1);
+	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo = RenderBackend12::CreateSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
+	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs = RenderBackend12::CreateBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, sizeof(FDrawWithRootConstants));
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
@@ -225,7 +225,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			s_pathtraceCurrentSampleIndex++;
 		}
 
-		RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+		RenderJob::TonemapDesc tonemapDesc = {};
 		tonemapDesc.source = Demo::s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.renderConfig = c;
@@ -259,8 +259,10 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		gbufferDesc.resY = resY;
 		gbufferDesc.scene = renderState.m_scene;
 		gbufferDesc.view = &renderState.m_view;
+		gbufferDesc.jitter = pixelJitter;
 		gbufferDesc.renderConfig = c;
-		renderJobs.push_back(RenderJob::GBufferPass(jobSync, gbufferDesc));
+		renderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
+		//renderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
@@ -329,7 +331,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
 				// Tonemap
-				RenderJob::TonemapDesc<FBindlessUav> tonemapDesc = {};
+				RenderJob::TonemapDesc tonemapDesc = {};
 				tonemapDesc.source = Demo::s_taaAccumulationBuffer.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
@@ -341,7 +343,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			else
 			{
 				// Tonemap
-				RenderJob::TonemapDesc<FRenderTexture> tonemapDesc = {};
+				RenderJob::TonemapDesc tonemapDesc = {};
 				tonemapDesc.source = hdrRasterSceneColor.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;

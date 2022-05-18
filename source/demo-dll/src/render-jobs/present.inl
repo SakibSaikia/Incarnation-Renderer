@@ -2,7 +2,7 @@ namespace RenderJob
 {
 	struct PresentDesc
 	{
-		FRenderTexture* backBuffer;
+		FShaderSurface* backBuffer;
 	};
 
 	concurrency::task<void> Present(RenderJob::Sync& jobSync, const PresentDesc& passDesc)

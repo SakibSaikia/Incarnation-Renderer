@@ -2,10 +2,10 @@ namespace RenderJob
 {
 	struct DebugVizDesc
 	{
-		FRenderTexture* visBuffer;
-		FBindlessUav* gbuffers[3];
-		FRenderTexture* target;
-		FBindlessUav* indirectArgsBuffer;
+		FShaderSurface* visBuffer;
+		FShaderSurface* gbuffers[3];
+		FShaderSurface* target;
+		FShaderBuffer* indirectArgsBuffer;
 		FConfig renderConfig;
 		uint32_t resX, resY;
 		uint32_t mouseX, mouseY;
@@ -141,7 +141,7 @@ namespace RenderJob
 					(int)passDesc.gbuffers[0]->m_srvIndex,
 					(int)passDesc.gbuffers[1]->m_srvIndex,
 					(int)passDesc.gbuffers[2]->m_srvIndex,
-					(int)passDesc.indirectArgsBuffer->m_uavIndices[0],
+					(int)passDesc.indirectArgsBuffer->m_uavIndex,
 					(int)passDesc.scene->m_packedMeshAccessors->m_srvIndex,
 					(int)passDesc.scene->m_packedMeshBufferViews->m_srvIndex,
 					(int)passDesc.scene->m_packedPrimitives->m_srvIndex,
