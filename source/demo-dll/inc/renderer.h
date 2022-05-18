@@ -87,8 +87,8 @@ struct FScene
 	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
-	std::unordered_map<std::string, std::unique_ptr<FShaderResource>> m_blasList;
-	std::unique_ptr<FShaderResource> m_tlas;
+	std::unordered_map<std::string, std::unique_ptr<FShaderBuffer>> m_blasList;
+	std::unique_ptr<FShaderBuffer> m_tlas;
 	std::unique_ptr<FShaderBuffer> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space

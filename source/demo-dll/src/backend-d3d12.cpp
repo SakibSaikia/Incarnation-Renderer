@@ -2610,89 +2610,6 @@ std::unique_ptr<FShaderResource> RenderBackend12::CreateBindlessTexture(
 	return std::move(newTexture);
 }
 
-std::unique_ptr<FShaderResource> RenderBackend12::CreateBindlessBuffer(
-	const std::wstring& name,
-	const ResourceType type,
-	const size_t size,
-	D3D12_RESOURCE_STATES resourceState,
-	const uint8_t* pData,
-	FResourceUploadContext* uploadContext)
-{
-	auto newBuffer = std::make_unique<FShaderResource>();
-
-	// Create resource
-	{
-		D3D12_HEAP_PROPERTIES heapProps = {};
-		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-		D3D12_RESOURCE_DESC desc = {};
-		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		desc.Alignment = 0;
-		desc.Width = size;
-		desc.Height = 1;
-		desc.DepthOrArraySize = 1;
-		desc.MipLevels = 1;
-		desc.Format = DXGI_FORMAT_UNKNOWN;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-		desc.Flags = (type == ResourceType::AccelerationStructure ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE);
-
-		newBuffer->m_resource = new FResource;
-		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
-	}
-
-	// Upload buffer data
-	if(pData)
-	{
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
-		srcData[0].pData = pData;
-		srcData[0].RowPitch = size;
-		srcData[0].SlicePitch = size;
-		uploadContext->UpdateSubresources(
-			newBuffer->m_resource,
-			srcData,
-			[buffer = newBuffer.get(), resourceState](FCommandList* cmdList)
-			{
-				buffer->m_resource->Transition(cmdList, buffer->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
-			});
-	}
-
-	// Descriptor
-	{
-		newBuffer->m_srvIndex = GetBindlessPool()->FetchIndex(type);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newBuffer->m_srvIndex);
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-
-		switch (type)
-		{
-		case ResourceType::Buffer:
-			srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-			srvDesc.Buffer.FirstElement = 0;
-			srvDesc.Buffer.NumElements = size / 4; // number of R32 elements
-			srvDesc.Buffer.StructureByteStride = 0;
-			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			GetDevice()->CreateShaderResourceView(newBuffer->m_resource->m_d3dResource, &srvDesc, srv);
-			break;
-		case ResourceType::AccelerationStructure:
-			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			srvDesc.RaytracingAccelerationStructure.Location = newBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
-			break;
-		default:
-			DebugAssert(false, "Not Implemented");
-		}
-	}
-
-	return std::move(newBuffer);
-}
-
 std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const std::wstring& name,
 	const BufferType type,
@@ -2709,7 +2626,7 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	{
 		if (type == BufferType::AccelerationStructure)
 		{
-			resourceFlags = D3D12_RESOURCE_FLAG_RAYTRACING_ACCELERATION_STRUCTURE;
+			resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			resourceState = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
 		}
 		else

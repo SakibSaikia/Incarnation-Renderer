@@ -390,14 +390,6 @@ namespace RenderBackend12
 		const DirectX::Image* images = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FShaderResource> CreateBindlessBuffer(
-		const std::wstring& name,
-		const ResourceType type,
-		const size_t size,
-		D3D12_RESOURCE_STATES resourceState,
-		const uint8_t* pData = nullptr,
-		FResourceUploadContext* uploadContext = nullptr);
-
 	std::unique_ptr<FShaderBuffer> CreateBuffer(
 		const std::wstring& name,
 		const BufferType type,

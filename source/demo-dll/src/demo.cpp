@@ -1216,11 +1216,12 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 
 				std::wstringstream s;
 				s << s2ws(meshName) << L"_blas";
-				m_blasList[meshName] = RenderBackend12::CreateBindlessBuffer(
+				m_blasList[meshName] = RenderBackend12::CreateBuffer(
 					s.str(),
-					ResourceType::AccelerationStructure,
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes),
-					D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+					BufferType::AccelerationStructure,
+					ResourceAccessMode::GpuReadWrite,
+					ResourceStorageMode::Committed,
+					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes));
 
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 				buildDesc.Inputs = blasInputsDesc;
@@ -1286,11 +1287,12 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 			ResourceStorageMode::Pooled,
 			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes));
 
-		m_tlas = RenderBackend12::CreateBindlessBuffer(
+		m_tlas = RenderBackend12::CreateBuffer(
 			L"tlas_buffer",
-			ResourceType::AccelerationStructure,
-			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes),
-			D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+			BufferType::AccelerationStructure,
+			ResourceAccessMode::GpuReadWrite,
+			ResourceStorageMode::Committed,
+			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes));
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 		buildDesc.Inputs = tlasInputsDesc;
