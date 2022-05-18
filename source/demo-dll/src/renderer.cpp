@@ -10,7 +10,7 @@
 
 namespace Demo
 {
-	std::unique_ptr<FShaderResource> s_envBRDF;
+	std::unique_ptr<FTexture> s_envBRDF;
 	std::unique_ptr<FShaderSurface> s_taaAccumulationBuffer;
 	std::unique_ptr<FShaderSurface> s_pathtraceHistoryBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
@@ -51,7 +51,7 @@ namespace
 		return result;
 	}
 
-	std::unique_ptr<FShaderResource> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
+	std::unique_ptr<FTexture> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
 	{
 		auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);
 
@@ -108,7 +108,7 @@ namespace
 
 		// Copy from UAV to destination texture
 		brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto brdfTex = RenderBackend12::CreateBindlessTexture(L"env_brdf_tex", ResourceType::Texture2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto brdfTex = RenderBackend12::CreateTexture(L"env_brdf_tex", ResourceType::Texture2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
 		brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -117,7 +117,7 @@ namespace
 		return std::move(brdfTex);
 	}
 
-	std::unique_ptr<FShaderResource> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
+	std::unique_ptr<FTexture> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
 	{
 		const uint32_t numSamples = width * height * depth;
 		std::vector<uint8_t> noiseSamples(numSamples);
@@ -142,7 +142,7 @@ namespace
 		}
 
 		FResourceUploadContext uploader{ numSamples };
-		auto noiseTexArray = RenderBackend12::CreateBindlessTexture(L"white_noise_array", ResourceType::Texture2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
+		auto noiseTexArray = RenderBackend12::CreateTexture(L"white_noise_array", ResourceType::Texture2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });

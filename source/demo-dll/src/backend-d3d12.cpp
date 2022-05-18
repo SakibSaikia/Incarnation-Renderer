@@ -1405,7 +1405,7 @@ private:
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														Resource Definitions
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-FShaderResource::~FShaderResource()
+FTexture::~FTexture()
 {
 	auto waitForFenceTask = concurrency::create_task([this]() mutable
 	{
@@ -2538,7 +2538,7 @@ std::unique_ptr<FShaderSurface> RenderBackend12::CreateSurface(
 	return std::move(surface);
 }
 
-std::unique_ptr<FShaderResource> RenderBackend12::CreateBindlessTexture(
+std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
 	const std::wstring& name,
 	const ResourceType type,
 	const DXGI_FORMAT format,
@@ -2550,7 +2550,7 @@ std::unique_ptr<FShaderResource> RenderBackend12::CreateBindlessTexture(
 	const DirectX::Image* images,
 	FResourceUploadContext* uploadContext)
 {
-	auto newTexture = std::make_unique<FShaderResource>();
+	auto newTexture = std::make_unique<FTexture>();
 
 	// Create resource
 	{

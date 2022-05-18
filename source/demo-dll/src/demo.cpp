@@ -51,7 +51,7 @@ struct FTextureCache
 
 	void Clear();
 
-	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FShaderResource>> m_cachedTextures;
+	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FTexture>> m_cachedTextures;
 };
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -1621,8 +1621,8 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Create source textures
 	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
 	FResourceUploadContext uploader{ uploadSize };
-	auto srcNormalmap = RenderBackend12::CreateBindlessTexture(L"src_normalmap", ResourceType::Texture2D, normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader);
-	auto srcMetallicRoughnessmap = RenderBackend12::CreateBindlessTexture(L"src_metallic_roughness", ResourceType::Texture2D, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader);
+	auto srcNormalmap = RenderBackend12::CreateTexture(L"src_normalmap", ResourceType::Texture2D, normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader);
+	auto srcMetallicRoughnessmap = RenderBackend12::CreateTexture(L"src_metallic_roughness", ResourceType::Texture2D, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader);
 
 	// Create UAVs for prefiltering
 	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);
@@ -2058,7 +2058,7 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 	else
 	{
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, ResourceType::Texture2D, format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateTexture(name, ResourceType::Texture2D, format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext);
 		return m_cachedTextures[name]->m_srvIndex;
 	}
 }
@@ -2070,7 +2070,7 @@ uint32_t FTextureCache::CacheEmptyTexture2D(
 	const int height,
 	const size_t mipCount)
 {
-	m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, ResourceType::Texture2D, format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	m_cachedTextures[name] = RenderBackend12::CreateTexture(name, ResourceType::Texture2D, format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 	return m_cachedTextures[name]->m_srvIndex;
 }
 
@@ -2107,7 +2107,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Create the equirectangular source texture
 		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
-		auto srcHdrTex = RenderBackend12::CreateBindlessTexture(
+		auto srcHdrTex = RenderBackend12::CreateTexture(
 			name, ResourceType::Texture2D, metadata.format, metadata.width, metadata.height, mipchain.GetImageCount(), 1,
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, mipchain.GetImages(), &uploadContext);
 
@@ -2247,7 +2247,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Copy from UAV to destination cubemap texture
 		texFilteredEnvmapUav->m_resource->Transition(cmdList, texFilteredEnvmapUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto filteredEnvmapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, ResourceType::TextureCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto filteredEnvmapTex = RenderBackend12::CreateTexture(envmapTextureName, ResourceType::TextureCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
 		filteredEnvmapTex->m_resource->Transition(cmdList, filteredEnvmapTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
@@ -2434,7 +2434,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Copy from UAV to destination texture
 		shTexureUavAccum->m_resource->Transition(cmdList, shTexureUavAccum->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto shTex = RenderBackend12::CreateBindlessTexture(shTextureName, ResourceType::Texture2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto shTex = RenderBackend12::CreateTexture(shTextureName, ResourceType::Texture2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
 		shTex->m_resource->Transition(cmdList, shTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);

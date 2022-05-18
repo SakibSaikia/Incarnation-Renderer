@@ -196,13 +196,13 @@ struct FResource
 	size_t GetSizeBytes() const;
 };
 
-struct FShaderResource
+struct FTexture
 {
 	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
 
-	~FShaderResource();
-	FShaderResource& operator==(FShaderResource&& other)
+	~FTexture();
+	FTexture& operator==(FTexture&& other)
 	{
 		// BindlessShaderResources are moved during async level load. 
 		// A custom move assingment is used here because we want to avoid 
@@ -393,7 +393,7 @@ namespace RenderBackend12
 		const bool bCreateSRV = true,
 		const bool bCreateNonShaderVisibleDescriptors = false);
 
-	std::unique_ptr<FShaderResource> CreateBindlessTexture(
+	std::unique_ptr<FTexture> CreateTexture(
 		const std::wstring& name, 
 		const ResourceType type,
 		const DXGI_FORMAT format,
