@@ -1449,7 +1449,39 @@ FShaderSurface::~FShaderSurface()
 
 FShaderBuffer::~FShaderBuffer()
 {
-	GetSharedResourcePool()->Retire(this);
+	if (m_storageMode == ResourceStorageMode::Pooled)
+	{
+		GetSharedResourcePool()->Retire(this);
+	}
+	else
+	{
+		auto waitForFenceTask = concurrency::create_task([this]() mutable
+		{
+			winrt::com_ptr<D3DFence_t> fence;
+			AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
+
+			GetGraphicsQueue()->Signal(fence.get(), 1);
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				fence->SetEventOnCompletion(1, event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		});
+
+		// Make a copy of the resource contents as it will be cleaned up by the destructor
+		auto freeResource = [resource = m_resource, srvIndex = m_srvIndex]() mutable
+		{
+			if (srvIndex != ~0u)
+			{
+				GetBindlessPool()->ReturnIndex(srvIndex);
+			}
+
+			delete resource;
+		};
+
+		waitForFenceTask.then(freeResource);
+	}
 }
 
 struct FHashedBlob
@@ -2743,6 +2775,7 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 
 	auto buffer = std::make_unique<FShaderBuffer>();
 	buffer->m_accessMode = accessMode;
+	buffer->m_storageMode = storageMode;
 	buffer->m_resource = resource;
 	buffer->m_uavIndex = uavIndex;
 	buffer->m_srvIndex = srvIndex;

@@ -228,10 +228,25 @@ struct FShaderSurface
 struct FShaderBuffer
 {
 	ResourceAccessMode m_accessMode;
+	ResourceStorageMode m_storageMode;
 	FResource* m_resource;
 	uint32_t m_uavIndex;
 	uint32_t m_srvIndex;
 	~FShaderBuffer();
+	FShaderBuffer& operator==(FShaderBuffer&& other)
+	{
+		// FShaderBuffer(s) are moved during async level load. 
+		// A custom move assingment is used here because we want to avoid 
+		// calling the desctructor which can release the resource.
+		m_accessMode = other.m_accessMode;
+		m_storageMode = other.m_storageMode;
+		m_resource = other.m_resource;
+		m_srvIndex = other.m_srvIndex;
+		m_uavIndex = other.m_uavIndex;
+		other.m_resource = nullptr;
+		other.m_srvIndex = ~0u;
+		other.m_uavIndex = ~0u;
+	}
 };
 
 struct FTransientBuffer
