@@ -1979,6 +1979,17 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 	}
 }
 
+FRootSignature::~FRootSignature()
+{
+	concurrency::create_task([fence = m_fenceMarker]()
+	{
+		fence.BlockingWait();
+	}).then([rootsig = m_rootsig]()
+	{
+		rootsig->Release();
+	});
+}
+
 void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 {
 	bool bDirty = false;;
@@ -2040,18 +2051,24 @@ void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 	}
 }
 
-winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(const FRootsigDesc& rootsig)
+std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& desc)
 {
-	IDxcBlob* rsBlob = CacheRootsignature(rootsig);
-	winrt::com_ptr<D3DRootSignature_t> rs;
-	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
+	auto rs = std::make_unique<FRootSignature>();
+	rs->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
+
+	IDxcBlob* rsBlob = CacheRootsignature(desc);
+	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(&rs->m_rootsig));
+	rs->m_rootsig->SetName(name.c_str());
 	return rs;
 }
 
-winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(IDxcBlob* blob)
+std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, IDxcBlob* blob)
 {
-	winrt::com_ptr<D3DRootSignature_t> rs;
-	s_d3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
+	auto rs = std::make_unique<FRootSignature>();
+	rs->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
+
+	s_d3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rs->m_rootsig));
+	rs->m_rootsig->SetName(name.c_str());
 	return rs;
 }
 

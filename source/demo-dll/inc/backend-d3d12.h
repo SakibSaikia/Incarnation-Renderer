@@ -171,6 +171,13 @@ struct FRootsigDesc
 	std::wstring m_profile;
 };
 
+struct FRootSignature
+{
+	D3DRootSignature_t* m_rootsig;
+	FFenceMarker m_fenceMarker;
+	~FRootSignature();
+};
+
 struct FResource
 {
 	D3DResource_t* m_d3dResource;
@@ -260,7 +267,6 @@ struct FUploadBuffer
 {
 	FResource* m_resource;
 	FFenceMarker m_fenceMarker;
-
 	~FUploadBuffer();
 };
 
@@ -351,8 +357,8 @@ namespace RenderBackend12
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures
-	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(const FRootsigDesc& rootsig);
-	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(IDxcBlob* blob);
+	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& rootsig);
+	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, IDxcBlob* blob);
 
 	// Pipeline States
 	D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);

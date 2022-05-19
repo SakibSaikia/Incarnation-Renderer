@@ -68,12 +68,12 @@ namespace
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({
-				L"image-based-lighting/split-sum-approx/brdf-integration.hlsl",
-				L"rootsig",
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"brdf_integration_rootsig",
+				cmdList,
+				FRootsigDesc{ L"image-based-lighting/split-sum-approx/brdf-integration.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
@@ -83,7 +83,7 @@ namespace
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -255,6 +255,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		gbufferDesc.gbufferTargets[0] = gbuffer_basecolor.get();
 		gbufferDesc.gbufferTargets[1] = gbuffer_normals.get();
 		gbufferDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
+		gbufferDesc.depthStencilTarget = depthBuffer.get();
 		gbufferDesc.resX = resX;
 		gbufferDesc.resY = resY;
 		gbufferDesc.scene = renderState.m_scene;
@@ -262,7 +263,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		gbufferDesc.jitter = pixelJitter;
 		gbufferDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
-		//renderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
+		renderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};

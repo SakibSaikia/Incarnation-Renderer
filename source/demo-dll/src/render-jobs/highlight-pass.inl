@@ -43,8 +43,11 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"geo-raster/highlight-pass.hlsl", L"rootsig", L"rootsig_1_1" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"highlight_rootsig",
+				cmdList,
+				FRootsigDesc { L"geo-raster/highlight-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Frame constant buffer
 			struct FrameCbLayout
@@ -107,7 +110,7 @@ namespace RenderJob
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 			psoDesc.NumRenderTargets = 1;
@@ -177,7 +180,7 @@ namespace RenderJob
 			commandSignatureDesc.NumArgumentDescs = 2;
 			commandSignatureDesc.ByteStride = sizeof(FDrawWithRootConstants);
 
-			D3DCommandSignature_t* commandSignature = RenderBackend12::CacheCommandSignature(commandSignatureDesc, rootsig.get());
+			D3DCommandSignature_t* commandSignature = RenderBackend12::CacheCommandSignature(commandSignatureDesc, rootsig->m_rootsig);
 
 			d3dCmdList->ExecuteIndirect(
 				commandSignature,

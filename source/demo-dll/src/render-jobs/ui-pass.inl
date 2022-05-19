@@ -84,9 +84,8 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"imgui.hlsl", L"rootsig", L"rootsig_1_1" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
-			rootsig->SetName(L"imgui_rootsig");
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"imgui_rootsig", cmdList, FRootsigDesc{L"imgui.hlsl", L"rootsig", L"rootsig_1_1"});
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Vertex Constant Buffer
 			{
@@ -121,7 +120,7 @@ namespace RenderJob
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;

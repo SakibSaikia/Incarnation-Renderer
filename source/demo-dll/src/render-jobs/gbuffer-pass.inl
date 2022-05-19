@@ -44,12 +44,12 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({
-				L"geo-raster/gbuffer-pass.hlsl",
-				L"rootsig",
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"gbuffer_rootsig",
+				cmdList,
+				FRootsigDesc { L"geo-raster/gbuffer-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
@@ -59,7 +59,7 @@ namespace RenderJob
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -154,8 +154,11 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"geo-raster/gbuffer-geo.hlsl", L"rootsig", L"rootsig_1_1" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"gbuffer_geo_rootsig",
+				cmdList,
+				FRootsigDesc{ L"geo-raster/gbuffer-geo.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Frame constant buffer
 			struct FrameCbLayout
@@ -233,9 +236,9 @@ namespace RenderJob
 					D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 					psoDesc.NodeMask = 1;
 					psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-					psoDesc.pRootSignature = rootsig.get();
+					psoDesc.pRootSignature = rootsig->m_rootsig;
 					psoDesc.SampleMask = UINT_MAX;
-					psoDesc.DSVFormat = passDesc.depthStencilTarget->m_resource->m_d3dResource->GetDesc().Format;
+					psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 					psoDesc.NumRenderTargets = 3;
 					psoDesc.RTVFormats[0] = passDesc.gbufferTargets[0]->m_resource->m_d3dResource->GetDesc().Format;
 					psoDesc.RTVFormats[1] = passDesc.gbufferTargets[1]->m_resource->m_d3dResource->GetDesc().Format;
@@ -282,6 +285,9 @@ namespace RenderJob
 						desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
 						desc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 						desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+						desc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_SRC_ALPHA;
+						desc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+						desc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
 						desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
 					}
 

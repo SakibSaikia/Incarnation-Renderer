@@ -117,8 +117,8 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Global Root Signature
-			winrt::com_ptr<D3DRootSignature_t> globalRootsig = RenderBackend12::FetchRootSignature(rtLib);
-			d3dCmdList->SetComputeRootSignature(globalRootsig.get());
+			std::unique_ptr<FRootSignature> globalRootsig = RenderBackend12::FetchRootSignature(L"pathtrace_rootsig", cmdList, rtLib);
+			d3dCmdList->SetComputeRootSignature(globalRootsig->m_rootsig);
 
 			// Root signature arguments
 			struct GlobalCbLayout
@@ -205,11 +205,11 @@ namespace RenderJob
 			// Combine with history buffer to integrate results over time
 			passDesc.targetBuffer->m_resource->Transition(cmdList, uavTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({
-				L"raytracing/pathtrace-integrate.hlsl",
-				L"rootsig",
-				L"rootsig_1_1" });
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"pathtrace_integrate_rootsig",
+				cmdList,
+				FRootsigDesc { L"raytracing/pathtrace-integrate.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"raytracing/pathtrace-integrate.hlsl",
@@ -218,7 +218,7 @@ namespace RenderJob
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;

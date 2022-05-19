@@ -1645,12 +1645,12 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 		// Root Signature
-		winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
-			L"content-pipeline/prefilter-normal-roughness.hlsl", 
-			L"rootsig", 
-			L"rootsig_1_1" });
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+			L"prefilter_normal_roughness_rootsig",
+			cmdList,
+			FRootsigDesc{ L"content-pipeline/prefilter-normal-roughness.hlsl", L"rootsig", L"rootsig_1_1" });
 
-		d3dCmdList->SetComputeRootSignature(rootsig.get());
+		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 		// PSO
 		IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
@@ -1660,7 +1660,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 			L"cs_6_6" });
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = rootsig.get();
+		psoDesc.pRootSignature = rootsig->m_rootsig;
 		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -2133,12 +2133,12 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
-				L"content-pipeline/cubemapgen.hlsl", 
-				L"rootsig", 
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"cubemapgen_rootsig",
+				cmdList,
+				FRootsigDesc{L"content-pipeline/cubemapgen.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
@@ -2148,7 +2148,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -2194,12 +2194,12 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
-				L"image-based-lighting/split-sum-approx/prefilter.hlsl", 
-				L"rootsig", 
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"split_sum_rootsig",
+				cmdList,
+				FRootsigDesc{ L"image-based-lighting/split-sum-approx/prefilter.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
@@ -2209,7 +2209,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -2267,12 +2267,12 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
-				L"image-based-lighting/spherical-harmonics/projection.hlsl", 
-				L"rootsig", 
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"sh_projection_rootsig",
+				cmdList,
+				FRootsigDesc{ L"image-based-lighting/spherical-harmonics/projection.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
@@ -2282,7 +2282,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -2322,12 +2322,12 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
-				L"image-based-lighting/spherical-harmonics/integration.hlsl", 
-				L"rootsig", 
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"sh_integration_rootsig",
+				cmdList,
+				FRootsigDesc{ L"image-based-lighting/spherical-harmonics/integration.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// See https://gpuopen.com/wp-content/uploads/2017/07/GDC2017-Wave-Programming-D3D12-Vulkan.pdf
 			const uint32_t laneCount = RenderBackend12::GetLaneCount();
@@ -2347,7 +2347,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -2394,12 +2394,12 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ 
-				L"image-based-lighting/spherical-harmonics/accumulation.hlsl", 
-				L"rootsig", 
-				L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"sh_accum_rootsig",
+				cmdList,
+				FRootsigDesc { L"image-based-lighting/spherical-harmonics/accumulation.hlsl", L"rootsig", L"rootsig_1_1" });
 
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			std::wstringstream s;
 			s << "THREAD_GROUP_SIZE_X=" << width <<
@@ -2413,7 +2413,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
