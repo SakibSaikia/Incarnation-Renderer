@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct BasePassDesc
 	{
-		FRenderTexture* colorTarget;
-		FRenderTexture* depthStencilTarget;
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
 		DXGI_FORMAT format;
 		uint32_t resX;
 		uint32_t resY;
@@ -62,7 +62,7 @@ namespace RenderJob
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList,
@@ -95,7 +95,7 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList,

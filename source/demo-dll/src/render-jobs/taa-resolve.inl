@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct TAAResolveDesc
 	{
-		FRenderTexture* source;
-		FBindlessUav* target;
+		FShaderSurface* source;
+		FShaderSurface* target;
 		uint32_t resX;
 		uint32_t resY;
 		uint32_t historyIndex;
@@ -75,7 +75,7 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FTransientBuffer> cbuf = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
 				L"taa_cb",
 				sizeof(TaaConstants),
 				cmdList,

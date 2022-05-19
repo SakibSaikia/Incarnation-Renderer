@@ -51,7 +51,7 @@ struct FTextureCache
 
 	void Clear();
 
-	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FBindlessShaderResource>> m_cachedTextures;
+	concurrency::concurrent_unordered_map<std::wstring, std::unique_ptr<FTexture>> m_cachedTextures;
 };
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -740,7 +740,8 @@ void FScene::ReloadModel(const std::wstring& filename)
 	LoadMeshAccessors(model);
 	LoadMaterials(model);
 	LoadLights(model);
-	m_sceneMeshes.Resize(model.meshes.size());
+
+	//m_sceneMeshes.Reserve(model.meshes.size());
 	
 	// GlTF uses a right handed coordinate. Use the following root transform to convert it to LH.
 	Matrix RH2LH = Matrix
@@ -849,6 +850,9 @@ void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& paren
 
 void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& parentTransform)
 {
+	const tinygltf::Mesh& mesh = model.meshes[meshIndex];
+	FSceneMeshEntities* sceneCollection = mesh.name.starts_with("decal") ? &m_sceneMeshDecals : &m_sceneMeshes;
+
 	SCOPED_CPU_EVENT("load_mesh", PIX_COLOR_DEFAULT);
 
 	auto CalcBounds = [&model](int positionAccessorIndex) -> DirectX::BoundingBox
@@ -866,9 +870,8 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		return bb;
 	};
 
-	const tinygltf::Mesh& mesh = model.meshes[meshIndex];
-	FMesh& outMesh = m_sceneMeshes.m_entityList[meshIndex];
-	outMesh.m_primitives.resize(mesh.primitives.size());
+	FMesh newMesh = {};
+	newMesh.m_primitives.resize(mesh.primitives.size());
 
 	DirectX::BoundingBox meshBounds = {};
 
@@ -876,7 +879,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	for (int primitiveIndex = 0; primitiveIndex < mesh.primitives.size(); ++primitiveIndex)
 	{
 		const tinygltf::Primitive& primitive = mesh.primitives[primitiveIndex];
-		FMeshPrimitive& outPrimitive = outMesh.m_primitives[primitiveIndex];
+		FMeshPrimitive& outPrimitive = newMesh.m_primitives[primitiveIndex];
 
 		// Index data
 		const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
@@ -930,9 +933,10 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		DirectX::BoundingBox::CreateMerged(meshBounds, meshBounds, primitiveBounds);
 	}
 
-	m_sceneMeshes.m_transformList[meshIndex] = parentTransform;
-	m_sceneMeshes.m_entityNames[meshIndex] = mesh.name;
-	m_sceneMeshes.m_objectSpaceBoundsList[meshIndex] = meshBounds;
+	sceneCollection->m_entityList.push_back(newMesh);
+	sceneCollection->m_transformList.push_back(parentTransform);
+	sceneCollection->m_entityNames.push_back(mesh.name);
+	sceneCollection->m_objectSpaceBoundsList.push_back(meshBounds);
 }
 
 void FScene::LoadMeshBuffers(const tinygltf::Model& model)
@@ -951,11 +955,12 @@ void FScene::LoadMeshBuffers(const tinygltf::Model& model)
 		std::wstringstream s;
 		s << L"scene_mesh_buffer_" << bufferIndex;
 
-		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBindlessBuffer(
+		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBuffer(
 			s.str(),
-			BindlessResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
 			model.buffers[bufferIndex].data.size(),
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			model.buffers[bufferIndex].data.data(),
 			&uploader);
 	}
@@ -980,11 +985,12 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 	const size_t bufferSize = views.size() * sizeof(FMeshBufferView);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMeshBufferViews = RenderBackend12::CreateBindlessBuffer(
+	m_packedMeshBufferViews = RenderBackend12::CreateBuffer(
 		L"scene_mesh_buffer_views",
-		BindlessResourceType::Buffer,
+		BufferType::Raw,
+		ResourceAccessMode::GpuReadOnly,
+		ResourceAllocationType::Committed,
 		bufferSize,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*) views.data(),
 		&uploader);
 
@@ -1008,11 +1014,12 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 	const size_t bufferSize = accessors.size() * sizeof(FMeshAccessor);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMeshAccessors = RenderBackend12::CreateBindlessBuffer(
+	m_packedMeshAccessors = RenderBackend12::CreateBuffer(
 		L"scene_mesh_accessors",
-		BindlessResourceType::Buffer,
+		BufferType::Raw,
+		ResourceAccessMode::GpuReadOnly,
+		ResourceAllocationType::Committed,
 		bufferSize,
-		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*) accessors.data(),
 		&uploader);
 
@@ -1051,11 +1058,12 @@ void FScene::CreateGpuPrimitiveBuffers()
 		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedPrimitives = RenderBackend12::CreateBindlessBuffer(
+		m_packedPrimitives = RenderBackend12::CreateBuffer(
 			L"scene_primitives",
-			BindlessResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
 			bufferSize,
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)primitives.data(),
 			&uploader);
 
@@ -1073,11 +1081,12 @@ void FScene::CreateGpuPrimitiveBuffers()
 		const size_t bufferSize = primitiveCounts.size() * sizeof(uint32_t);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedPrimitiveCounts = RenderBackend12::CreateBindlessBuffer(
+		m_packedPrimitiveCounts = RenderBackend12::CreateBuffer(
 			L"scene_primitive_counts",
-			BindlessResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
 			bufferSize,
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)primitiveCounts.data(),
 			&uploader);
 
@@ -1095,19 +1104,21 @@ void FScene::CreateGpuLightBuffers()
 		const size_t transformsBufferSize = m_sceneLights.m_transformList.size() * sizeof(Matrix);
 		FResourceUploadContext uploader{ indexBufferSize + transformsBufferSize };
 
-		m_packedLightIndices = RenderBackend12::CreateBindlessBuffer(
+		m_packedLightIndices = RenderBackend12::CreateBuffer(
 			L"scene_light_indices",
-			BindlessResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
 			indexBufferSize,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
 			&uploader);
 
-		m_packedLightTransforms = RenderBackend12::CreateBindlessBuffer(
+		m_packedLightTransforms = RenderBackend12::CreateBuffer(
 			L"scene_light_transforms",
-			BindlessResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
 			transformsBufferSize,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_sceneLights.m_transformList.data(),
 			&uploader);
 
@@ -1196,18 +1207,21 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO blasPreBuildInfo = {};
 				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&blasInputsDesc, &blasPreBuildInfo);
 
-				auto blasScratch = RenderBackend12::CreateBindlessUavBuffer(
+				auto blasScratch = RenderBackend12::CreateBuffer(
 					L"blas_scratch",
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes),
-					false);
+					BufferType::AccelerationStructure,
+					ResourceAccessMode::GpuWriteOnly,
+					ResourceAllocationType::Pooled,
+					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes));
 
 				std::wstringstream s;
 				s << s2ws(meshName) << L"_blas";
-				m_blasList[meshName] = RenderBackend12::CreateBindlessBuffer(
+				m_blasList[meshName] = RenderBackend12::CreateBuffer(
 					s.str(),
-					BindlessResourceType::AccelerationStructure,
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes),
-					D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+					BufferType::AccelerationStructure,
+					ResourceAccessMode::GpuReadWrite,
+					ResourceAllocationType::Committed,
+					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes));
 
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 				buildDesc.Inputs = blasInputsDesc;
@@ -1247,7 +1261,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	// Build TLAS
 	{
 		const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-		auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
+		auto instanceDescBuffer = RenderBackend12::CreateUploadBuffer(
 			L"instance_descs_buffer",
 			instanceDescBufferSize,
 			cmdList,
@@ -1266,16 +1280,19 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
 		RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
-		auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
+		auto tlasScratch = RenderBackend12::CreateBuffer(
 			L"tlas_scratch",
-			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes),
-			false);
+			BufferType::AccelerationStructure,
+			ResourceAccessMode::GpuWriteOnly,
+			ResourceAllocationType::Pooled,
+			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes));
 
-		m_tlas = RenderBackend12::CreateBindlessBuffer(
+		m_tlas = RenderBackend12::CreateBuffer(
 			L"tlas_buffer",
-			BindlessResourceType::AccelerationStructure,
-			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes),
-			D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+			BufferType::AccelerationStructure,
+			ResourceAccessMode::GpuReadWrite,
+			ResourceAllocationType::Committed,
+			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes));
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 		buildDesc.Inputs = tlasInputsDesc;
@@ -1305,11 +1322,12 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 	const size_t bufferSize = m_materialList.size() * sizeof(FMaterial);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMaterials = RenderBackend12::CreateBindlessBuffer(
+	m_packedMaterials = RenderBackend12::CreateBuffer(
 		L"scene_materials",
-		BindlessResourceType::Buffer,
+		BufferType::Raw,
+		ResourceAccessMode::GpuReadOnly,
+		ResourceAllocationType::Committed,
 		bufferSize,
-		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 		(const uint8_t*)m_materialList.data(),
 		&uploader);
 
@@ -1603,14 +1621,14 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Create source textures
 	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
 	FResourceUploadContext uploader{ uploadSize };
-	auto srcNormalmap = RenderBackend12::CreateBindlessTexture(L"src_normalmap", BindlessResourceType::Texture2D, normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader);
-	auto srcMetallicRoughnessmap = RenderBackend12::CreateBindlessTexture(L"src_metallic_roughness", BindlessResourceType::Texture2D, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader);
+	auto srcNormalmap = RenderBackend12::CreateTexture(L"src_normalmap", TextureType::Tex2D, normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader);
+	auto srcMetallicRoughnessmap = RenderBackend12::CreateTexture(L"src_metallic_roughness", TextureType::Tex2D, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader);
 
 	// Create UAVs for prefiltering
 	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);
 	size_t metallicRoughnessMipCount = RenderUtils12::CalcMipCount(metallicRoughnessImage.width, metallicRoughnessImage.height, true);
-	auto normalmapFilterUav = RenderBackend12::CreateBindlessUavTexture(L"dest_normalmap", normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount, 1);
-	auto metallicRoughnessFilterUav = RenderBackend12::CreateBindlessUavTexture(L"dest_metallicRoughnessmap", metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount, 1);
+	auto normalmapFilterUav = RenderBackend12::CreateSurface(L"dest_normalmap", SurfaceType::UAV, normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount);
+	auto metallicRoughnessFilterUav = RenderBackend12::CreateSurface(L"dest_metallicRoughnessmap", SurfaceType::UAV, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount);
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
 	cmdList->SetName(L"prefilter_normal_roughness");
@@ -1863,11 +1881,12 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		const size_t bufferSize = m_lights.size() * sizeof(FLight);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedLightProperties = RenderBackend12::CreateBindlessBuffer(
+		m_packedLightProperties = RenderBackend12::CreateBuffer(
 			L"scene_light_properties",
-			BindlessResourceType::Buffer,
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
 			bufferSize,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
 			(const uint8_t*)m_lights.data(),
 			&uploader);
 
@@ -1880,8 +1899,6 @@ void FScene::LoadLights(const tinygltf::Model& model)
 void FScene::Clear()
 {
 	m_cameras.clear();
-	m_sceneMeshes.Clear();
-	m_sceneLights.Clear();
 	m_meshBuffers.clear();
 	m_blasList.clear();
 	m_materialList.clear();
@@ -2041,7 +2058,7 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 	else
 	{
-		m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, BindlessResourceType::Texture2D, format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext);
+		m_cachedTextures[name] = RenderBackend12::CreateTexture(name, TextureType::Tex2D, format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext);
 		return m_cachedTextures[name]->m_srvIndex;
 	}
 }
@@ -2053,7 +2070,7 @@ uint32_t FTextureCache::CacheEmptyTexture2D(
 	const int height,
 	const size_t mipCount)
 {
-	m_cachedTextures[name] = RenderBackend12::CreateBindlessTexture(name, BindlessResourceType::Texture2D, format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	m_cachedTextures[name] = RenderBackend12::CreateTexture(name, TextureType::Tex2D, format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 	return m_cachedTextures[name]->m_srvIndex;
 }
 
@@ -2090,8 +2107,8 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Create the equirectangular source texture
 		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
-		auto srcHdrTex = RenderBackend12::CreateBindlessTexture(
-			name, BindlessResourceType::Texture2D, metadata.format, metadata.width, metadata.height, mipchain.GetImageCount(), 1,
+		auto srcHdrTex = RenderBackend12::CreateTexture(
+			name, TextureType::Tex2D, metadata.format, metadata.width, metadata.height, mipchain.GetImageCount(), 1,
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, mipchain.GetImages(), &uploadContext);
 
 		// Compute CL
@@ -2106,7 +2123,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// Generate environment cubemap
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t cubemapSize = metadata.height;
-		auto texCubeUav = RenderBackend12::CreateBindlessUavTexture(L"src_cubemap", metadata.format, cubemapSize, cubemapSize, numMips, 6);
+		auto texCubeUav = RenderBackend12::CreateSurface(L"src_cubemap", SurfaceType::UAV, metadata.format, cubemapSize, cubemapSize, numMips, 1, 6);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "cubemap_gen", 0);
@@ -2166,7 +2183,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t filteredEnvmapSize = cubemapSize >> 1;
 		const int filteredEnvmapMips = numMips - 1;
-		auto texFilteredEnvmapUav = RenderBackend12::CreateBindlessUavTexture(L"filtered_envmap", metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6);
+		auto texFilteredEnvmapUav = RenderBackend12::CreateSurface(L"filtered_envmap", SurfaceType::UAV, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6);
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		{
@@ -2230,7 +2247,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Copy from UAV to destination cubemap texture
 		texFilteredEnvmapUav->m_resource->Transition(cmdList, texFilteredEnvmapUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto filteredEnvmapTex = RenderBackend12::CreateBindlessTexture(envmapTextureName, BindlessResourceType::TextureCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto filteredEnvmapTex = RenderBackend12::CreateTexture(envmapTextureName, TextureType::TexCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
 		filteredEnvmapTex->m_resource->Transition(cmdList, filteredEnvmapTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
@@ -2240,7 +2257,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
 		constexpr uint32_t srcMipIndex = 2;
-		auto shTexureUav0 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_0", metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, numCoefficients);
+		auto shTexureUav0 = RenderBackend12::CreateSurface(L"ShProj_0", SurfaceType::UAV, metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, 1, numCoefficients);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
@@ -2291,10 +2308,10 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		}
 
 		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
-		auto shTexureUav1 = RenderBackend12::CreateBindlessUavTexture(L"ShProj_1", metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, numCoefficients);
+		auto shTexureUav1 = RenderBackend12::CreateSurface(L"ShProj_1", SurfaceType::UAV, metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, 1, numCoefficients);
 
 		// Ping-pong UAVs
-		FBindlessUav* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
+		FShaderSurface* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
 		int src = 0, dest = 1;
 
 		{
@@ -2367,7 +2384,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			}
 		}
 
-		auto shTexureUavAccum = RenderBackend12::CreateBindlessUavTexture(L"ShAccum", metadata.format, numCoefficients, 1, 1, 1);
+		auto shTexureUavAccum = RenderBackend12::CreateSurface(L"ShAccum", SurfaceType::UAV, metadata.format, numCoefficients, 1);
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
@@ -2417,7 +2434,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Copy from UAV to destination texture
 		shTexureUavAccum->m_resource->Transition(cmdList, shTexureUavAccum->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto shTex = RenderBackend12::CreateBindlessTexture(shTextureName, BindlessResourceType::Texture2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+		auto shTex = RenderBackend12::CreateTexture(shTextureName, TextureType::Tex2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
 		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
 		shTex->m_resource->Transition(cmdList, shTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);
@@ -2480,7 +2497,7 @@ uint32_t FSamplerCache::CacheSampler(const tinygltf::Sampler& s)
 		const D3D12_TEXTURE_ADDRESS_MODE addressV = AddressModeConversion(s.wrapT);
 		const D3D12_TEXTURE_ADDRESS_MODE addressW = AddressModeConversion(s.wrapR);
 
-		m_cachedSamplers[s] = RenderBackend12::CreateBindlessSampler(filter, addressU, addressV, addressW);
+		m_cachedSamplers[s] = RenderBackend12::CreateSampler(filter, addressU, addressV, addressW);
 		return m_cachedSamplers[s];
 	}
 }

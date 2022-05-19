@@ -43,22 +43,6 @@ struct TSceneEntities
 	std::vector<std::string> m_entityNames;
 	std::vector<Matrix> m_transformList;
 	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
-
-	void Resize(const size_t count)
-	{
-		m_entityList.resize(count);
-		m_entityNames.resize(count);
-		m_transformList.resize(count);
-		m_objectSpaceBoundsList.resize(count);
-	}
-
-	void Clear()
-	{
-		m_entityList.clear();
-		m_entityNames.clear();
-		m_transformList.clear();
-		m_objectSpaceBoundsList.clear();
-	}
 };
 
 struct FCamera
@@ -93,26 +77,27 @@ struct FScene
 	using FSceneMeshEntities = TSceneEntities<FMesh>;
 	using FSceneLightEntities = TSceneEntities<int>;
 	FSceneMeshEntities m_sceneMeshes;
+	FSceneMeshEntities m_sceneMeshDecals;
 	FSceneLightEntities m_sceneLights;
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
-	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
-	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
-	std::unique_ptr<FBindlessShaderResource> m_packedPrimitives;
-	std::unique_ptr<FBindlessShaderResource> m_packedPrimitiveCounts;
-	std::unordered_map<std::string, std::unique_ptr<FBindlessShaderResource>> m_blasList;
-	std::unique_ptr<FBindlessShaderResource> m_tlas;
-	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
+	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
+	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
+	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
+	std::unordered_map<std::string, std::unique_ptr<FShaderBuffer>> m_blasList;
+	std::unique_ptr<FShaderBuffer> m_tlas;
+	std::unique_ptr<FShaderBuffer> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Lights
 	std::vector<FLight> m_lights;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightProperties;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightIndices;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightTransforms;
+	std::unique_ptr<FShaderBuffer> m_packedLightProperties;
+	std::unique_ptr<FShaderBuffer> m_packedLightIndices;
+	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;
 	FLightProbe m_environmentSky;
 
 	// Transform

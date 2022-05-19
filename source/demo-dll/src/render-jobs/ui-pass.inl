@@ -2,7 +2,7 @@ namespace RenderJob
 {
 	struct UIPassDesc
 	{
-		FRenderTexture* colorTarget;
+		FShaderSurface* colorTarget;
 		FConfig renderConfig;
 	};
 
@@ -33,7 +33,7 @@ namespace RenderJob
 
 			// Vertex Buffer
 			{
-				std::unique_ptr<FTransientBuffer> vtxBuffer = RenderBackend12::CreateTransientBuffer(
+				std::unique_ptr<FUploadBuffer> vtxBuffer = RenderBackend12::CreateUploadBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
 					cmdList,
@@ -57,7 +57,7 @@ namespace RenderJob
 
 			// Index Buffer
 			{
-				std::unique_ptr<FTransientBuffer> idxBuffer = RenderBackend12::CreateTransientBuffer(
+				std::unique_ptr<FUploadBuffer> idxBuffer = RenderBackend12::CreateUploadBuffer(
 					L"imgui_ib",
 					idxBufferSize,
 					cmdList,

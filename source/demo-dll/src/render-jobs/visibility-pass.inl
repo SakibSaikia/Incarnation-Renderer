@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct VisibilityPassDesc
 	{
-		FRenderTexture* visBufferTarget;
-		FRenderTexture* depthStencilTarget;
+		FShaderSurface* visBufferTarget;
+		FShaderSurface* depthStencilTarget;
 		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;
@@ -55,7 +55,7 @@ namespace RenderJob
 				int scenePrimitivesIndex;
 			};
 
-			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList,
@@ -78,7 +78,7 @@ namespace RenderJob
 				Vector3 eyePos;
 			};
 
-			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList,

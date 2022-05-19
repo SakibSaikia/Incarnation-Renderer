@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct PathTracingDesc
 	{
-		FBindlessUav* targetBuffer;
-		FBindlessUav* historyBuffer;
+		FShaderSurface* targetBuffer;
+		FShaderSurface* historyBuffer;
 		uint32_t currentSampleIndex;
 		uint32_t resX;
 		uint32_t resY;
@@ -75,7 +75,7 @@ namespace RenderJob
 
 			// Raygen shader table
 			const size_t raygenShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FTransientBuffer> raygenShaderTable = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> raygenShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"raygen_sbt",
 				1 * raygenShaderRecordSize,
 				cmdList,
@@ -86,7 +86,7 @@ namespace RenderJob
 
 			// Miss shader table
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FTransientBuffer> missShaderTable = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> missShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"miss_sbt",
 				2 * missShaderRecordSize,
 				cmdList,
@@ -98,7 +98,7 @@ namespace RenderJob
 
 			// Hit shader table
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FTransientBuffer> hitGroupShaderTable = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> hitGroupShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"hit_sbt",
 				2 * hitGroupShaderRecordSize,
 				cmdList,
@@ -144,7 +144,7 @@ namespace RenderJob
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> globalCb = RenderBackend12::CreateUploadBuffer(
 				L"global_cb",
 				sizeof(GlobalCbLayout),
 				cmdList,

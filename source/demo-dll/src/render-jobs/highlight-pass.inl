@@ -2,9 +2,9 @@ namespace RenderJob
 {
 	struct HighlightPassDesc
 	{
-		FRenderTexture* colorTarget;
-		FRenderTexture* depthStencilTarget;
-		FBindlessUav* indirectArgsBuffer;
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
+		FShaderBuffer* indirectArgsBuffer;
 		uint32_t resX, resY;
 		const FScene* scene;
 		const FView* view;
@@ -55,7 +55,7 @@ namespace RenderJob
 				int scenePrimitivesBufferIndex;
 			};
 
-			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList,
@@ -78,7 +78,7 @@ namespace RenderJob
 				Vector3 eyePos;
 			};
 
-			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList,

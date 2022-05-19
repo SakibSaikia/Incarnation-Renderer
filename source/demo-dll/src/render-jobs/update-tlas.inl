@@ -44,7 +44,7 @@ namespace RenderJob
 			}
 
 			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-			auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
+			auto instanceDescBuffer = RenderBackend12::CreateUploadBuffer(
 				L"instance_descs_buffer",
 				instanceDescBufferSize,
 				cmdList,
@@ -64,10 +64,12 @@ namespace RenderJob
 			RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
 			// TLAS scratch buffer
-			auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
+			auto tlasScratch = RenderBackend12::CreateBuffer(
 				L"tlas_scratch",
-				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes),
-				false);
+				BufferType::AccelerationStructure,
+				ResourceAccessMode::GpuWriteOnly,
+				ResourceAllocationType::Pooled,
+				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes));
 
 			// Build TLAS
 			scene->m_tlas->m_resource->UavBarrier(cmdList);
