@@ -11,6 +11,7 @@ struct FMaterialProperties
 {
 	float3 emissive;
 	float3 basecolor;
+	float opacity;
 	bool bHasNormalmap;
 	float3 normalmap;
 	float metallic;
@@ -51,7 +52,9 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 	if (mat.m_baseColorTextureIndex != -1)
 	{
 		Texture2D baseColorTex = ResourceDescriptorHeap[NonUniformResourceIndex(mat.m_baseColorTextureIndex)];
-		output.basecolor *= TEX_SAMPLE(baseColorTex, s, uv).rgb;
+		float4 texVal = TEX_SAMPLE(baseColorTex, s, uv);
+		output.basecolor *= texVal.rgb;
+		output.opacity = texVal.a;
 	}
 
 	// Normalmap
