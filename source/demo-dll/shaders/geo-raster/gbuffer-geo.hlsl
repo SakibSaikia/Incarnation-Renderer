@@ -109,6 +109,6 @@ gbuffer ps_main(vs_to_ps input)
 	gbuffer output;
 	output.basecolor = float4(p.basecolor, p.opacity);
 	output.normals = OctEncode(N);
-	output.metallic_roughness_ao = float4(p.metallic, p.roughness, p.ao, p.opacity);
+	output.metallic_roughness_ao = float4(p.metallic, p.roughness, p.ao, p.aoblend);
 	return output;
 }

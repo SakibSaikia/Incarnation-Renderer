@@ -230,6 +230,7 @@ namespace RenderJob
 
 				for (const FMeshPrimitive& primitive : mesh.m_primitives)
 				{
+					const FMaterial& material = passDesc.scene->m_materialList[primitive.m_materialIndex];
 					d3dCmdList->IASetPrimitiveTopology(primitive.m_topology);
 
 					// PSO
@@ -259,7 +260,7 @@ namespace RenderJob
 
 					// PSO - Rasterizer State
 					{
-						bool bDoubleSidedMaterial = passDesc.scene->m_materialList[primitive.m_materialIndex].m_doubleSided;
+						bool bDoubleSidedMaterial = material.m_doubleSided;
 
 						D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
 						desc.FillMode = D3D12_FILL_MODE_SOLID;
@@ -279,7 +280,9 @@ namespace RenderJob
 					{
 						D3D12_BLEND_DESC& desc = psoDesc.BlendState;
 						desc.AlphaToCoverageEnable = FALSE;
-						desc.IndependentBlendEnable = FALSE;
+						desc.IndependentBlendEnable = TRUE;
+
+						// For base color, blend using opacity value
 						desc.RenderTarget[0].BlendEnable = TRUE;
 						desc.RenderTarget[0].LogicOpEnable = FALSE;
 						desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
@@ -289,6 +292,48 @@ namespace RenderJob
 						desc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
 						desc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
 						desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+						// If the decal specifies a normal map, allow it to overwrite the existing 
+						// GBuffer value (no use blending normals). Otherwise, retain the existing value.
+						if (material.m_normalTextureIndex != -1)
+						{
+							desc.RenderTarget[1].BlendEnable = FALSE;
+							desc.RenderTarget[1].LogicOpEnable = FALSE;
+							desc.RenderTarget[1].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+						}
+						else
+						{
+							desc.RenderTarget[1].BlendEnable = TRUE;
+							desc.RenderTarget[1].LogicOpEnable = FALSE;
+							desc.RenderTarget[1].SrcBlend = D3D12_BLEND_ZERO;
+							desc.RenderTarget[1].DestBlend = D3D12_BLEND_ONE;
+							desc.RenderTarget[1].BlendOp = D3D12_BLEND_OP_ADD;
+							desc.RenderTarget[1].SrcBlendAlpha = D3D12_BLEND_ZERO;
+							desc.RenderTarget[1].DestBlendAlpha = D3D12_BLEND_ONE;
+							desc.RenderTarget[1].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+							desc.RenderTarget[1].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+						}
+
+						// If the decal specifies a metallic/roughness map, allow it to overwrite the existing 
+						// GBuffer value. Otherwise, retain the existing value.
+						if (material.m_metallicRoughnessTextureIndex != -1)
+						{
+							desc.RenderTarget[2].BlendEnable = FALSE;
+							desc.RenderTarget[2].LogicOpEnable = FALSE;
+							desc.RenderTarget[2].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+						}
+						else
+						{
+							desc.RenderTarget[2].BlendEnable = TRUE;
+							desc.RenderTarget[2].LogicOpEnable = FALSE;
+							desc.RenderTarget[2].SrcBlend = D3D12_BLEND_ZERO;
+							desc.RenderTarget[2].DestBlend = D3D12_BLEND_ONE;
+							desc.RenderTarget[2].BlendOp = D3D12_BLEND_OP_ADD;
+							desc.RenderTarget[2].SrcBlendAlpha = D3D12_BLEND_ZERO;
+							desc.RenderTarget[2].DestBlendAlpha = D3D12_BLEND_ONE;
+							desc.RenderTarget[2].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+							desc.RenderTarget[2].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+						}
 					}
 
 					// PSO - Depth Stencil State

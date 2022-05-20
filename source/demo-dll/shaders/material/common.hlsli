@@ -29,16 +29,6 @@ FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, Sampler
 {
 	FMaterialProperties output;
 
-//#if !RAY_TRACING
-//	// Alpha clip
-//	if (mat.m_baseColorTextureIndex != -1)
-//	{
-//		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-//		float alpha = TEX_SAMPLE(baseColorTex, s, uv, ddx, ddy).a;
-//		clip(alpha - 0.5);
-//	}
-//#endif
-
 	// Emissive
 	output.emissive = mat.m_emissiveFactor;
 	if (mat.m_emissiveTextureIndex != -1)
