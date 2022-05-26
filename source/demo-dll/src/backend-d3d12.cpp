@@ -1949,11 +1949,13 @@ void RenderBackend12::Teardown()
 
 FCommandList* RenderBackend12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
 {
+	SCOPED_CPU_EVENT("fetch_commandlist", PIX_COLOR_DEFAULT);
 	return s_commandListPool.GetOrCreate(type);
 }
 
 IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 {
+	SCOPED_CPU_EVENT("cache_shader", PIX_COLOR_DEFAULT);
 	auto search = s_shaderCache.find(shaderDesc);
 	if (search != s_shaderCache.cend())
 	{
@@ -1982,6 +1984,7 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 
 IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 {
+	SCOPED_CPU_EVENT("cache_rootsig", PIX_COLOR_DEFAULT);
 	auto search = s_rootsigCache.find(rootsigDesc);
 	if (search != s_rootsigCache.cend())
 	{
@@ -2020,6 +2023,7 @@ FRootSignature::~FRootSignature()
 
 void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 {
+	SCOPED_CPU_EVENT("recompile_shaders", PIX_COLOR_DEFAULT);
 	bool bDirty = false;;
 
 	for (auto& [shaderDesc, blob] : s_shaderCache)
@@ -2081,6 +2085,7 @@ void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 
 std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& desc)
 {
+	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
 	auto rs = std::make_unique<FRootSignature>();
 	rs->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
 
@@ -2092,6 +2097,7 @@ std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::w
 
 std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, IDxcBlob* blob)
 {
+	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
 	auto rs = std::make_unique<FRootSignature>();
 	rs->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
 
@@ -2102,6 +2108,7 @@ std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::w
 
 D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
+	SCOPED_CPU_EVENT("fetch_pso", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>{}(desc);
 
 	auto search = s_graphicsPSOPool.find(descHash);
@@ -2123,6 +2130,7 @@ D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAP
 
 D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC& desc)
 {
+	SCOPED_CPU_EVENT("fetch_pso", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(desc);
 
 	auto search = s_computePSOPool.find(descHash);
@@ -2144,6 +2152,7 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 
 D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc)
 {
+	SCOPED_CPU_EVENT("fetch_rtpso", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_STATE_OBJECT_DESC>{}(desc);
 
 	auto search = s_raytracePSOPool.find(descHash);
@@ -2165,6 +2174,7 @@ D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_
 
 D3DCommandSignature_t* RenderBackend12::CacheCommandSignature(const D3D12_COMMAND_SIGNATURE_DESC desc, D3DRootSignature_t* rootsig)
 {
+	SCOPED_CPU_EVENT("cache_commandsig", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_COMMAND_SIGNATURE_DESC>{}(desc, rootsig);
 
 	auto search = s_commandSignaturePool.find(descHash);
@@ -2249,12 +2259,12 @@ void RenderBackend12::PresentDisplay()
 
 	AssertIfFailed(s_swapChain->Present(0, 0));
 
-		winrt::com_ptr<ID3D12DeviceRemovedExtendedData> dredData;
-		AssertIfFailed(GetDevice()->QueryInterface(IID_PPV_ARGS(dredData.put())));
-		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput;
-		D3D12_DRED_PAGE_FAULT_OUTPUT DredPageFaultOutput;
-		AssertIfFailed(dredData->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput));
-		AssertIfFailed(dredData->GetPageFaultAllocationOutput(&DredPageFaultOutput));
+	/*winrt::com_ptr<ID3D12DeviceRemovedExtendedData> dredData;
+	AssertIfFailed(GetDevice()->QueryInterface(IID_PPV_ARGS(dredData.put())));
+	D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput;
+	D3D12_DRED_PAGE_FAULT_OUTPUT DredPageFaultOutput;
+	AssertIfFailed(dredData->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput));
+	AssertIfFailed(dredData->GetPageFaultAllocationOutput(&DredPageFaultOutput));*/
 
 	// Signal current frame is done
 	auto currentFenceValue = s_frameFenceValues[s_currentBufferIndex];
@@ -2314,6 +2324,7 @@ std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 	const FCommandList* dependentCL,
 	std::function<void(uint8_t*)> uploadFunc)
 {
+	SCOPED_CPU_EVENT("create_upload_buffer", PIX_COLOR_DEFAULT);
 	DebugAssert(sizeInBytes != 0);
 
 	DWORD n;
@@ -2351,6 +2362,8 @@ std::unique_ptr<FShaderSurface> RenderBackend12::CreateSurface(
 	const bool bCreateSRV,
 	const bool bCreateNonShaderVisibleDescriptors)
 {
+	SCOPED_CPU_EVENT("create_surface", PIX_COLOR_DEFAULT);
+
 	// Default clear color for RTVs
 	D3D12_CLEAR_VALUE defaultClearColor = {};
 	defaultClearColor.Format = format;
@@ -2602,6 +2615,7 @@ std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
 	const DirectX::Image* images,
 	FResourceUploadContext* uploadContext)
 {
+	SCOPED_CPU_EVENT("create_texture", PIX_COLOR_DEFAULT);
 	auto newTexture = std::make_unique<FTexture>();
 
 	// Create resource
@@ -2710,6 +2724,8 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const uint8_t* pData,
 	FResourceUploadContext* uploadContext)
 {
+	SCOPED_CPU_EVENT("create_buffer", PIX_COLOR_DEFAULT);
+
 	// Resource Flags & State
 	D3D12_RESOURCE_FLAGS resourceFlags = {};
 	D3D12_RESOURCE_STATES resourceState = {};
@@ -2848,6 +2864,8 @@ uint32_t RenderBackend12::CreateSampler(
 	const D3D12_TEXTURE_ADDRESS_MODE addressV,
 	const D3D12_TEXTURE_ADDRESS_MODE addressW)
 {
+	SCOPED_CPU_EVENT("create_sampler", PIX_COLOR_DEFAULT);
+
 	uint32_t samplerIndex;
 	bool ok = s_samplerIndexPool.try_pop(samplerIndex);
 	DebugAssert(ok, "Ran out of Sampler descriptors");
