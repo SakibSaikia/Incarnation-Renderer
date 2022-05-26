@@ -288,13 +288,16 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			desc.gbuffers[1] = gbuffer_normals.get();
 			desc.gbuffers[2] = gbuffer_metallicRoughnessAo.get();
 			desc.target = RenderBackend12::GetBackBuffer();
+			desc.depthBuffer = depthBuffer.get();
 			desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
+			desc.jitter = pixelJitter;
 			desc.renderConfig = c;
 			desc.resX = resX;
 			desc.resY = resY;
 			desc.mouseX = renderState.m_mouseX;
 			desc.mouseY = renderState.m_mouseY;
 			desc.scene = renderState.m_scene;
+			desc.view = &renderState.m_view;
 			renderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
 
 			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)

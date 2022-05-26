@@ -5,11 +5,14 @@ namespace RenderJob
 		FShaderSurface* visBuffer;
 		FShaderSurface* gbuffers[3];
 		FShaderSurface* target;
+		FShaderSurface* depthBuffer;
 		FShaderBuffer* indirectArgsBuffer;
+		Vector2 jitter;
 		FConfig renderConfig;
 		uint32_t resX, resY;
 		uint32_t mouseX, mouseY;
 		const FScene* scene;
+		const FView* view;
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
@@ -21,6 +24,7 @@ namespace RenderJob
 		size_t gbuffer0TransitionToken = passDesc.gbuffers[0]->m_resource->GetTransitionToken();
 		size_t gbuffer1TransitionToken = passDesc.gbuffers[1]->m_resource->GetTransitionToken();
 		size_t gbuffer2TransitionToken = passDesc.gbuffers[2]->m_resource->GetTransitionToken();
+		size_t depthTransitionToken = passDesc.depthBuffer->m_resource->GetTransitionToken();
 		size_t indirectArgsTransitionToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
@@ -130,6 +134,7 @@ namespace RenderJob
 				int gbuffer0TextureIndex;
 				int gbuffer1TextureIndex;
 				int gbuffer2TextureIndex;
+				int depthBufferTextureIndex;
 				int indirectArgsBufferIndex;
 				int sceneMeshAccessorsIndex;
 				int sceneMeshBufferViewsIndex;
@@ -139,11 +144,14 @@ namespace RenderJob
 				uint32_t resY;
 				uint32_t mouseX;
 				uint32_t mouseY;
+				float __padding[2];
+				Matrix invProjectionTransform;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_srvIndex,
 					(int)passDesc.gbuffers[0]->m_srvIndex,
 					(int)passDesc.gbuffers[1]->m_srvIndex,
 					(int)passDesc.gbuffers[2]->m_srvIndex,
+					(int)passDesc.depthBuffer->m_srvIndex,
 					(int)passDesc.indirectArgsBuffer->m_uavIndex,
 					(int)passDesc.scene->m_packedMeshAccessors->m_srvIndex,
 					(int)passDesc.scene->m_packedMeshBufferViews->m_srvIndex,
@@ -152,7 +160,9 @@ namespace RenderJob
 					passDesc.resX,
 					passDesc.resY,
 					passDesc.mouseX,
-					passDesc.mouseY
+					passDesc.mouseY,
+					0.f,0.f,
+					(passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert()
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
@@ -161,6 +171,7 @@ namespace RenderJob
 			passDesc.gbuffers[0]->m_resource->Transition(cmdList, gbuffer0TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.gbuffers[1]->m_resource->Transition(cmdList, gbuffer1TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.gbuffers[2]->m_resource->Transition(cmdList, gbuffer2TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.depthBuffer->m_resource->Transition(cmdList, depthTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.target->m_resource->Transition(cmdList, targetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.indirectArgsBuffer->m_resource->Transition(cmdList, indirectArgsTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 

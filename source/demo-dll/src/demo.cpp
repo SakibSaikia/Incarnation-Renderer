@@ -585,6 +585,7 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::RadioButton("Reflections", &s_globalConfig.Viewmode, (int)Viewmode::Reflections);
 				ImGui::RadioButton("Object IDs", &s_globalConfig.Viewmode, (int)Viewmode::ObjectIds);
 				ImGui::RadioButton("Triangle IDs", &s_globalConfig.Viewmode, (int)Viewmode::TriangleIds);
+				ImGui::RadioButton("Light Cluster Slices", &s_globalConfig.Viewmode, (int)Viewmode::LightClusterSlices);
 				ImGui::TreePop();
 			}
 
