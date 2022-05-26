@@ -409,6 +409,28 @@ bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
 }
 
 #pragma endregion
+#pragma region Programmatic_Captures
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Programmatic Captures
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+FScopedGpuCapture::FScopedGpuCapture(FCommandList* cl) :
+	m_waitFence{ cl->GetFence() }
+{
+	PIXCaptureParameters params = {};
+	params.GpuCaptureParameters.FileName = L"PIXGpuCapture.wpix";
+	PIXBeginCapture(PIX_CAPTURE_GPU, &params);
+}
+FScopedGpuCapture::~FScopedGpuCapture()
+{
+	concurrency::create_task([fence = m_waitFence]()
+	{
+		fence.BlockingWait();
+	}).then([]()
+	{
+		PIXEndCapture(false);
+	});
+}
+#pragma endregion
 #pragma region Command_Lists
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														Command Lists
@@ -1500,7 +1522,6 @@ namespace RenderBackend12
 #if defined (_DEBUG)
 	winrt::com_ptr<D3DDebug_t> s_debugController;
 	winrt::com_ptr<D3DInfoQueue_t> s_infoQueue;
-	winrt::com_ptr<IDXGraphicsAnalysis> s_graphicsAnalysis;
 #endif
 
 	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
@@ -1615,8 +1636,6 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		s_debugController->SetEnableSynchronizedCommandQueueValidation(true);
 	#endif
 
-	// Programmatic Capture
-	DXGIGetDebugInterface1(0, IID_PPV_ARGS(s_graphicsAnalysis.put()));
 #endif
 
 	// DXGI Factory
@@ -2843,26 +2862,6 @@ size_t RenderBackend12::GetResourceSize(const DirectX::ScratchImage& image)
 	GetDevice()->GetCopyableFootprints(&desc, 0, image.GetImageCount(), 0, nullptr, nullptr, nullptr, &totalBytes);
 
 	return totalBytes;
-}
-
-void RenderBackend12::BeginCapture()
-{
-#if defined (_DEBUG)
-	if (s_graphicsAnalysis)
-	{
-		s_graphicsAnalysis->BeginCapture();
-	}
-#endif
-}
-
-void RenderBackend12::EndCapture()
-{
-#if defined (_DEBUG)
-	if (s_graphicsAnalysis)
-	{
-		s_graphicsAnalysis->EndCapture();
-	}
-#endif
 }
 
 uint32_t RenderBackend12::GetLaneCount()

@@ -7,7 +7,6 @@
 #include <DirectXTex.h>
 #include <winrt/base.h>
 #include <pix3.h>
-#include <DXProgrammableCapture.h>
 #include <vector>
 #include <string>
 #include <functional>
@@ -154,6 +153,15 @@ struct FCommandList
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
 	void SetName(const std::wstring& name);
 	FFenceMarker GetFence() const;
+};
+
+// Saves the capture to a file named PIXGpuCapture.wpix in the binaries directory
+struct FScopedGpuCapture
+{
+	FScopedGpuCapture() = delete;
+	FScopedGpuCapture(FCommandList* cl);
+	~FScopedGpuCapture();
+	FFenceMarker m_waitFence;
 };
 
 struct FShaderDesc
@@ -434,8 +442,4 @@ namespace RenderBackend12
 		std::function<void(uint8_t*)> uploadFunc = nullptr);
 
 	size_t GetResourceSize(const DirectX::ScratchImage& image);
-
-	// Programmatic Captures
-	void BeginCapture();
-	void EndCapture();
 }
