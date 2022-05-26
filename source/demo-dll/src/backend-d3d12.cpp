@@ -1522,6 +1522,7 @@ namespace RenderBackend12
 #if defined (_DEBUG)
 	winrt::com_ptr<D3DDebug_t> s_debugController;
 	winrt::com_ptr<D3DInfoQueue_t> s_infoQueue;
+	winrt::com_ptr<D3DDredSettings_t> s_dredController;
 #endif
 
 	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
@@ -1630,11 +1631,19 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	s_debugController->EnableDebugLayer();
 	dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 
-	#if 0
+	// DRED
+	AssertIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(s_dredController.put())));
+
+	// Turn on auto-breadcrumbs and page fault reporting.
+	s_dredController->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+	s_dredController->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+
+	if (config.UseGpuBasedValidation)
+	{
 		// GPU-based validation
 		s_debugController->SetEnableGPUBasedValidation(true);
 		s_debugController->SetEnableSynchronizedCommandQueueValidation(true);
-	#endif
+	}
 
 #endif
 
@@ -2238,7 +2247,14 @@ void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
 
-	s_swapChain->Present(0, 0);
+	AssertIfFailed(s_swapChain->Present(0, 0));
+
+		winrt::com_ptr<ID3D12DeviceRemovedExtendedData> dredData;
+		AssertIfFailed(GetDevice()->QueryInterface(IID_PPV_ARGS(dredData.put())));
+		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput;
+		D3D12_DRED_PAGE_FAULT_OUTPUT DredPageFaultOutput;
+		AssertIfFailed(dredData->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput));
+		AssertIfFailed(dredData->GetPageFaultAllocationOutput(&DredPageFaultOutput));
 
 	// Signal current frame is done
 	auto currentFenceValue = s_frameFenceValues[s_currentBufferIndex];

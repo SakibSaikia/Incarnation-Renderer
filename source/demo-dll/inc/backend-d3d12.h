@@ -19,6 +19,7 @@ using DXGIAdapter_t = IDXGIAdapter;
 using DXGISwapChain_t = IDXGISwapChain3;
 using D3DDebug_t = ID3D12Debug5;
 using D3DInfoQueue_t = ID3D12InfoQueue;
+using D3DDredSettings_t = ID3D12DeviceRemovedExtendedDataSettings;
 using D3DDevice_t = ID3D12Device5;
 using D3DCommandQueue_t = ID3D12CommandQueue;
 using D3DCommandAllocator_t = ID3D12CommandAllocator;
