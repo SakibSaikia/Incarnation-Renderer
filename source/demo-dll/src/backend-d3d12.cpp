@@ -653,7 +653,7 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 	m_sizeInBytes = (1 << (n + 1));
 	m_sizeInBytes = std::max<size_t>(m_sizeInBytes, 256);
 
-	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
+	m_copyCommandlist = FetchCommandlist(L"upload_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 
 	m_uploadBuffer = GetUploadBufferPool()->GetOrCreate(L"upload_context_buffer", m_sizeInBytes);
 	m_uploadBuffer->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
@@ -773,7 +773,7 @@ FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
 	readbackSizeInBytes = (1 << (n + 1));
 	readbackSizeInBytes = std::max<size_t>(readbackSizeInBytes, 256);
 
-	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
+	m_copyCommandlist = FetchCommandlist(L"readback_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 	m_readbackBuffer = GetReadbackBufferPool()->GetOrCreate(L"readback_context_buffer", readbackSizeInBytes);
 }
 
@@ -1947,10 +1947,12 @@ void RenderBackend12::Teardown()
 #endif
 }
 
-FCommandList* RenderBackend12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+FCommandList* RenderBackend12::FetchCommandlist(const std::wstring& name, const D3D12_COMMAND_LIST_TYPE type)
 {
 	SCOPED_CPU_EVENT("fetch_commandlist", PIX_COLOR_DEFAULT);
-	return s_commandListPool.GetOrCreate(type);
+	FCommandList* cl = s_commandListPool.GetOrCreate(type);
+	cl->SetName(name.c_str());
+	return cl;
 }
 
 IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)

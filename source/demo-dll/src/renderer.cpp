@@ -56,8 +56,7 @@ namespace
 		auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);
 
 		// Compute CL
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-		cmdList->SetName(L"hdr_preprocess");
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
 		{
@@ -143,7 +142,7 @@ namespace
 
 		FResourceUploadContext uploader{ numSamples };
 		auto noiseTexArray = RenderBackend12::CreateTexture(L"white_noise_array", TextureType::Tex2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_noise_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 

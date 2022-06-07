@@ -22,12 +22,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_taa_resolve", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"taa_resolve_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"taa_resolve_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "taa_resolve", 0);
 
 			passDesc.source->m_resource->Transition(cmdList, colorSourceTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

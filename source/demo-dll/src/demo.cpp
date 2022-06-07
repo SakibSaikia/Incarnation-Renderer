@@ -398,7 +398,7 @@ void Demo::UpdateUI(float deltaTime)
 {
 	SCOPED_CPU_EVENT("ui_update", PIX_COLOR_DEFAULT);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	FResourceUploadContext uploader{ 32 * 1024 * 1024 };
 
 	uint8_t* pixels;
@@ -966,7 +966,7 @@ void FScene::LoadMeshBuffers(const tinygltf::Model& model)
 			&uploader);
 	}
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
@@ -995,7 +995,7 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 		(const uint8_t*) views.data(),
 		&uploader);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffer_views", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
@@ -1024,14 +1024,14 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 		(const uint8_t*) accessors.data(),
 		&uploader);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_accessors", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
 void FScene::CreateGpuPrimitiveBuffers()
 {
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_primitives", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	// Packed buffer that contains an array of FGpuPrimitive(s)
 	{
@@ -1123,7 +1123,7 @@ void FScene::CreateGpuLightBuffers()
 			(const uint8_t*)m_sceneLights.m_transformList.data(),
 			&uploader);
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
@@ -1131,7 +1131,7 @@ void FScene::CreateGpuLightBuffers()
 
 void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 {
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"create_acceleration_structure", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
 	for (int meshIndex = 0; meshIndex < m_sceneMeshes.m_entityList.size(); ++meshIndex)
@@ -1332,7 +1332,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 		(const uint8_t*)m_materialList.data(),
 		&uploader);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_materials", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
@@ -1497,7 +1497,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 			scratch.GetImages(),
 			scratch.GetImageCount());
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 		return bindlessIndex;
@@ -1556,7 +1556,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 				compressedScratch.GetImages(),
 				compressedScratch.GetImageCount());
 
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			uploader.SubmitUploads(cmdList);
 			RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 			return bindlessIndex;
@@ -1577,7 +1577,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 				&srcImage,
 				1);
 
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			uploader.SubmitUploads(cmdList);
 			RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 			return bindlessIndex;
@@ -1631,8 +1631,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	auto normalmapFilterUav = RenderBackend12::CreateSurface(L"dest_normalmap", SurfaceType::UAV, normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount);
 	auto metallicRoughnessFilterUav = RenderBackend12::CreateSurface(L"dest_metallicRoughnessmap", SurfaceType::UAV, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-	cmdList->SetName(L"prefilter_normal_roughness");
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"prefilter_normal_roughness", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "prefilter_normal_roughness", 0);
@@ -1820,7 +1819,7 @@ void FScene::ProcessReadbackTexture(FResourceReadbackContext* context, const std
 			texResource->Transition(cmdList, texResource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		});
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
@@ -1889,7 +1888,7 @@ void FScene::LoadLights(const tinygltf::Model& model)
 			(const uint8_t*)m_lights.data(),
 			&uploader);
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
@@ -2111,8 +2110,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, mipchain.GetImages(), &uploadContext);
 
 		// Compute CL
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-		cmdList->SetName(L"hdr_preprocess");
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "hdr_preprocess", 0);

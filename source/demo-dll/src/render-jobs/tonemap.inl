@@ -17,12 +17,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_tonemap_pass", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"tonemap_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tonemap_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "tonemap", 0);
 
 			// Descriptor Heaps

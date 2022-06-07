@@ -26,12 +26,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_gbuffer_pass", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"gbuffer_pass");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_pass", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_pass", 0);
 
 			passDesc.sourceVisBuffer->m_resource->Transition(cmdList, sourceTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -132,12 +128,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_gbuffer_decals", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"gbuffer_decals");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_decals", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_decals", 0);
 
 			passDesc.gbufferTargets[0]->m_resource->Transition(cmdList, gbufferTransitionTokens[0], 0, D3D12_RESOURCE_STATE_RENDER_TARGET);

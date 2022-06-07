@@ -22,12 +22,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_visibility_pass", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"visibility_pass_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"visibility_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "visibility_pass", 0);
 
 			passDesc.visBufferTarget->m_resource->Transition(cmdList, visBufferTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);

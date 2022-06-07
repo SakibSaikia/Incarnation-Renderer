@@ -361,7 +361,7 @@ namespace RenderBackend12
 	void FlushGPU();
 
 	// Command Lists
-	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
+	FCommandList* FetchCommandlist(const std::wstring& name, const D3D12_COMMAND_LIST_TYPE type);
 	FFenceMarker ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
