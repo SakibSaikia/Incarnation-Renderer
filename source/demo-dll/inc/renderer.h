@@ -27,6 +27,7 @@ struct FMeshPrimitive
 	size_t m_indexCount;
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	int m_materialIndex;
+	DirectX::BoundingSphere m_boundingSphere;
 };
 
 // Corresponds to GLTF Mesh

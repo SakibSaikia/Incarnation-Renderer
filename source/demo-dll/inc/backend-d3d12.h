@@ -254,9 +254,10 @@ struct FShaderBuffer
 	ResourceAllocationType m_allocType;
 	FResource* m_resource;
 	uint32_t m_uavIndex;
+	uint32_t m_nonShaderVisibleUavIndex;
 	uint32_t m_srvIndex;
 	~FShaderBuffer();
-	FShaderBuffer& operator==(FShaderBuffer&& other)
+	FShaderBuffer& operator=(FShaderBuffer&& other)
 	{
 		// FShaderBuffer(s) are moved during async level load. 
 		// A custom move assingment is used here because we want to avoid 
@@ -266,6 +267,7 @@ struct FShaderBuffer
 		m_resource = other.m_resource;
 		m_srvIndex = other.m_srvIndex;
 		m_uavIndex = other.m_uavIndex;
+		m_nonShaderVisibleUavIndex = other.m_nonShaderVisibleUavIndex;
 		other.m_resource = nullptr;
 		other.m_srvIndex = ~0u;
 		other.m_uavIndex = ~0u;
@@ -433,6 +435,7 @@ namespace RenderBackend12
 		const ResourceAccessMode accessMode,
 		const ResourceAllocationType allocType,
 		const size_t size,
+		const bool bCreateNonShaderVisibleDescriptor = false,
 		const uint8_t* pData = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 

@@ -1369,6 +1369,7 @@ public:
 			this, 
 			resource = buffer->m_resource, 
 			uavIndex = buffer->m_uavIndex,
+			nonShaderVisibleUavIndex = buffer->m_nonShaderVisibleUavIndex,
 			srvIndex = buffer->m_srvIndex
 		]() mutable
 		{
@@ -1382,6 +1383,11 @@ public:
 			if (srvIndex != ~0u)
 			{
 				GetBindlessPool()->ReturnIndex(srvIndex);
+			}
+
+			if (nonShaderVisibleUavIndex != ~0u)
+			{
+				GetNonShaderVisibleDescriptorPool().push(nonShaderVisibleUavIndex);
 			}
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
@@ -2734,6 +2740,7 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const ResourceAccessMode accessMode,
 	const ResourceAllocationType allocType,
 	const size_t size,
+	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
 	FResourceUploadContext* uploadContext)
 {
@@ -2810,13 +2817,11 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 
 	// UAV Descriptor
 	uint32_t uavIndex = ~0u;
+	uint32_t nonShaderVisibleUavIndex = ~0u;
 	if (accessMode != ResourceAccessMode::GpuReadOnly)
 	{
 		if (type == BufferType::Raw)
 		{
-			uavIndex = GetBindlessPool()->FetchIndex(ResourceType::Buffer);
-			D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
-
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 			uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
@@ -2824,7 +2829,19 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 			uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
 			uavDesc.Buffer.StructureByteStride = 0;
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+
+			uavIndex = GetBindlessPool()->FetchIndex(ResourceType::Buffer);
+			D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, descriptor);
+
+			if (bCreateNonShaderVisibleDescriptor)
+			{
+				bool ok = s_nonShaderVisibleDescriptorPool.try_pop(nonShaderVisibleUavIndex);
+				DebugAssert(ok, "Ran out of non shader visible descriptors");
+
+				D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, nonShaderVisibleUavIndex, false);
+				GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
+			}
 		}
 	}
 
@@ -2866,6 +2883,7 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	buffer->m_allocType = allocType;
 	buffer->m_resource = resource;
 	buffer->m_uavIndex = uavIndex;
+	buffer->m_nonShaderVisibleUavIndex = nonShaderVisibleUavIndex;
 	buffer->m_srvIndex = srvIndex;
 
 	return std::move(buffer);

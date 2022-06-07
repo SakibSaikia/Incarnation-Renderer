@@ -33,6 +33,7 @@ namespace Demo
 #include "render-jobs/gbuffer-pass.inl"
 #include "render-jobs/debug-visualization.inl"
 #include "render-jobs/highlight-pass.inl"
+#include "render-jobs/batch-culling.inl"
 
 namespace
 {
@@ -189,6 +190,11 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	static RenderJob::Sync jobSync;
 
 	static uint64_t frameIndex = 0;
+	size_t totalPrimitives = 0;
+	for (const auto& mesh : renderState.m_scene->m_sceneMeshes.m_entityList)
+	{
+		totalPrimitives += mesh.m_primitives.size();
+	}
 
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
@@ -201,6 +207,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderSurface> gbuffer_normals = RenderBackend12::CreateSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo = RenderBackend12::CreateSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs = RenderBackend12::CreateBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(FDrawWithRootConstants));
+	std::unique_ptr<FShaderBuffer> batchArgsBuffer = RenderBackend12::CreateBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, totalPrimitives * sizeof(FDrawWithRootConstants));
+	std::unique_ptr<FShaderBuffer> batchCountsBuffer = RenderBackend12::CreateBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
@@ -234,6 +242,15 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	else
 	{
 		Vector2 pixelJitter = c.EnableTAA && c.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+
+		// Cull Pass & Draw Call Generation
+		RenderJob::BatchCullingDesc cullDesc = {};
+		cullDesc.batchArgsBuffer = batchArgsBuffer.get();
+		cullDesc.batchCountsBuffer = batchCountsBuffer.get();
+		cullDesc.scene = renderState.m_scene;
+		cullDesc.view = &renderState.m_view;
+		cullDesc.primitiveCount = totalPrimitives;
+		renderJobs.push_back(RenderJob::BatchCulling(jobSync, cullDesc));
 
 		// Visibility Pass
 		RenderJob::VisibilityPassDesc visDesc = {};

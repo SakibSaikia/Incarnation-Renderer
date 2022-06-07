@@ -932,6 +932,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		// Bounds
 		DirectX::BoundingBox primitiveBounds = CalcBounds(posIt->second);
 		DirectX::BoundingBox::CreateMerged(meshBounds, meshBounds, primitiveBounds);
+		DirectX::BoundingSphere::CreateFromBoundingBox(outPrimitive.m_boundingSphere, primitiveBounds);
 	}
 
 	sceneCollection->m_entityList.push_back(newMesh);
@@ -962,6 +963,7 @@ void FScene::LoadMeshBuffers(const tinygltf::Model& model)
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			model.buffers[bufferIndex].data.size(),
+			false,
 			model.buffers[bufferIndex].data.data(),
 			&uploader);
 	}
@@ -992,6 +994,7 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 		ResourceAccessMode::GpuReadOnly,
 		ResourceAllocationType::Committed,
 		bufferSize,
+		false,
 		(const uint8_t*) views.data(),
 		&uploader);
 
@@ -1021,6 +1024,7 @@ void FScene::LoadMeshAccessors(const tinygltf::Model& model)
 		ResourceAccessMode::GpuReadOnly,
 		ResourceAllocationType::Committed,
 		bufferSize,
+		false,
 		(const uint8_t*) accessors.data(),
 		&uploader);
 
@@ -1042,8 +1046,10 @@ void FScene::CreateGpuPrimitiveBuffers()
 			for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
 			{
 				const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
+				const DirectX::BoundingSphere& bounds = primitive.m_boundingSphere;
 				FGpuPrimitive newPrimitive = {};
 				newPrimitive.m_localToWorld = m_sceneMeshes.m_transformList[meshIndex];
+				newPrimitive.m_boundingSphere = Vector4(bounds.Center.x, bounds.Center.y, bounds.Center.z, bounds.Radius);
 				newPrimitive.m_indexAccessor = primitive.m_indexAccessor;
 				newPrimitive.m_positionAccessor = primitive.m_positionAccessor;
 				newPrimitive.m_uvAccessor = primitive.m_uvAccessor;
@@ -1065,6 +1071,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			bufferSize,
+			false,
 			(const uint8_t*)primitives.data(),
 			&uploader);
 
@@ -1088,6 +1095,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			bufferSize,
+			false,
 			(const uint8_t*)primitiveCounts.data(),
 			&uploader);
 
@@ -1111,6 +1119,7 @@ void FScene::CreateGpuLightBuffers()
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			indexBufferSize,
+			false,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
 			&uploader);
 
@@ -1120,6 +1129,7 @@ void FScene::CreateGpuLightBuffers()
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			transformsBufferSize,
+			false,
 			(const uint8_t*)m_sceneLights.m_transformList.data(),
 			&uploader);
 
@@ -1329,6 +1339,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 		ResourceAccessMode::GpuReadOnly,
 		ResourceAllocationType::Committed,
 		bufferSize,
+		false,
 		(const uint8_t*)m_materialList.data(),
 		&uploader);
 
@@ -1885,6 +1896,7 @@ void FScene::LoadLights(const tinygltf::Model& model)
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			bufferSize,
+			false,
 			(const uint8_t*)m_lights.data(),
 			&uploader);
 

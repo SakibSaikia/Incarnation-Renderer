@@ -41,6 +41,7 @@ struct FMeshAccessor
 struct FGpuPrimitive
 {
 	Matrix m_localToWorld;
+	Vector4 m_boundingSphere;
 	int m_indexAccessor;
 	int m_positionAccessor;
 	int m_uvAccessor;
@@ -118,6 +119,6 @@ struct FDrawInstanced
 
 struct FDrawWithRootConstants
 {
-	uint32_t rootConstants[32];
+	uint32_t rootConstants[8];
 	FDrawInstanced drawArguments;
 };

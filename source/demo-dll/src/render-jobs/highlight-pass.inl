@@ -168,7 +168,7 @@ namespace RenderJob
 			argumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
 			argumentDescs[0].Constant.RootParameterIndex = 0;
 			argumentDescs[0].Constant.DestOffsetIn32BitValues = 0;
-			argumentDescs[0].Constant.Num32BitValuesToSet = 32;
+			argumentDescs[0].Constant.Num32BitValuesToSet = 8;
 			argumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
 
 			D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
