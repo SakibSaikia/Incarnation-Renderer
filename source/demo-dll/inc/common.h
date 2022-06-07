@@ -5,22 +5,24 @@
 
 enum class Viewmode
 {
-	Normal			= 0,
-	LightingOnly	= 1,
-	Roughness		= 2,
-	Metallic		= 3,
-	BaseColor		= 4,
-	Emissive		= 5,
-	NanCheck		= 6,
-	Reflections		= 7,
-	ObjectIds		= 8,
-	TriangleIds		= 9,
-	Normalmap		= 10
+	Normal				= 0,
+	LightingOnly		= 1,
+	Roughness			= 2,
+	Metallic			= 3,
+	BaseColor			= 4,
+	Emissive			= 5,
+	NanCheck			= 6,
+	Reflections			= 7,
+	ObjectIds			= 8,
+	TriangleIds			= 9,
+	Normalmap			= 10,
+	LightClusterSlices	= 11 
 };
 
 struct FConfig
 {
 	DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	bool UseGpuBasedValidation = false;
 	std::wstring ModelFilename = L"Sponza.gltf";
 	std::wstring EnvironmentFilename = L"lilienstein_2k.hdr";
 	bool UseContentCache = true;
