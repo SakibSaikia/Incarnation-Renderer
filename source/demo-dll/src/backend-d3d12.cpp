@@ -1545,6 +1545,10 @@ namespace RenderBackend12
 	winrt::com_ptr<D3DCommandQueue_t> s_computeQueue;
 	winrt::com_ptr<D3DCommandQueue_t> s_copyQueue;
 
+	tracy::D3D12QueueCtx* s_tracyGraphicsQueueCtx;
+	tracy::D3D12QueueCtx* s_tracyComputeQueueCtx;
+	tracy::D3D12QueueCtx* s_tracyCopyQueueCtx;
+
 	FCommandListPool s_commandListPool;
 	TBufferPool<D3D12_HEAP_TYPE_UPLOAD> s_uploadBufferPool;
 	TBufferPool<D3D12_HEAP_TYPE_READBACK> s_readbackBufferPool;
@@ -1706,14 +1710,17 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	cmdQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_graphicsQueue.put())));
 	s_graphicsQueue->SetName(L"graphics_queue");
+	s_tracyGraphicsQueueCtx = TracyD3D12Context(s_d3dDevice.get(), s_graphicsQueue.get());
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_computeQueue.put())));
 	s_computeQueue->SetName(L"compute_queue");
+	s_tracyComputeQueueCtx = TracyD3D12Context(s_d3dDevice.get(), s_computeQueue.get());
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.put())));
 	s_copyQueue->SetName(L"copy_queue");
+	s_tracyCopyQueueCtx = TracyD3D12Context(s_d3dDevice.get(), s_copyQueue.get());
 
 	// Shader Visible Bindless heap
 	{
@@ -1932,6 +1939,10 @@ void RenderBackend12::Teardown()
 			descriptorHeap.get()->Release();
 		}
 	}
+
+	TracyD3D12Destroy(s_tracyGraphicsQueueCtx);
+	TracyD3D12Destroy(s_tracyComputeQueueCtx);
+	TracyD3D12Destroy(s_tracyCopyQueueCtx);
 
 	s_swapChain.get()->Release();
 	s_dxgiFactory.get()->Release();
