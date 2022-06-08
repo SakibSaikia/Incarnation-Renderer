@@ -256,11 +256,14 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		RenderJob::VisibilityPassDesc visDesc = {};
 		visDesc.visBufferTarget = visBuffer.get();
 		visDesc.depthStencilTarget = depthBuffer.get();
+		visDesc.indirectArgsBuffer = batchArgsBuffer.get();
+		visDesc.indirectCountsBuffer = batchCountsBuffer.get();
 		visDesc.visBufferFormat = visBufferFormat;
 		visDesc.resX = resX;
 		visDesc.resY = resY;
 		visDesc.scene = renderState.m_scene;
 		visDesc.view = &renderState.m_view;
+		visDesc.scenePrimitiveCount = totalPrimitives;
 		visDesc.jitter = pixelJitter;
 		visDesc.renderConfig = c;
 		renderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));

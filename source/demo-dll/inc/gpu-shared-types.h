@@ -109,6 +109,7 @@ struct FLight
 	Vector2 m_spotAngles;
 };
 
+// Corresponds to D3D12_DRAW_ARGUMENTS
 struct FDrawInstanced
 {
 	uint32_t VertexCount;
