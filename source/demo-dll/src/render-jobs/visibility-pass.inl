@@ -76,8 +76,7 @@ namespace RenderJob
 			// View constant buffer
 			struct ViewCbLayout
 			{
-				Matrix viewTransform;
-				Matrix projectionTransform;
+				Matrix viewProjTransform;
 				Vector3 eyePos;
 			};
 
@@ -88,8 +87,7 @@ namespace RenderJob
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-					cbDest->viewTransform = passDesc.view->m_viewTransform;
-					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 				});
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

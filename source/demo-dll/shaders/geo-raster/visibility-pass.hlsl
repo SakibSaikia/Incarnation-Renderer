@@ -18,8 +18,7 @@ struct FrameCbLayout
 
 struct ViewCbLayout
 {
-	float4x4 viewTransform;
-	float4x4 projectionTransform;
+	float4x4 viewProjTransform;
 	float3 eyePos;
 };
 
@@ -47,12 +46,11 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 	FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_primitiveConstants.id * sizeof(FGpuPrimitive));
 
 	float4x4 localToWorld = mul(primitive.m_localToWorld, g_frameConstants.sceneRotation);
-	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
 
 	uint vertIndex = MeshMaterial::GetUint(index, primitive.m_indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 	float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
-	o.pos = mul(worldPos, viewProjTransform);
+	o.pos = mul(worldPos, g_viewConstants.viewProjTransform);
 	o.objectId = g_primitiveConstants.id;
 
 	return o;
