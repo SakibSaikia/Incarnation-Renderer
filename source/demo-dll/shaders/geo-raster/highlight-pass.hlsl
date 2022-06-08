@@ -4,7 +4,7 @@
 
 #define rootsig \
 	"RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED )," \
-    "RootConstants(b0, num32BitConstants=32, visibility = SHADER_VISIBILITY_ALL)," \
+    "RootConstants(b0, num32BitConstants=8, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)"
 
