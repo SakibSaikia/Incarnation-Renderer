@@ -19,7 +19,6 @@ struct FrameCbLayout
 struct ViewCbLayout
 {
 	float4x4 viewProjTransform;
-	float3 eyePos;
 };
 
 struct PrimitiveCbLayout

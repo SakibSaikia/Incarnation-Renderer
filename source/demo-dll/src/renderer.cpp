@@ -250,6 +250,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		cullDesc.scene = renderState.m_scene;
 		cullDesc.view = &renderState.m_view;
 		cullDesc.primitiveCount = totalPrimitives;
+		cullDesc.jitter = pixelJitter;
 		renderJobs.push_back(RenderJob::BatchCulling(jobSync, cullDesc));
 
 		// Visibility Pass

@@ -7,6 +7,7 @@ namespace RenderJob
 		const FScene* scene;
 		const FView* view;
 		size_t primitiveCount;
+		Vector2 jitter;
 	};
 
 	concurrency::task<void> BatchCulling(RenderJob::Sync& jobSync, const BatchCullingDesc& passDesc)
@@ -61,6 +62,7 @@ namespace RenderJob
 				uint32_t batchCountsBufferUavIndex;
 				uint32_t scenePrimitivesIndex;
 				uint32_t primitiveCount;
+				Matrix viewProjTransform;
 			};
 
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
@@ -74,6 +76,7 @@ namespace RenderJob
 					cb->batchCountsBufferUavIndex = passDesc.batchCountsBuffer->m_uavIndex;
 					cb->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cb->primitiveCount = (uint32_t)passDesc.primitiveCount;
+					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());

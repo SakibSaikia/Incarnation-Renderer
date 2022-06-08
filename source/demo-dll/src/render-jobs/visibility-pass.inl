@@ -77,7 +77,6 @@ namespace RenderJob
 			struct ViewCbLayout
 			{
 				Matrix viewProjTransform;
-				Vector3 eyePos;
 			};
 
 			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
