@@ -22,17 +22,16 @@ bool FrustumCull(FGpuPrimitive primitive)
     // Gribb-Hartmann frustum plane extraction
     // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
-    float4x4 M = transpose(g_viewProjTransform);
+    float4x4 M = transpose(mul(primitive.m_localToWorld, g_viewProjTransform));
     float4 nPlane = M[3] - M[2];
     float4 lPlane = M[3] + M[0];
     float4 rPlane = M[3] - M[0];
     float4 bPlane = M[3] + M[1];
     float4 tPlane = M[3] - M[1];
 
-    // World bounds
-    float4 boundsCenter = float4(primitive.m_boundingSphere.xyz, 1.f);
-    boundsCenter = mul(boundsCenter, primitive.m_localToWorld);
-    float boundsRadius = primitive.m_boundingSphere.w;
+    // Primitive bounds
+    const float4 boundsCenter = float4(primitive.m_boundingSphere.xyz, 1.f);
+    const float boundsRadius = primitive.m_boundingSphere.w;
 
     // Frustum test - scale the radius by the plane normal instead of normalizing the plane
     return (dot(boundsCenter, nPlane) + boundsRadius * length(nPlane.xyz) >= 0)
