@@ -35,6 +35,7 @@ struct FConfig
 	bool EnableSpecularIBL = true;
 	bool PathTrace = false;
 	bool EnableTAA = true;
+	bool FreezeCulling = false;
 	uint32_t MaxSampleCount = 256;
 	float Pathtracing_CameraAperture = 0.01f;
 	float Pathtracing_CameraFocalLength = 7.f;

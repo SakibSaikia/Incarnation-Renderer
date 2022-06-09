@@ -248,7 +248,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		cullDesc.batchArgsBuffer = batchArgsBuffer.get();
 		cullDesc.batchCountsBuffer = batchCountsBuffer.get();
 		cullDesc.scene = renderState.m_scene;
-		cullDesc.view = &renderState.m_view;
+		cullDesc.view = &renderState.m_cullingView;
 		cullDesc.primitiveCount = totalPrimitives;
 		cullDesc.jitter = pixelJitter;
 		renderJobs.push_back(RenderJob::BatchCulling(jobSync, cullDesc));

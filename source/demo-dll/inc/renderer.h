@@ -146,6 +146,7 @@ struct FRenderState
 	bool m_suspendRendering;
 	FScene* m_scene;
 	FView m_view;
+	FView m_cullingView;
 	uint32_t m_mouseX, m_mouseY;
 };
 

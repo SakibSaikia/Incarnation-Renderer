@@ -173,6 +173,7 @@ namespace Demo
 	FConfig s_globalConfig;
 	FScene s_scene;
 	FView s_view;
+	FView s_cullingView;
 	FController s_controller;
 	FTextureCache s_textureCache;
 	FSamplerCache s_samplerCache;
@@ -189,6 +190,7 @@ namespace Demo
 		s.m_suspendRendering = s_suspendRendering;
 		s.m_scene = &s_scene;
 		s.m_view = s_view;
+		s.m_cullingView = s_cullingView;
 		s.m_mouseX = s_controller.m_mouseCurrentPosition.x;
 		s.m_mouseY = s_controller.m_mouseCurrentPosition.y;
 		return s;
@@ -320,6 +322,10 @@ void Demo::Tick(float deltaTime)
 	// Tick components
 	s_controller.Tick(deltaTime);
 	s_view.Tick(deltaTime, &s_controller);
+	if (!s_globalConfig.FreezeCulling)
+	{
+		s_cullingView = s_view;
+	}
 
 	// Handle scene rotation
 	{
@@ -571,6 +577,8 @@ void Demo::UpdateUI(float deltaTime)
 
 		if (ImGui::CollapsingHeader("Debug"))
 		{
+			ImGui::Checkbox("Freeze Culling", &s_globalConfig.FreezeCulling);
+
 			int currentViewMode = s_globalConfig.Viewmode;
 			if (ImGui::TreeNode("View Modes"))
 			{
