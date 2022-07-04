@@ -378,6 +378,7 @@ namespace RenderBackend12
 
 	// Swap chain and back buffers
 	FShaderSurface* GetBackBuffer();
+	void WaitForSwapChain();
 	void PresentDisplay();
 
 	// Shaders

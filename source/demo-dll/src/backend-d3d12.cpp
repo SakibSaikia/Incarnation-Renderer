@@ -22,6 +22,7 @@ using namespace RenderBackend12;
 //														Constants
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 constexpr uint32_t k_backBufferCount = 3;
+constexpr uint32_t k_maxFrameLatency = k_backBufferCount - 1;
 constexpr size_t k_rtvHeapSize = 32;
 constexpr size_t k_dsvHeapSize = 8;
 constexpr size_t k_samplerHeapSize = 16;
@@ -1360,8 +1361,6 @@ public:
 			{
 				m_fence->SetEventOnCompletion(m_fenceValue, event);
 				WaitForSingleObject(event, INFINITE);
-
-
 			}
 		});
 
@@ -1838,17 +1837,21 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = k_backBufferCount;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
-	winrt::com_ptr<IDXGISwapChain1> swapChain;
+	winrt::com_ptr<IDXGISwapChain1> baseChain;
 	AssertIfFailed(s_dxgiFactory->CreateSwapChainForHwnd(
 			s_graphicsQueue.get(),
 			windowHandle,
 			&swapChainDesc,
 			nullptr,
 			nullptr,
-			swapChain.put()));
+			baseChain.put()));
 
-	AssertIfFailed(swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
+	AssertIfFailed(baseChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
+
+	s_swapChain->SetMaximumFrameLatency(std::max(1u, k_maxFrameLatency));
+
 
 	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.Format = config.BackBufferFormat;
@@ -2272,11 +2275,19 @@ D3DCommandQueue_t* RenderBackend12::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type
 	return nullptr;
 }
 
+void RenderBackend12::WaitForSwapChain()
+{
+	SCOPED_CPU_EVENT("wait_for_swap_chain", PIX_COLOR_DEFAULT);
+	HANDLE swapEvent = s_swapChain->GetFrameLatencyWaitableObject();
+	WaitForSingleObject(swapEvent, INFINITE);
+}
+
 void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
 
-	AssertIfFailed(s_swapChain->Present(0, 0));
+	// VSync - SyncInterval 1
+	AssertIfFailed(s_swapChain->Present(1, 0));
 
 	/*winrt::com_ptr<ID3D12DeviceRemovedExtendedData> dredData;
 	AssertIfFailed(GetDevice()->QueryInterface(IID_PPV_ARGS(dredData.put())));
@@ -2293,6 +2304,7 @@ void RenderBackend12::PresentDisplay()
 	s_currentBufferIndex = (s_currentBufferIndex + 1) % k_backBufferCount;
 
 	// If the buffer that was swapped in hasn't finished rendering on the GPU (from a previous submit), then wait!
+	// This wait will not be hit when using the waitable object
 	if (s_frameFence->GetCompletedValue() < s_frameFenceValues[s_currentBufferIndex])
 	{
 		SCOPED_CPU_EVENT("wait_on_previous_frame", PIX_COLOR_DEFAULT);
