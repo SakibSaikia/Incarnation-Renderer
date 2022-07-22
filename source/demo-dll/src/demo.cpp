@@ -531,7 +531,7 @@ void Demo::UpdateUI(float deltaTime)
 					int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
 					const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
 
-					FLight& light = GetScene()->m_lights[lightIndex];
+					FLight& light = GetScene()->m_lightList[lightIndex];
 					if (ImGui::CollapsingHeader(lightName.c_str()))
 					{
 						switch (light.m_type)
@@ -1875,27 +1875,27 @@ void FScene::LoadLights(const tinygltf::Model& model)
 	SCOPED_CPU_EVENT("load_lights", PIX_COLOR_DEFAULT);
 
 	// Load lights and initialize CPU-side copy
-	m_lights.resize(model.lights.size());
+	m_lightList.resize(model.lights.size());
 
 	concurrency::parallel_for(0, (int)model.lights .size(), [&](int i)
 	{
 		const tinygltf::Light& light = model.lights[i];
-		m_lights[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
-		m_lights[i].m_intensity = light.intensity;
-		m_lights[i].m_range = light.range;
-		m_lights[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
+		m_lightList[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
+		m_lightList[i].m_intensity = light.intensity;
+		m_lightList[i].m_range = light.range;
+		m_lightList[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
 
 		if (light.type == "directional")
-			m_lights[i].m_type = Light::Directional;
+			m_lightList[i].m_type = Light::Directional;
 		else if (light.type == "point")
-			m_lights[i].m_type = Light::Point;
+			m_lightList[i].m_type = Light::Point;
 		else if (light.type == "spot")
-			m_lights[i].m_type = Light::Spot;
+			m_lightList[i].m_type = Light::Spot;
 	});
 
-	if (!m_lights.empty())
+	if (!m_lightList.empty())
 	{
-		const size_t bufferSize = m_lights.size() * sizeof(FLight);
+		const size_t bufferSize = m_lightList.size() * sizeof(FLight);
 		FResourceUploadContext uploader{ bufferSize };
 
 		m_packedLightProperties = RenderBackend12::CreateBuffer(
@@ -1905,7 +1905,7 @@ void FScene::LoadLights(const tinygltf::Model& model)
 			ResourceAllocationType::Committed,
 			bufferSize,
 			false,
-			(const uint8_t*)m_lights.data(),
+			(const uint8_t*)m_lightList.data(),
 			&uploader);
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);

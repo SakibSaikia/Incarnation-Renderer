@@ -81,7 +81,7 @@ namespace RenderJob
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
-			//
+			// Initialize counts buffer to 0
 			const uint32_t clearValue[] = { 0, 0, 0, 0 };
 			d3dCmdList->ClearUnorderedAccessViewUint(
 				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.batchCountsBuffer->m_uavIndex),

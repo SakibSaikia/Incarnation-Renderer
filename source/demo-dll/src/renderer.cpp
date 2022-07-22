@@ -34,6 +34,7 @@ namespace Demo
 #include "render-jobs/debug-visualization.inl"
 #include "render-jobs/highlight-pass.inl"
 #include "render-jobs/batch-culling.inl"
+#include "render-jobs/light-culling.inl"
 
 namespace
 {
@@ -211,6 +212,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs = RenderBackend12::CreateBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(FDrawWithRootConstants));
 	std::unique_ptr<FShaderBuffer> batchArgsBuffer = RenderBackend12::CreateBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, totalPrimitives * sizeof(FDrawWithRootConstants));
 	std::unique_ptr<FShaderBuffer> batchCountsBuffer = RenderBackend12::CreateBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
+	std::unique_ptr<FShaderBuffer> culledLightCountBuffer = RenderBackend12::CreateBuffer(L"culled_light_count", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
+	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 128 * c.lightClusterDimX * c.lightClusterDimY * c.lightClusterDimZ * sizeof(uint32_t), true); // Max 128 lights per cluster
+	std::unique_ptr<FShaderBuffer> lightGridBuffer = RenderBackend12::CreateBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.lightClusterDimX * c.lightClusterDimY * c.lightClusterDimZ * sizeof(uint32_t)); // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
@@ -246,14 +250,29 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		Vector2 pixelJitter = c.EnableTAA && c.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 		// Cull Pass & Draw Call Generation
-		RenderJob::BatchCullingDesc cullDesc = {};
-		cullDesc.batchArgsBuffer = batchArgsBuffer.get();
-		cullDesc.batchCountsBuffer = batchCountsBuffer.get();
-		cullDesc.scene = renderState.m_scene;
-		cullDesc.view = &renderState.m_cullingView;
-		cullDesc.primitiveCount = totalPrimitives;
-		cullDesc.jitter = pixelJitter;
-		renderJobs.push_back(RenderJob::BatchCulling(jobSync, cullDesc));
+		RenderJob::BatchCullingDesc batchCullDesc = {};
+		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
+		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
+		batchCullDesc.scene = renderState.m_scene;
+		batchCullDesc.view = &renderState.m_cullingView;
+		batchCullDesc.primitiveCount = totalPrimitives;
+		batchCullDesc.jitter = pixelJitter;
+		renderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
+
+		// Light Culling
+		const size_t lightCount = renderState.m_scene->m_sceneLights.m_entityList.size();
+		if (lightCount > 0)
+		{
+			RenderJob::LightCullingDesc lightCullDesc = {};
+			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
+			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
+			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
+			lightCullDesc.renderConfig = c;
+			lightCullDesc.scene = renderState.m_scene;
+			lightCullDesc.view = &renderState.m_cullingView;
+			lightCullDesc.jitter = pixelJitter;
+			renderJobs.push_back(RenderJob::LightCulling(jobSync, lightCullDesc));
+		}
 
 		// Visibility Pass
 		RenderJob::VisibilityPassDesc visDesc = {};

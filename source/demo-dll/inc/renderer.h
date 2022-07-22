@@ -95,7 +95,7 @@ struct FScene
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Lights
-	std::vector<FLight> m_lights;
+	std::vector<FLight> m_lightList;
 	std::unique_ptr<FShaderBuffer> m_packedLightProperties;
 	std::unique_ptr<FShaderBuffer> m_packedLightIndices;
 	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;

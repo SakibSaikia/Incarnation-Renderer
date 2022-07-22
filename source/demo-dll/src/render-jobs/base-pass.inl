@@ -67,7 +67,7 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_lights.size();
+					const int lightCount = passDesc.scene->m_sceneLights.m_entityList.size();
 
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;

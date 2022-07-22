@@ -148,7 +148,7 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_lights.size();
+					const int lightCount = passDesc.scene->m_sceneLights.m_entityList.size();
 
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
 					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
@@ -158,7 +158,7 @@ namespace RenderJob
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->cameraAperture = passDesc.renderConfig.Pathtracing_CameraAperture;
 					cbDest->cameraFocalLength = passDesc.renderConfig.Pathtracing_CameraFocalLength;
-					cbDest->lightCount = passDesc.scene->m_lights.size();
+					cbDest->lightCount = passDesc.scene->m_lightList.size();
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
