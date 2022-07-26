@@ -1899,7 +1899,7 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		FResourceUploadContext uploader{ bufferSize };
 
 		m_packedGlobalLightProperties = RenderBackend12::CreateBuffer(
-			L"scene_light_properties",
+			L"global_light_properties",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
