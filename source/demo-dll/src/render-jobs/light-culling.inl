@@ -72,8 +72,8 @@ namespace RenderJob
 				uint32_t culledLightListsBufferUavIndex;
 				uint32_t lightGridBufferUavIndex;
 				uint32_t packedLightIndicesBufferIndex;
-				uint32_t packedLightPropertiesBufferIndex;
 				uint32_t packedLightTransformsBufferIndex;
+				uint32_t packedGlobalLightPropertiesBufferIndex;
 				uint32_t lightCount;
 				uint32_t __padding0;
 				uint32_t clusterGridSize[3];
@@ -93,7 +93,7 @@ namespace RenderJob
 					cb->lightGridBufferUavIndex = passDesc.lightGridBuffer->m_uavIndex;
 					cb->packedLightIndicesBufferIndex = passDesc.scene->m_packedLightIndices->m_srvIndex;
 					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
-					cb->packedLightPropertiesBufferIndex = passDesc.scene->m_packedLightProperties->m_srvIndex;
+					cb->packedGlobalLightPropertiesBufferIndex = passDesc.scene->m_packedGlobalLightProperties->m_srvIndex;
 					cb->lightCount = (uint32_t)passDesc.scene->m_sceneLights.m_entityList.size();
 					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
 					cb->clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;

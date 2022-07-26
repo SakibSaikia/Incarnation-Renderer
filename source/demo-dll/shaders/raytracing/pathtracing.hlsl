@@ -70,7 +70,7 @@ struct GlobalCbLayout
     int scenePrimitiveCountsIndex;
     uint currentSampleIndex;
     uint sqrtSampleCount;
-    int sceneLightPropertiesBufferIndex;
+    int globalLightPropertiesBufferIndex;
     int sceneLightIndicesBufferIndex;
     int sceneLightsTransformsBufferIndex;
 };
@@ -217,7 +217,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
 #if DIRECT_LIGHTING
     ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightIndicesBufferIndex];
-    ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightPropertiesBufferIndex];
+    ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_globalConstants.globalLightPropertiesBufferIndex];
     ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightsTransformsBufferIndex];
     for (int lightIndex = 0; lightIndex < g_globalConstants.lightCount; ++lightIndex)
     {

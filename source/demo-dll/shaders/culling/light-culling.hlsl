@@ -26,8 +26,8 @@ cbuffer cb : register(b0)
     uint g_culledLightListsBufferUavIndex;
     uint g_lightGridBufferUavIndex;
     uint g_packedLightIndicesBufferIndex;
-    uint g_packedLightPropertiesBufferIndex;
     uint g_packedLightTransformsBufferIndex;
+    uint g_packedGlobalLightPropertiesBufferIndex;
     uint g_lightCount;
     uint __padding0;
     uint3 g_clusterGridSize;

@@ -137,7 +137,7 @@ namespace RenderJob
 				int scenePrimitiveCountsIndex;
 				uint32_t currentSampleIndex;
 				uint32_t sqrtSampleCount;
-				int sceneLightPropertiesBufferIndex;
+				int globalLightPropertiesBufferIndex;
 				int sceneLightIndicesBufferIndex;
 				int sceneLightsTransformsBufferIndex;
 			};
@@ -158,7 +158,7 @@ namespace RenderJob
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->cameraAperture = passDesc.renderConfig.Pathtracing_CameraAperture;
 					cbDest->cameraFocalLength = passDesc.renderConfig.Pathtracing_CameraFocalLength;
-					cbDest->lightCount = passDesc.scene->m_lightList.size();
+					cbDest->lightCount = passDesc.scene->m_globalLightList.size();
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
@@ -167,7 +167,7 @@ namespace RenderJob
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
 					cbDest->sqrtSampleCount = std::sqrt(passDesc.renderConfig.MaxSampleCount);
-					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
+					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
 				});

@@ -531,7 +531,7 @@ void Demo::UpdateUI(float deltaTime)
 					int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
 					const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
 
-					FLight& light = GetScene()->m_lightList[lightIndex];
+					FLight& light = GetScene()->m_globalLightList[lightIndex];
 					if (ImGui::CollapsingHeader(lightName.c_str()))
 					{
 						switch (light.m_type)
@@ -1875,37 +1875,37 @@ void FScene::LoadLights(const tinygltf::Model& model)
 	SCOPED_CPU_EVENT("load_lights", PIX_COLOR_DEFAULT);
 
 	// Load lights and initialize CPU-side copy
-	m_lightList.resize(model.lights.size());
+	m_globalLightList.resize(model.lights.size());
 
 	concurrency::parallel_for(0, (int)model.lights .size(), [&](int i)
 	{
 		const tinygltf::Light& light = model.lights[i];
-		m_lightList[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
-		m_lightList[i].m_intensity = light.intensity;
-		m_lightList[i].m_range = light.range;
-		m_lightList[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
+		m_globalLightList[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
+		m_globalLightList[i].m_intensity = light.intensity;
+		m_globalLightList[i].m_range = light.range;
+		m_globalLightList[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
 
 		if (light.type == "directional")
-			m_lightList[i].m_type = Light::Directional;
+			m_globalLightList[i].m_type = Light::Directional;
 		else if (light.type == "point")
-			m_lightList[i].m_type = Light::Point;
+			m_globalLightList[i].m_type = Light::Point;
 		else if (light.type == "spot")
-			m_lightList[i].m_type = Light::Spot;
+			m_globalLightList[i].m_type = Light::Spot;
 	});
 
-	if (!m_lightList.empty())
+	if (!m_globalLightList.empty())
 	{
-		const size_t bufferSize = m_lightList.size() * sizeof(FLight);
+		const size_t bufferSize = m_globalLightList.size() * sizeof(FLight);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedLightProperties = RenderBackend12::CreateBuffer(
+		m_packedGlobalLightProperties = RenderBackend12::CreateBuffer(
 			L"scene_light_properties",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
 			bufferSize,
 			false,
-			(const uint8_t*)m_lightList.data(),
+			(const uint8_t*)m_globalLightList.data(),
 			&uploader);
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);

@@ -80,6 +80,8 @@ struct FScene
 	FSceneMeshEntities m_sceneMeshes;
 	FSceneMeshEntities m_sceneMeshDecals;
 	FSceneLightEntities m_sceneLights;
+	std::unique_ptr<FShaderBuffer> m_packedLightIndices; // Index into global light list
+	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
@@ -95,10 +97,8 @@ struct FScene
 	DirectX::BoundingBox m_sceneBounds; // world space
 
 	// Lights
-	std::vector<FLight> m_lightList;
-	std::unique_ptr<FShaderBuffer> m_packedLightProperties;
-	std::unique_ptr<FShaderBuffer> m_packedLightIndices;
-	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;
+	std::vector<FLight> m_globalLightList;
+	std::unique_ptr<FShaderBuffer> m_packedGlobalLightProperties;
 	FLightProbe m_environmentSky;
 
 	// Transform
