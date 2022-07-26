@@ -36,9 +36,10 @@ struct FConfig
 	bool PathTrace = false;
 	bool EnableTAA = true;
 	bool FreezeCulling = false;
-	int lightClusterDimX = 16;
-	int lightClusterDimY = 9;
-	int lightClusterDimZ = 24;
+	int LightClusterDimX = 16;
+	int LightClusterDimY = 9;
+	int LightClusterDimZ = 24;
+	int MaxLightsPerCluster = 64;
 	uint32_t MaxSampleCount = 256;
 	float Pathtracing_CameraAperture = 0.01f;
 	float Pathtracing_CameraFocalLength = 7.f;

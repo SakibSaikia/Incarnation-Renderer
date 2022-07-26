@@ -12,11 +12,13 @@
     #define THREAD_GROUP_SIZE_Z 1
 #endif
 
+#ifndef MAX_LIGHTS_PER_CLUSTER
+    #define MAX_LIGHTS_PER_CLUSTER 128
+#endif
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "CBV(b0)"
 
-static const uint k_maxLightsPerCluster = 128;
 
 cbuffer cb : register(b0)
 {
@@ -45,10 +47,10 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         // Per cluster - visible light count and light indices list
         uint visibleLightCount = 0;
-        uint visibleLightIndices[k_maxLightsPerCluster];
+        uint visibleLightIndices[MAX_LIGHTS_PER_CLUSTER];
 
         ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_packedLightIndicesBufferIndex];
-        for (uint i = 0; i < g_lightCount && visibleLightCount < k_maxLightsPerCluster; ++i)
+        for (uint i = 0; i < g_lightCount && visibleLightCount < MAX_LIGHTS_PER_CLUSTER; ++i)
         {
             const uint lightIndex = lightIndicesBuffer.Load<uint>(i * sizeof(uint));
             if (true)

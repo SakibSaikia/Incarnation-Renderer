@@ -46,7 +46,8 @@ namespace RenderJob
 			std::wstringstream s;
 			s << "THREAD_GROUP_SIZE_X=" << threadGroupSize[0] <<
 				" THREAD_GROUP_SIZE_Y=" << threadGroupSize[1] <<
-				" THREAD_GROUP_SIZE_Z=" << threadGroupSize[2];
+				" THREAD_GROUP_SIZE_Z=" << threadGroupSize[2] <<
+				" MAX_LIGHTS_PER_CLUSTER=" << passDesc.renderConfig.MaxLightsPerCluster;
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
@@ -94,9 +95,9 @@ namespace RenderJob
 					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
 					cb->packedLightPropertiesBufferIndex = passDesc.scene->m_packedLightProperties->m_srvIndex;
 					cb->lightCount = (uint32_t)passDesc.scene->m_sceneLights.m_entityList.size();
-					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.lightClusterDimX;
-					cb->clusterGridSize[1] = (uint32_t)passDesc.renderConfig.lightClusterDimY;
-					cb->clusterGridSize[2] = (uint32_t)passDesc.renderConfig.lightClusterDimZ;
+					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
+					cb->clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
+					cb->clusterGridSize[2] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
 					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 				});
 
@@ -117,9 +118,9 @@ namespace RenderJob
 				clearValue, 0, nullptr);
 
 			// Dispatch - one thread per cluster
-			const uint32_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.renderConfig.lightClusterDimX / threadGroupSize[0]), 1);
-			const uint32_t threadGroupCountY = std::max<size_t>(std::ceil(passDesc.renderConfig.lightClusterDimY / threadGroupSize[1]), 1);
-			const uint32_t threadGroupCountZ = std::max<size_t>(std::ceil(passDesc.renderConfig.lightClusterDimZ / threadGroupSize[2]), 1);
+			const uint32_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.renderConfig.LightClusterDimX / threadGroupSize[0]), 1);
+			const uint32_t threadGroupCountY = std::max<size_t>(std::ceil(passDesc.renderConfig.LightClusterDimY / threadGroupSize[1]), 1);
+			const uint32_t threadGroupCountZ = std::max<size_t>(std::ceil(passDesc.renderConfig.LightClusterDimZ / threadGroupSize[2]), 1);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
 
 			return cmdList;
