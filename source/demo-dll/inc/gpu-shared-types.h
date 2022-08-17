@@ -123,3 +123,9 @@ struct FDrawWithRootConstants
 	uint32_t m_rootConstants[8];
 	FDrawInstanced m_drawArguments;
 };
+
+struct FDebugStatsBuffer
+{
+	int m_culledPrimitives;
+	int m_culledLights;
+};

@@ -1783,7 +1783,7 @@ void FScene::ProcessReadbackTexture(FResourceReadbackContext* context, const std
 
 	for (int i = 0; i < mipchain.size(); ++i)
 	{
-		D3D12_SUBRESOURCE_DATA data = context->GetData(i);
+		D3D12_SUBRESOURCE_DATA data = context->GetTextureData(i);
 		DirectX::Image& mip = mipchain[i];
 		mip.width = width >> i;
 		mip.height = height >> i;

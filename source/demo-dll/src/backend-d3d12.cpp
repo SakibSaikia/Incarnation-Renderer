@@ -824,7 +824,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResour
 	return copyMarker;
 }
 
-D3D12_SUBRESOURCE_DATA FResourceReadbackContext::GetData(int subresourceIndex)
+D3D12_SUBRESOURCE_DATA FResourceReadbackContext::GetTextureData(int subresourceIndex)
 {
 	DebugAssert(subresourceIndex < m_layouts.size());
 	const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& subresourceLayout = m_layouts[subresourceIndex];

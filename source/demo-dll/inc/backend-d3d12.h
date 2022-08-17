@@ -312,7 +312,18 @@ public:
 	~FResourceReadbackContext();
 
 	FFenceMarker StageSubresources(FResource* sourceResource, const FFenceMarker sourceReadyMarker);
-	D3D12_SUBRESOURCE_DATA GetData(int subresourceIndex = 0);
+	D3D12_SUBRESOURCE_DATA GetTextureData(int subresourceIndex = 0);
+
+	template<class T> 
+	T* GetBufferData()
+	{
+		if (!m_mappedPtr)
+		{
+			m_readbackBuffer->m_d3dResource->Map(0, nullptr, (void**)&m_mappedPtr);
+		}
+
+		return reinterpret_cast<T*>(m_mappedPtr);
+	}
 
 private:
 	FResource* m_readbackBuffer;

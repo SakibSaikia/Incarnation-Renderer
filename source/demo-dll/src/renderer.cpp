@@ -13,9 +13,11 @@ namespace Demo
 	std::unique_ptr<FTexture> s_envBRDF;
 	std::unique_ptr<FShaderSurface> s_taaAccumulationBuffer;
 	std::unique_ptr<FShaderSurface> s_pathtraceHistoryBuffer;
+	std::unique_ptr<FShaderBuffer> s_debugStatsBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
 	Matrix s_prevViewProjectionTransform;
 	uint32_t s_pathtraceCurrentSampleIndex = 1;
+	FDebugStatsBuffer s_debugStats;
 }
 
 // Render Jobs
@@ -159,6 +161,7 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 	s_taaAccumulationBuffer = RenderBackend12::CreateSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
+	s_debugStatsBuffer = RenderBackend12::CreateBuffer(L"debug_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FDebugStatsBuffer));
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -174,6 +177,7 @@ void Demo::TeardownRenderer()
 	s_envBRDF.reset(nullptr);
 	s_pathtraceHistoryBuffer.reset(nullptr);
 	s_taaAccumulationBuffer.reset(nullptr);
+	s_debugStatsBuffer.reset(nullptr);
 }
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
@@ -253,6 +257,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		RenderJob::BatchCullingDesc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
 		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
+		batchCullDesc.debugStatsBuffer = Demo::s_debugStatsBuffer.get();
 		batchCullDesc.scene = renderState.m_scene;
 		batchCullDesc.view = &renderState.m_cullingView;
 		batchCullDesc.primitiveCount = totalPrimitives;
@@ -267,6 +272,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
 			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
 			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
+			lightCullDesc.debugStatsBuffer = Demo::s_debugStatsBuffer.get();
 			lightCullDesc.renderConfig = c;
 			lightCullDesc.scene = renderState.m_scene;
 			lightCullDesc.view = &renderState.m_cullingView;
@@ -416,7 +422,20 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	auto joinTask = concurrency::when_all(std::begin(renderJobs), std::end(renderJobs));
 	joinTask.wait();
 
+	// Present the frame
 	RenderBackend12::PresentDisplay();
+
+	// Read back debug stats from GPU passes
+	auto debugReadbackContext = std::make_shared<FResourceReadbackContext>(Demo::s_debugStatsBuffer->m_resource);
+	FFenceMarker frameCompleteMarker{ jobSync.m_fence.get(), jobSync.m_fenceValue};
+	FFenceMarker readbackCompleteCompleteMarker = debugReadbackContext->StageSubresources(Demo::s_debugStatsBuffer->m_resource, frameCompleteMarker);
+	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
+	{
+			readbackCompleteCompleteMarker.BlockingWait();
+	}).then([debugReadbackContext]()
+		{
+			auto debugStatsData = debugReadbackContext->GetBufferData<FDebugStatsBuffer>();
+		});
 }
 
 void Demo::ResetPathtraceAccumulation()

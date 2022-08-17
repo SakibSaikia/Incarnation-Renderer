@@ -4,6 +4,7 @@ namespace RenderJob
 	{
 		FShaderBuffer* batchArgsBuffer;
 		FShaderBuffer* batchCountsBuffer;
+		FShaderBuffer* debugStatsBuffer;
 		const FScene* scene;
 		const FView* view;
 		size_t primitiveCount;
@@ -60,6 +61,7 @@ namespace RenderJob
 			{
 				uint32_t batchArgsBufferUavIndex;
 				uint32_t batchCountsBufferUavIndex;
+				uint32_t debugStatsBufferUavIndex;
 				uint32_t scenePrimitivesIndex;
 				uint32_t primitiveCount;
 				Matrix viewProjTransform;
@@ -74,6 +76,7 @@ namespace RenderJob
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->batchArgsBufferUavIndex = passDesc.batchArgsBuffer->m_uavIndex;
 					cb->batchCountsBufferUavIndex = passDesc.batchCountsBuffer->m_uavIndex;
+					cb->debugStatsBufferUavIndex = passDesc.debugStatsBuffer->m_uavIndex;
 					cb->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cb->primitiveCount = (uint32_t)passDesc.primitiveCount;
 					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);

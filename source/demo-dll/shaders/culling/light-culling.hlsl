@@ -32,7 +32,7 @@ cbuffer cb : register(b0)
     uint g_packedLightTransformsBufferIndex;
     uint g_packedGlobalLightPropertiesBufferIndex;
     uint g_lightCount;
-    uint __padding0;
+    uint g_debugStatsBufferUavIndex;
     uint3 g_clusterGridSize;
     uint __padding1;
     float4x4 g_ProjTransform;
@@ -143,6 +143,14 @@ bool FrustumCull(FFrustum frustum, float4 bounds)
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
 {
+    RWByteAddressBuffer debugStatsBuffer = ResourceDescriptorHeap[g_debugStatsBufferUavIndex];
+    if ((clusterIndex.x | clusterIndex.y | clusterIndex.z) == 0)
+    {
+        debugStatsBuffer.Store(sizeof(int), 0);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
     if (clusterIndex.x < g_clusterGridSize.x &&
         clusterIndex.y < g_clusterGridSize.y &&
         clusterIndex.z < g_clusterGridSize.z)
@@ -179,6 +187,11 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
                 visibleLightIndices[visibleLightCount++] = globalLightIndex;
+            }
+            else
+            {
+                int previousValue;
+                debugStatsBuffer.InterlockedAdd(sizeof(int), 1, previousValue);
             }
         }
 
