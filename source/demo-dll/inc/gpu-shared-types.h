@@ -112,14 +112,14 @@ struct FLight
 // Corresponds to D3D12_DRAW_ARGUMENTS
 struct FDrawInstanced
 {
-	uint32_t VertexCount;
-	uint32_t InstanceCount;
-	uint32_t StartVertexLocation;
-	uint32_t StartInstanceLocation;
+	uint32_t m_vertexCount;
+	uint32_t m_instanceCount;
+	uint32_t m_startVertexLocation;
+	uint32_t m_startInstanceLocation;
 };
 
 struct FDrawWithRootConstants
 {
-	uint32_t rootConstants[8];
-	FDrawInstanced drawArguments;
+	uint32_t m_rootConstants[8];
+	FDrawInstanced m_drawArguments;
 };
