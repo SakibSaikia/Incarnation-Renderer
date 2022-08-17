@@ -763,7 +763,7 @@ FResourceUploadContext::~FResourceUploadContext()
 }
 
 FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
-	m_mappedPtr {nullptr}
+	m_source {resource}, m_mappedPtr {nullptr}
 {
 	size_t readbackSizeInBytes = resource->GetSizeBytes();
 	DebugAssert(readbackSizeInBytes != 0);
@@ -778,9 +778,9 @@ FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
 	m_readbackBuffer = GetReadbackBufferPool()->GetOrCreate(L"readback_context_buffer", readbackSizeInBytes);
 }
 
-FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResource, const FFenceMarker sourceReadyMarker)
+FFenceMarker FResourceReadbackContext::StageSubresources(const FFenceMarker sourceReadyMarker)
 {
-	D3D12_RESOURCE_DESC desc = sourceResource->m_d3dResource->GetDesc();
+	D3D12_RESOURCE_DESC desc = m_source->m_d3dResource->GetDesc();
 
 	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
 	UINT64 totalBytes = 0;
@@ -798,7 +798,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResour
 		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(
 			m_readbackBuffer->m_d3dResource,
 			m_layouts[0].Offset,
-			sourceResource->m_d3dResource,
+			m_source->m_d3dResource,
 			0,
 			m_layouts[0].Footprint.Width);
 	}
@@ -807,7 +807,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResour
 		for (UINT i = 0; i < desc.MipLevels; ++i)
 		{
 			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-			srcLocation.pResource = sourceResource->m_d3dResource;
+			srcLocation.pResource = m_source->m_d3dResource;
 			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 			srcLocation.SubresourceIndex = i;
 

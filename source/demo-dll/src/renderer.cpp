@@ -428,7 +428,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	// Read back debug stats from GPU passes
 	auto debugReadbackContext = std::make_shared<FResourceReadbackContext>(Demo::s_debugStatsBuffer->m_resource);
 	FFenceMarker frameCompleteMarker{ jobSync.m_fence.get(), jobSync.m_fenceValue};
-	FFenceMarker readbackCompleteCompleteMarker = debugReadbackContext->StageSubresources(Demo::s_debugStatsBuffer->m_resource, frameCompleteMarker);
+	FFenceMarker readbackCompleteCompleteMarker = debugReadbackContext->StageSubresources(frameCompleteMarker);
 	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
 	{
 			readbackCompleteCompleteMarker.BlockingWait();

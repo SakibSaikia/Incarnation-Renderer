@@ -311,7 +311,7 @@ public:
 	explicit FResourceReadbackContext(const FResource* resource);
 	~FResourceReadbackContext();
 
-	FFenceMarker StageSubresources(FResource* sourceResource, const FFenceMarker sourceReadyMarker);
+	FFenceMarker StageSubresources(const FFenceMarker sourceReadyMarker);
 	D3D12_SUBRESOURCE_DATA GetTextureData(int subresourceIndex = 0);
 
 	template<class T> 
@@ -326,6 +326,7 @@ public:
 	}
 
 private:
+	const FResource* m_source;
 	FResource* m_readbackBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;

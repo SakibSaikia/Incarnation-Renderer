@@ -1733,7 +1733,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 
 	// Copy back normal texture and compress
 	auto normalmapReadbackContext = std::make_shared<FResourceReadbackContext>(normalmapFilterUav->m_resource);
-	FFenceMarker normalmapStageCompleteMarker = normalmapReadbackContext->StageSubresources(normalmapFilterUav->m_resource, fenceMarker);
+	FFenceMarker normalmapStageCompleteMarker = normalmapReadbackContext->StageSubresources(fenceMarker);
 	auto normalmapProcessingJob = concurrency::create_task([normalmapStageCompleteMarker, this]()
 	{
 		normalmapStageCompleteMarker.BlockingWait();
@@ -1753,7 +1753,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 
 	// Copy back metallic-roughness texture and compress
 	auto metallicRoughnessReadbackContext = std::make_shared<FResourceReadbackContext>(metallicRoughnessFilterUav->m_resource);
-	FFenceMarker metallicRoughnessStageCompleteMarker = metallicRoughnessReadbackContext->StageSubresources(metallicRoughnessFilterUav->m_resource, fenceMarker);
+	FFenceMarker metallicRoughnessStageCompleteMarker = metallicRoughnessReadbackContext->StageSubresources(fenceMarker);
 	auto metallicRoughnessProcessingJob = concurrency::create_task([metallicRoughnessStageCompleteMarker, this]()
 	{
 		metallicRoughnessStageCompleteMarker.BlockingWait();
