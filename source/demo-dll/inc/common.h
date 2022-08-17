@@ -23,7 +23,7 @@ struct FConfig
 {
 	DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	bool UseGpuBasedValidation = false;
-	std::wstring ModelFilename = L"Sponza.gltf";
+	std::wstring ModelFilename = L"sponza.gltf";
 	std::wstring EnvironmentFilename = L"lilienstein_2k.hdr";
 	bool UseContentCache = true;
 	float Fov = 0.25f * DirectX::XM_PI;

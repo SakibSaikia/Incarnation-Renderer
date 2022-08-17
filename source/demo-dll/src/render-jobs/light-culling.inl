@@ -78,7 +78,8 @@ namespace RenderJob
 				uint32_t __padding0;
 				uint32_t clusterGridSize[3];
 				uint32_t __padding1;
-				Matrix viewProjTransform;
+				Matrix projTransform;
+				Matrix invViewProjTransform;
 			};
 
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
@@ -98,7 +99,8 @@ namespace RenderJob
 					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
 					cb->clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
 					cb->clusterGridSize[2] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
-					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+					cb->projTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
