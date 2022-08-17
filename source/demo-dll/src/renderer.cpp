@@ -13,11 +13,11 @@ namespace Demo
 	std::unique_ptr<FTexture> s_envBRDF;
 	std::unique_ptr<FShaderSurface> s_taaAccumulationBuffer;
 	std::unique_ptr<FShaderSurface> s_pathtraceHistoryBuffer;
-	std::unique_ptr<FShaderBuffer> s_debugStatsBuffer;
+	std::unique_ptr<FShaderBuffer> s_renderStatsBuffer;
 	std::vector<Vector2> s_pixelJitterValues;
 	Matrix s_prevViewProjectionTransform;
 	uint32_t s_pathtraceCurrentSampleIndex = 1;
-	FDebugStatsBuffer s_debugStats;
+	FRenderStatsBuffer s_renderStats;
 }
 
 // Render Jobs
@@ -154,6 +154,11 @@ namespace
 	}
 }
 
+FRenderStatsBuffer Demo::GetRenderStats()
+{
+	return Demo::s_renderStats;
+}
+
 void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 {
 
@@ -161,7 +166,7 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 	s_taaAccumulationBuffer = RenderBackend12::CreateSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
-	s_debugStatsBuffer = RenderBackend12::CreateBuffer(L"debug_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FDebugStatsBuffer));
+	s_renderStatsBuffer = RenderBackend12::CreateBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStatsBuffer));
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -177,7 +182,7 @@ void Demo::TeardownRenderer()
 	s_envBRDF.reset(nullptr);
 	s_pathtraceHistoryBuffer.reset(nullptr);
 	s_taaAccumulationBuffer.reset(nullptr);
-	s_debugStatsBuffer.reset(nullptr);
+	s_renderStatsBuffer.reset(nullptr);
 }
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
@@ -257,7 +262,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		RenderJob::BatchCullingDesc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
 		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
-		batchCullDesc.debugStatsBuffer = Demo::s_debugStatsBuffer.get();
+		batchCullDesc.renderStatsBuffer = Demo::s_renderStatsBuffer.get();
 		batchCullDesc.scene = renderState.m_scene;
 		batchCullDesc.view = &renderState.m_cullingView;
 		batchCullDesc.primitiveCount = totalPrimitives;
@@ -272,7 +277,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
 			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
 			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
-			lightCullDesc.debugStatsBuffer = Demo::s_debugStatsBuffer.get();
+			lightCullDesc.renderStatsBuffer = Demo::s_renderStatsBuffer.get();
 			lightCullDesc.renderConfig = c;
 			lightCullDesc.scene = renderState.m_scene;
 			lightCullDesc.view = &renderState.m_cullingView;
@@ -425,16 +430,16 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	// Present the frame
 	RenderBackend12::PresentDisplay();
 
-	// Read back debug stats from GPU passes
-	auto debugReadbackContext = std::make_shared<FResourceReadbackContext>(Demo::s_debugStatsBuffer->m_resource);
+	// Read back render stats from the GPU
+	auto renderStatsReadbackContext = std::make_shared<FResourceReadbackContext>(Demo::s_renderStatsBuffer->m_resource);
 	FFenceMarker frameCompleteMarker{ jobSync.m_fence.get(), jobSync.m_fenceValue};
-	FFenceMarker readbackCompleteCompleteMarker = debugReadbackContext->StageSubresources(frameCompleteMarker);
+	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(frameCompleteMarker);
 	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
 	{
 			readbackCompleteCompleteMarker.BlockingWait();
-	}).then([debugReadbackContext]()
+	}).then([renderStatsReadbackContext]()
 		{
-			auto debugStatsData = debugReadbackContext->GetBufferData<FDebugStatsBuffer>();
+			Demo::s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStatsBuffer>();
 		});
 }
 

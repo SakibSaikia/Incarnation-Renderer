@@ -124,7 +124,7 @@ struct FDrawWithRootConstants
 	FDrawInstanced m_drawArguments;
 };
 
-struct FDebugStatsBuffer
+struct FRenderStatsBuffer
 {
 	int m_culledPrimitives;
 	int m_culledLights;

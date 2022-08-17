@@ -609,6 +609,15 @@ void Demo::UpdateUI(float deltaTime)
 		}
 	}
 	ImGui::End();
+
+	ImGui::Begin("Render Stats");
+	{
+		FRenderStatsBuffer stats = Demo::GetRenderStats();
+		ImGui::Text("Culled Primitives		%d ", stats.m_culledPrimitives);
+		ImGui::Text("Culled Lights			%d ", stats.m_culledLights);
+	}
+	ImGui::End();
+
 	ImGui::EndFrame();
 	ImGui::Render();
 

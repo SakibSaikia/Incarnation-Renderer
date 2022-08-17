@@ -153,6 +153,7 @@ struct FRenderState
 namespace Demo
 {
 	FRenderState GetRenderState();
+	FRenderStatsBuffer GetRenderStats();
 	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
 	void TeardownRenderer();
