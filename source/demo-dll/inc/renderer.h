@@ -96,6 +96,7 @@ struct FScene
 	std::unique_ptr<FShaderBuffer> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
+	size_t m_primitiveCount;
 
 	// Lights
 	std::vector<FLight> m_globalLightList;

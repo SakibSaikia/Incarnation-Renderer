@@ -613,8 +613,8 @@ void Demo::UpdateUI(float deltaTime)
 	ImGui::Begin("Render Stats");
 	{
 		FRenderStatsBuffer stats = Demo::GetRenderStats();
-		ImGui::Text("Culled Primitives		%d ", stats.m_culledPrimitives);
-		ImGui::Text("Culled Lights			%d ", stats.m_culledLights);
+		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float) GetScene()->m_primitiveCount);
+		ImGui::Text("Culled Lights			%d", stats.m_culledLights);
 	}
 	ImGui::End();
 
@@ -798,6 +798,13 @@ void FScene::ReloadModel(const std::wstring& filename)
 	for (const auto& bb : meshWorldBounds)
 	{
 		DirectX::BoundingBox::CreateMerged(m_sceneBounds, m_sceneBounds, bb);
+	}
+
+	// Primitive counts
+	m_primitiveCount = 0;
+	for (const FMesh& mesh : m_sceneMeshes.m_entityList)
+	{
+		m_primitiveCount += mesh.m_primitives.size();
 	}
 
 	CreateAccelerationStructures(model);
@@ -1926,6 +1933,8 @@ void FScene::LoadLights(const tinygltf::Model& model)
 
 void FScene::Clear()
 {
+	m_primitiveCount = 0;
+
 	m_cameras.clear();
 	m_meshBuffers.clear();
 	m_blasList.clear();
