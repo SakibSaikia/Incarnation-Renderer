@@ -215,7 +215,7 @@ namespace RenderJob
 			d3dCmdList->OMSetRenderTargets(3, rtvs, FALSE, &dsv);
 
 			// Issue decal draws
-			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshDecals.m_entityList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshDecals.GetCount(); ++meshIndex)
 			{
 				const FMesh& mesh = passDesc.scene->m_sceneMeshDecals.m_entityList[meshIndex];
 				SCOPED_COMMAND_LIST_EVENT(cmdList, passDesc.scene->m_sceneMeshDecals.m_entityNames[meshIndex].c_str(), 0);

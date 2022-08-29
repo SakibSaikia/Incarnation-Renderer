@@ -518,7 +518,7 @@ void Demo::UpdateUI(float deltaTime)
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
-		int lightCount = GetScene()->m_sceneLights.m_entityList.size();
+		int lightCount = GetScene()->m_sceneLights.GetCount();
 		if (lightCount > 0)
 		{
 			if (ImGui::CollapsingHeader("Lights"))
@@ -1057,7 +1057,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 	// Packed buffer that contains an array of FGpuPrimitive(s)
 	{
 		std::vector<FGpuPrimitive> primitives;
-		for (int meshIndex = 0; meshIndex < m_sceneMeshes.m_entityList.size(); ++meshIndex)
+		for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
 		{
 			const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
 			for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
@@ -1124,10 +1124,11 @@ void FScene::CreateGpuPrimitiveBuffers()
 
 void FScene::CreateGpuLightBuffers()
 {
-	if (!m_sceneLights.m_entityList.empty())
+	const size_t numLights = m_sceneLights.GetCount();
+	if (numLights > 0)
 	{
-		const size_t indexBufferSize = m_sceneLights.m_entityList.size() * sizeof(int);
-		const size_t transformsBufferSize = m_sceneLights.m_transformList.size() * sizeof(Matrix);
+		const size_t indexBufferSize = numLights * sizeof(int);
+		const size_t transformsBufferSize = numLights * sizeof(Matrix);
 		FResourceUploadContext uploader{ indexBufferSize + transformsBufferSize };
 
 		m_packedLightIndices = RenderBackend12::CreateBuffer(
@@ -1161,7 +1162,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"create_acceleration_structure", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-	for (int meshIndex = 0; meshIndex < m_sceneMeshes.m_entityList.size(); ++meshIndex)
+	for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
 	{
 		const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
 		const std::string& meshName = m_sceneMeshes.m_entityNames[meshIndex];

@@ -67,7 +67,7 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_sceneLights.m_entityList.size();
+					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
 
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
@@ -123,7 +123,7 @@ namespace RenderJob
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
 			// Issue scene draws
-			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.GetCount(); ++meshIndex)
 			{
 				const FMesh& mesh = passDesc.scene->m_sceneMeshes.m_entityList[meshIndex];
 				SCOPED_COMMAND_LIST_EVENT(cmdList, passDesc.scene->m_sceneMeshes.m_entityNames[meshIndex].c_str(), 0);

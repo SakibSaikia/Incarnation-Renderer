@@ -12,10 +12,10 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "update_tlas", PIX_COLOR_DEFAULT);
 
 			std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-			instanceDescs.reserve(scene->m_sceneMeshes.m_entityList.size());
+			instanceDescs.reserve(scene->m_sceneMeshes.GetCount());
 			int instanceIndex = 0;
 
-			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.GetCount(); ++meshIndex)
 			{
 				const FMesh& mesh = scene->m_sceneMeshes.m_entityList[meshIndex];
 				const std::string& meshName = scene->m_sceneMeshes.m_entityNames[meshIndex];

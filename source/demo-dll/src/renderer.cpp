@@ -270,7 +270,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		renderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
 
 		// Light Culling
-		const size_t lightCount = renderState.m_scene->m_sceneLights.m_entityList.size();
+		const size_t lightCount = renderState.m_scene->m_sceneLights.GetCount();
 		if (lightCount > 0)
 		{
 			RenderJob::LightCullingDesc lightCullDesc = {};

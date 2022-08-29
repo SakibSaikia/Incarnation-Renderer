@@ -148,7 +148,7 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_sceneLights.m_entityList.size();
+					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
 
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
 					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
