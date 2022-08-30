@@ -15,6 +15,7 @@ cbuffer cb : register(b0)
     uint g_renderStatsBufferIndex;
     uint g_primitivesBufferIndex;
     uint g_primitiveCount;
+    uint3 __pad;
     float4x4 g_viewProjTransform;
 };
 
