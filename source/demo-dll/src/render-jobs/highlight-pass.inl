@@ -164,7 +164,7 @@ namespace RenderJob
 			d3dCmdList->SetPipelineState(pso);
 
 			// Command signature
-			D3DCommandSignature_t* commandSignature = RenderBackend12::CacheCommandSignature(FIndirectDrawWithRootConstants::GetCommandSignature(), rootsig->m_rootsig);
+			D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
 
 			d3dCmdList->ExecuteIndirect(
 				commandSignature,

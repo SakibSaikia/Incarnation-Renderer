@@ -176,19 +176,7 @@ namespace RenderJob
 			d3dCmdList->SetPipelineState(pso);
 
 			// Command signature
-			D3D12_INDIRECT_ARGUMENT_DESC argumentDescs[2] = {};
-			argumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-			argumentDescs[0].Constant.RootParameterIndex = 0;
-			argumentDescs[0].Constant.DestOffsetIn32BitValues = 0;
-			argumentDescs[0].Constant.Num32BitValuesToSet = 8;
-			argumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-
-			D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
-			commandSignatureDesc.pArgumentDescs = argumentDescs;
-			commandSignatureDesc.NumArgumentDescs = 2;
-			commandSignatureDesc.ByteStride = sizeof(FIndirectDrawWithRootConstants);
-
-			D3DCommandSignature_t* commandSignature = RenderBackend12::CacheCommandSignature(commandSignatureDesc, rootsig->m_rootsig);
+			D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
 
 			d3dCmdList->ExecuteIndirect(
 				commandSignature,

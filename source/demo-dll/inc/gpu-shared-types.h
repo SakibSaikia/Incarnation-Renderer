@@ -121,17 +121,17 @@ struct FDrawInstanced
 
 struct FIndirectDrawWithRootConstants
 {
-	uint32_t m_rootConstants[8];
+	uint32_t m_rootConstants[32];
 	FDrawInstanced m_drawArguments;
 
 #ifdef __cplusplus
-	static D3D12_COMMAND_SIGNATURE_DESC GetCommandSignature()
+	static D3DCommandSignature_t* GetCommandSignature(D3DRootSignature_t* rootsig)
 	{
 		D3D12_INDIRECT_ARGUMENT_DESC argumentDescs[2] = {};
 		argumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
 		argumentDescs[0].Constant.RootParameterIndex = 0;
 		argumentDescs[0].Constant.DestOffsetIn32BitValues = 0;
-		argumentDescs[0].Constant.Num32BitValuesToSet = 8;
+		argumentDescs[0].Constant.Num32BitValuesToSet = 32;
 		argumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
 
 		D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
@@ -139,7 +139,7 @@ struct FIndirectDrawWithRootConstants
 		commandSignatureDesc.NumArgumentDescs = 2;
 		commandSignatureDesc.ByteStride = sizeof(FIndirectDrawWithRootConstants);
 
-		return commandSignatureDesc;
+		return RenderBackend12::CacheCommandSignature(commandSignatureDesc, rootsig);
 	}
 #endif
 };
