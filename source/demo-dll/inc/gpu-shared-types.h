@@ -6,6 +6,7 @@
 	#define Vector3		float3
 	#define Vector4		float4
 	#define Matrix		float4x4
+	#define Color		float4
 #else
 	#include <SimpleMath.h>
 	using namespace DirectX::SimpleMath;
@@ -124,14 +125,17 @@ struct FIndirectDrawWithRootConstants
 	FDrawInstanced m_drawArguments;
 };
 
-struct FIndirectDrawWithTransform
-{
-	Matrix m_localToWorld;
-	FDrawInstanced m_drawArguments;
-};
-
 struct FRenderStatsBuffer
 {
 	int m_culledPrimitives;
 	int m_culledLights;
+};
+
+struct FDebugDrawCmd
+{
+	uint32_t m_shapeType;
+	uint32_t m_fillType;
+	Color m_color;
+	Matrix m_transform;
+	bool m_persistent;
 };

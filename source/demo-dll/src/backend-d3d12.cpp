@@ -677,6 +677,7 @@ void FResourceUploadContext::UpdateSubresources(
 	size_t capacity = m_sizeInBytes - m_currentOffset;
 	DebugAssert(totalBytes <= capacity, "Upload buffer is too small!");
 
+	// Copy CPU data to mapped upload resource
 	for (UINT i = 0; i < srcData.size(); ++i)
 	{
 		D3D12_SUBRESOURCE_DATA src;
@@ -705,6 +706,7 @@ void FResourceUploadContext::UpdateSubresources(
 		}
 	}
 
+	// Issue GPU copy from upload resource to destination resource
 	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
 		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(

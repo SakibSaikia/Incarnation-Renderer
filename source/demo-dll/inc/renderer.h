@@ -160,7 +160,9 @@ struct FRenderState
 
 struct FDebugDraw : public FModelLoader
 {
-	enum Shapes
+	static const size_t MaxCommands = 256;
+
+	enum Shape : uint32_t
 	{
 		Cube,
 		Icosphere,
@@ -171,14 +173,26 @@ struct FDebugDraw : public FModelLoader
 		Count
 	};
 
-	void LoadModels();
+	enum FillMode : uint32_t
+	{
+		Wireframe,
+		Solid
+	};
+
+	void Initialize();
+	void Render(Shape shapeType, FillMode fillType, Color color, Matrix transform, bool bPersistent = false);
+	void Flush();
 
 private:
-	FMeshPrimitive m_shapePrimitives[Shapes::Count];
+	FMeshPrimitive m_shapePrimitives[Shape::Count];
 	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
 	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
 	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+
+	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.
+	std::vector<FDebugDrawCmd> m_queuedCommands;
+	std::unique_ptr<FShaderBuffer> m_queuedCommandsBuffer;
 };
 
 namespace Demo

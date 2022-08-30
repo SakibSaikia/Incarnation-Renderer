@@ -241,7 +241,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	ok = ok && ShaderCompiler::Initialize();
 
 	InitializeRenderer(resX, resY);
-	s_debugDraw.LoadModels();
+	s_debugDraw.Initialize();
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();

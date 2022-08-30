@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <dxcapi.h>
 #include <random>
+#include <algorithm>
 #include <tiny_gltf.h>
 
 namespace Demo
@@ -177,9 +178,9 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 	}
 }
 
-void FDebugDraw::LoadModels()
+void FDebugDraw::Initialize()
 {
-	std::unordered_map<std::string, FDebugDraw::Shapes> primitiveNameMapping =
+	std::unordered_map<std::string, FDebugDraw::Shape> primitiveNameMapping =
 	{	
 		{"Cube", FDebugDraw::Cube},
 		{"Icosphere", FDebugDraw::Icosphere},
@@ -311,6 +312,63 @@ void FDebugDraw::LoadModels()
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
+
+	// Buffer that contains queued debug draw commands
+	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd), true);
+}
+
+void FDebugDraw::Render(Shape shapeType, FillMode fillType, Color color, Matrix transform, bool bPersistent)
+{
+	m_queuedCommands.push_back({ shapeType, fillType, color, transform, bPersistent });
+}
+
+void FDebugDraw::Flush()
+{
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_debug_draw_cmds", D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+	const size_t numCommands = m_queuedCommands.size();
+	const size_t bufferSize = numCommands * sizeof(FDebugDrawCmd);
+	FResourceUploadContext uploader{ bufferSize };
+
+	// Clear the debug draw commands buffer
+	const uint32_t clearValue[] = { 0, 0, 0, 0 };
+	cmdList->m_d3dCmdList->ClearUnorderedAccessViewUint(
+		RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_queuedCommandsBuffer->m_uavIndex),
+		RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_queuedCommandsBuffer->m_nonShaderVisibleUavIndex, false),
+		m_queuedCommandsBuffer->m_resource->m_d3dResource,
+		clearValue, 0, nullptr);
+
+	// Upload the CPU debug draw commands buffer data
+	FResource* destResource = m_queuedCommandsBuffer->m_resource;
+	destResource->Transition(cmdList, destResource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_DEST);
+
+	std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
+	srcData[0].pData = m_queuedCommands.data();
+	srcData[0].RowPitch = bufferSize;
+	srcData[0].SlicePitch = bufferSize;
+	uploader.UpdateSubresources(
+		destResource,
+		srcData,
+		[destResource](FCommandList* cmdList)
+		{
+			destResource->Transition(cmdList, destResource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		});
+
+	uploader.SubmitUploads(cmdList);
+
+	// Now that the CPU data is uploaded, clear the entries in m_queuedCommands except for persistent ones
+	m_queuedCommands.erase(
+		std::remove_if(m_queuedCommands.begin(), m_queuedCommands.end(),
+		[](const FDebugDrawCmd& cmd)
+			{
+				return cmd.m_persistent == false;
+			}));
+
+	// Run a compute shader to sort the draw commands and merge them with commands generated from other shaders.
+	// The output of this generates the actual indirect arguments
+
+	// Finally, dispatch the indirect draw commands for the debug primitives
+
 }
 
 void Demo::TeardownRenderer()
