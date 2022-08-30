@@ -61,7 +61,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         if (FrustumCull(primitive))
         {
-            FDrawWithRootConstants cmd = (FDrawWithRootConstants)0;
+            FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
             cmd.m_rootConstants[0] = primId;
             cmd.m_drawArguments.m_vertexCount = primitive.m_indexCount;
             cmd.m_drawArguments.m_instanceCount = 1;
@@ -73,7 +73,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             countsBuffer.InterlockedAdd(0, 1, currentIndex);
 
             RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_argsBufferIndex];
-            uint destAddress = currentIndex * sizeof(FDrawWithRootConstants);
+            uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
             argsBuffer.Store(destAddress, cmd);
         }
         else

@@ -177,6 +177,7 @@ namespace Demo
 	FController s_controller;
 	FTextureCache s_textureCache;
 	FSamplerCache s_samplerCache;
+	FDebugDraw s_debugDraw;
 	float s_aspectRatio;
 	bool s_suspendRendering = true;
 
@@ -240,6 +241,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	ok = ok && ShaderCompiler::Initialize();
 
 	InitializeRenderer(resX, resY);
+	s_debugDraw.LoadModels();
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -965,7 +967,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	sceneCollection->m_objectSpaceBoundsList.push_back(meshBounds);
 }
 
-void FScene::LoadMeshBuffers(const tinygltf::Model& model)
+void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 {
 	size_t uploadSize = 0;
 	for (const tinygltf::Buffer& buffer : model.buffers)
@@ -997,7 +999,7 @@ void FScene::LoadMeshBuffers(const tinygltf::Model& model)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
-void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
+void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 {
 	// CPU Copy
 	std::vector<FMeshBufferView> views(model.bufferViews.size());
@@ -1027,7 +1029,7 @@ void FScene::LoadMeshBufferViews(const tinygltf::Model& model)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
-void FScene::LoadMeshAccessors(const tinygltf::Model& model)
+void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 {
 	// CPU Copy
 	std::vector<FMeshAccessor> accessors(model.accessors.size());

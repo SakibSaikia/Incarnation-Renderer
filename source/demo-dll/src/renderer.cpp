@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <dxcapi.h>
 #include <random>
+#include <tiny_gltf.h>
 
 namespace Demo
 {
@@ -161,7 +162,6 @@ FRenderStatsBuffer Demo::GetRenderStats()
 
 void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 {
-
 	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
@@ -174,6 +174,142 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 		Vector2 pixelJitter = { Halton(sampleIdx, 2), Halton(sampleIdx, 3) };
 		pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
 		s_pixelJitterValues.push_back(pixelJitter);
+	}
+}
+
+void FDebugDraw::LoadModels()
+{
+	std::unordered_map<std::string, FDebugDraw::Shapes> primitiveNameMapping =
+	{	
+		{"Cube", FDebugDraw::Cube},
+		{"Icosphere", FDebugDraw::Icosphere},
+		{"Sphere", FDebugDraw::Sphere},
+		{"Cylinder", FDebugDraw::Cylinder},
+		{"Cone", FDebugDraw::Cone},
+		{"Plane", FDebugDraw::Plane}
+	};
+
+	// Debug models
+	std::string modelFilepath = GetFilepathA("debug-primitives.gltf");
+	tinygltf::TinyGLTF loader;
+
+	std::string errors, warnings;
+	tinygltf::Model model;
+	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, modelFilepath);
+	if (!ok)
+	{
+		if (!warnings.empty())
+		{
+			printf("Warn: %s\n", warnings.c_str());
+		}
+
+		if (!errors.empty())
+		{
+			printf("Error: %s\n", errors.c_str());
+			DebugAssert(ok, "Failed to parse glTF");
+		}
+	}
+
+	LoadMeshBuffers(model);
+	LoadMeshBufferViews(model);
+	LoadMeshAccessors(model);
+
+	for (tinygltf::Scene& scene : model.scenes)
+	{
+		for (const int nodeIndex : scene.nodes)
+		{
+			const tinygltf::Node& node = model.nodes[nodeIndex];
+
+			if (node.mesh != -1)
+			{
+				const tinygltf::Primitive& primitive = model.meshes[node.mesh].primitives[0];
+				FMeshPrimitive& newPrimitive = m_shapePrimitives[primitiveNameMapping[node.name]];
+
+				// Index data
+				const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+				newPrimitive.m_indexCount = indexAccessor.count;
+				newPrimitive.m_indexAccessor = primitive.indices;
+
+				// Position data
+				auto posIt = primitive.attributes.find("POSITION");
+				DebugAssert(posIt != primitive.attributes.cend());
+				newPrimitive.m_positionAccessor = posIt->second;
+
+				// UV data
+				auto uvIt = primitive.attributes.find("TEXCOORD_0");
+				newPrimitive.m_uvAccessor = (uvIt != primitive.attributes.cend() ? uvIt->second : -1);
+
+				// Normal data
+				auto normalIt = primitive.attributes.find("NORMAL");
+				newPrimitive.m_normalAccessor = (normalIt != primitive.attributes.cend() ? normalIt->second : -1);
+
+				// Tangent data
+				auto tangentIt = primitive.attributes.find("TANGENT");
+				newPrimitive.m_tangentAccessor = (tangentIt != primitive.attributes.cend() ? tangentIt->second : -1);
+
+				// Topology
+				switch (primitive.mode)
+				{
+				case TINYGLTF_MODE_POINTS:
+					newPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+					break;
+				case TINYGLTF_MODE_LINE:
+					newPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+					break;
+				case TINYGLTF_MODE_LINE_STRIP:
+					newPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+					break;
+				case TINYGLTF_MODE_TRIANGLES:
+					newPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+					break;
+				case TINYGLTF_MODE_TRIANGLE_STRIP:
+					newPrimitive.m_topology = D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+					break;
+				default:
+					DebugAssert(false);
+				}
+			}
+		}
+	}
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_debug_primitives", D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+	// Packed buffer that contains an array of debug primitives
+	{
+		std::vector<FGpuPrimitive> primitives;
+		for (int primitiveIndex = 0; primitiveIndex < FDebugDraw::Count; ++primitiveIndex)
+		{
+			const FMeshPrimitive& primitive = m_shapePrimitives[primitiveIndex];
+			FGpuPrimitive newPrimitive = {};
+			newPrimitive.m_localToWorld = Matrix::Identity;
+			newPrimitive.m_boundingSphere = Vector4(0.f, 0.f, 0.f, 1.f);
+			newPrimitive.m_indexAccessor = primitive.m_indexAccessor;
+			newPrimitive.m_positionAccessor = primitive.m_positionAccessor;
+			newPrimitive.m_uvAccessor = primitive.m_uvAccessor;
+			newPrimitive.m_normalAccessor = primitive.m_normalAccessor;
+			newPrimitive.m_tangentAccessor = primitive.m_tangentAccessor;
+			newPrimitive.m_materialIndex = primitive.m_materialIndex;
+			newPrimitive.m_indexCount = primitive.m_indexCount;
+			newPrimitive.m_indicesPerTriangle = 3;
+			primitives.push_back(newPrimitive);
+		}
+
+		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
+		FResourceUploadContext uploader{ bufferSize };
+
+		m_packedPrimitives = RenderBackend12::CreateBuffer(
+			L"debug_primitives",
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
+			bufferSize,
+			false,
+			(const uint8_t*)primitives.data(),
+			&uploader);
+
+		uploader.SubmitUploads(cmdList);
+
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
 }
 
@@ -218,8 +354,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderSurface> gbuffer_basecolor = RenderBackend12::CreateSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
 	std::unique_ptr<FShaderSurface> gbuffer_normals = RenderBackend12::CreateSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1);
 	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo = RenderBackend12::CreateSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs = RenderBackend12::CreateBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(FDrawWithRootConstants));
-	std::unique_ptr<FShaderBuffer> batchArgsBuffer = RenderBackend12::CreateBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, totalPrimitives * sizeof(FDrawWithRootConstants));
+	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs = RenderBackend12::CreateBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(FIndirectDrawWithRootConstants));
+	std::unique_ptr<FShaderBuffer> batchArgsBuffer = RenderBackend12::CreateBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, totalPrimitives * sizeof(FIndirectDrawWithRootConstants));
 	std::unique_ptr<FShaderBuffer> batchCountsBuffer = RenderBackend12::CreateBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
 	std::unique_ptr<FShaderBuffer> culledLightCountBuffer = RenderBackend12::CreateBuffer(L"culled_light_count", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
 	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true);

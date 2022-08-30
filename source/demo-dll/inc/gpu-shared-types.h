@@ -118,9 +118,15 @@ struct FDrawInstanced
 	uint32_t m_startInstanceLocation;
 };
 
-struct FDrawWithRootConstants
+struct FIndirectDrawWithRootConstants
 {
 	uint32_t m_rootConstants[8];
+	FDrawInstanced m_drawArguments;
+};
+
+struct FIndirectDrawWithTransform
+{
+	Matrix m_localToWorld;
 	FDrawInstanced m_drawArguments;
 };
 

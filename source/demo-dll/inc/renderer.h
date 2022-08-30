@@ -60,11 +60,23 @@ struct FLightProbe
 	int m_shTextureIndex;
 };
 
-struct FScene
+struct FModelLoader
+{
+	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
+	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
+	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
+
+protected:
+	void LoadMeshBuffers(const tinygltf::Model& model);
+	void LoadMeshBufferViews(const tinygltf::Model& model);
+	void LoadMeshAccessors(const tinygltf::Model& model);
+};
+
+struct FScene : public FModelLoader
 {
 	void ReloadModel(const std::wstring& gltfFilename);
 	void ReloadEnvironment(const std::wstring& hdriFilename);
-	void LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform);
+	void LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform = Matrix::Identity);
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
@@ -86,9 +98,6 @@ struct FScene
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
-	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
-	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
 	std::unordered_map<std::string, std::unique_ptr<FShaderBuffer>> m_blasList;
@@ -107,9 +116,6 @@ struct FScene
 	Matrix m_rootTransform;
 
 private:
-	void LoadMeshBuffers(const tinygltf::Model& model);
-	void LoadMeshBufferViews(const tinygltf::Model& model);
-	void LoadMeshAccessors(const tinygltf::Model& model);
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
 	void CreateGpuPrimitiveBuffers();
@@ -152,11 +158,35 @@ struct FRenderState
 	uint32_t m_mouseX, m_mouseY;
 };
 
+struct FDebugDraw : public FModelLoader
+{
+	enum Shapes
+	{
+		Cube,
+		Icosphere,
+		Sphere,
+		Cylinder,
+		Cone,
+		Plane,
+		Count
+	};
+
+	void LoadModels();
+
+private:
+	FMeshPrimitive m_shapePrimitives[Shapes::Count];
+	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
+	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
+	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+};
+
 namespace Demo
 {
 	FRenderState GetRenderState();
 	FRenderStatsBuffer GetRenderStats();
 	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
+	void LoadDebugModels();
 	void TeardownRenderer();
 }

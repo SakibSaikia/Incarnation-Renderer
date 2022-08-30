@@ -16,7 +16,7 @@
     #define MAX_LIGHTS_PER_CLUSTER 128
 #endif
 
-#define MAX_RANGE (200.f)
+#define MAX_RANGE (5.f)
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \

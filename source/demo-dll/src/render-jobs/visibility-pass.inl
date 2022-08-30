@@ -186,7 +186,7 @@ namespace RenderJob
 			D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
 			commandSignatureDesc.pArgumentDescs = argumentDescs;
 			commandSignatureDesc.NumArgumentDescs = 2;
-			commandSignatureDesc.ByteStride = sizeof(FDrawWithRootConstants);
+			commandSignatureDesc.ByteStride = sizeof(FIndirectDrawWithRootConstants);
 
 			D3DCommandSignature_t* commandSignature = RenderBackend12::CacheCommandSignature(commandSignatureDesc, rootsig->m_rootsig);
 
