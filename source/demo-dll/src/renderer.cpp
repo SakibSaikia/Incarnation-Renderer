@@ -660,8 +660,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
-		GetDebugRenderer()->Draw(FDebugDraw::Icosphere, Color{ 1.f, 0.f, 0.f }, Matrix::Identity);
-
 		// Cull Pass & Draw Call Generation
 		RenderJob::BatchCullingDesc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
