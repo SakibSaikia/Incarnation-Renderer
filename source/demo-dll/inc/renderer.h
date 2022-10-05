@@ -173,15 +173,21 @@ struct FDebugDraw : public FModelLoader
 		Count
 	};
 
-	enum FillMode : uint32_t
+	struct PassDesc
 	{
-		Wireframe,
-		Solid
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthTarget;
+		uint32_t resX;
+		uint32_t resY;
+		const FScene* scene;
+		const FView* view;
+		Vector2 jitter;
+		FConfig renderConfig;
 	};
 
 	void Initialize();
-	void Render(Shape shapeType, FillMode fillType, Color color, Matrix transform, bool bPersistent = false);
-	void Flush();
+	void Draw(Shape shapeType, Color color, Matrix transform, bool bPersistent = false);
+	void Flush(const PassDesc& passDesc);
 
 private:
 	FMeshPrimitive m_shapePrimitives[Shape::Count];
@@ -191,14 +197,17 @@ private:
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 
 	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.
-	std::vector<FDebugDrawCmd> m_queuedCommands;
+	concurrency::concurrent_vector<FDebugDrawCmd> m_queuedCommands;
 	std::unique_ptr<FShaderBuffer> m_queuedCommandsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectArgsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectCountsBuffer;
 };
 
 namespace Demo
 {
 	FRenderState GetRenderState();
 	FRenderStatsBuffer GetRenderStats();
+	FDebugDraw* GetDebugRenderer();
 	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
 	void LoadDebugModels();

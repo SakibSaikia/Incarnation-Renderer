@@ -212,6 +212,11 @@ namespace Demo
 		return &s_view;
 	}
 
+	FDebugDraw* GetDebugRenderer()
+	{
+		return &s_debugDraw;
+	}
+
 	void UpdateUI(float deltaTime);
 }
 

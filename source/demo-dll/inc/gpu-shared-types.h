@@ -152,9 +152,9 @@ struct FRenderStatsBuffer
 
 struct FDebugDrawCmd
 {
-	uint32_t m_shapeType;
-	uint32_t m_fillType;
 	Color m_color;
 	Matrix m_transform;
+	uint32_t m_shapeType;
+	uint32_t m_indexCount;
 	bool m_persistent;
 };

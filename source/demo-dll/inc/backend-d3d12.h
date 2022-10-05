@@ -293,14 +293,13 @@ public:
 		const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 		std::function<void(FCommandList*)> transition);
 
-	FFenceMarker SubmitUploads(FCommandList* owningCL);
+	FFenceMarker SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent = nullptr);
 
 private:
 	FResource* m_uploadBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_sizeInBytes;
-	size_t m_currentOffset;
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };
 

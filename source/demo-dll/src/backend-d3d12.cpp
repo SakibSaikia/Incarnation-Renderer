@@ -643,8 +643,7 @@ private:
 	std::list<std::unique_ptr<FResource>> m_useList;
 };
 
-FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
-	m_currentOffset{ 0 }
+FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes)
 {
 	DebugAssert(uploadBufferSizeInBytes != 0);
 
@@ -665,59 +664,61 @@ void FResourceUploadContext::UpdateSubresources(
 	const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 	std::function<void(FCommandList*)> transition)
 {
-	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
-	UINT64 totalBytes = 0;
-	std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(srcData.size());
-	std::vector<UINT64> rowSizeInBytes(srcData.size());
-	std::vector<UINT> numRows(srcData.size());
-
 	D3D12_RESOURCE_DESC destinationDesc = destinationResource->m_d3dResource->GetDesc();
-	GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), m_currentOffset, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
-
-	size_t capacity = m_sizeInBytes - m_currentOffset;
-	DebugAssert(totalBytes <= capacity, "Upload buffer is too small!");
-
-	// Copy CPU data to mapped upload resource
-	for (UINT i = 0; i < srcData.size(); ++i)
-	{
-		D3D12_SUBRESOURCE_DATA src;
-		src.pData = srcData[i].pData;
-		src.RowPitch = srcData[i].RowPitch;
-		src.SlicePitch = srcData[i].SlicePitch;
-
-		D3D12_MEMCPY_DEST dest;
-		dest.pData = m_mappedPtr + layouts[i].Offset;
-		dest.RowPitch = layouts[i].Footprint.RowPitch;
-		dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
-
-		UINT numSlices = layouts[i].Footprint.Depth;
-
-		for (UINT z = 0; z < numSlices; ++z)
-		{
-			BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
-			const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
-
-			for (UINT y = 0; y < numRows[i]; ++y)
-			{
-				memcpy(pDestSlice + dest.RowPitch * y,
-					pSrcSlice + src.RowPitch * y,
-					rowSizeInBytes[i]);
-			}
-		}
-	}
 
 	// Issue GPU copy from upload resource to destination resource
 	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
+		// Copy CPU data to mapped upload resource
+		memcpy(m_mappedPtr,srcData[0].pData,srcData[0].RowPitch);
+
 		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(
 			destinationResource->m_d3dResource,
 			0,
 			m_uploadBuffer->m_d3dResource,
-			layouts[0].Offset,
-			layouts[0].Footprint.Width);
+			0,
+			std::min<uint32_t>(srcData[0].RowPitch, destinationDesc.Width));
 	}
 	else
 	{
+		// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
+		UINT64 totalBytes = 0;
+		std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(srcData.size());
+		std::vector<UINT64> rowSizeInBytes(srcData.size());
+		std::vector<UINT> numRows(srcData.size());
+
+		D3D12_RESOURCE_DESC destinationDesc = destinationResource->m_d3dResource->GetDesc();
+		GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), 0, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
+
+		// Copy CPU data to mapped upload resource
+		for (UINT i = 0; i < srcData.size(); ++i)
+		{
+			D3D12_SUBRESOURCE_DATA src;
+			src.pData = srcData[i].pData;
+			src.RowPitch = srcData[i].RowPitch;
+			src.SlicePitch = srcData[i].SlicePitch;
+
+			D3D12_MEMCPY_DEST dest;
+			dest.pData = m_mappedPtr + layouts[i].Offset;
+			dest.RowPitch = layouts[i].Footprint.RowPitch;
+			dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
+
+			UINT numSlices = layouts[i].Footprint.Depth;
+
+			for (UINT z = 0; z < numSlices; ++z)
+			{
+				BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
+				const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
+
+				for (UINT y = 0; y < numRows[i]; ++y)
+				{
+					memcpy(pDestSlice + dest.RowPitch * y,
+						pSrcSlice + src.RowPitch * y,
+						src.RowPitch);
+				}
+			}
+		}
+
 		for (UINT i = 0; i < srcData.size(); ++i)
 		{
 			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
@@ -734,12 +735,18 @@ void FResourceUploadContext::UpdateSubresources(
 		}
 	}
 
-	m_currentOffset += totalBytes;
 	m_pendingTransitions.push_back(transition);
 }
 
-FFenceMarker FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
+FFenceMarker FResourceUploadContext::SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent)
 {
+	// If a wait event is provided, stall until the fence is hit.
+	// Used for cross-queue synchronization since transitions along cannot avoid data races in that case.
+	if (waitEvent && waitEvent->m_fence)
+	{
+		GetCopyQueue()->Wait(waitEvent->m_fence, waitEvent->m_value);
+	}
+
 	FFenceMarker fenceMarker = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
 
 	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
@@ -2287,6 +2294,11 @@ void RenderBackend12::WaitForSwapChain()
 void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
+
+	// Transition back buffer
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"transition_back_buffer", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	GetBackBuffer()->m_resource->Transition(cmdList, GetBackBuffer()->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_PRESENT);
+	ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	// VSync - SyncInterval 1
 	AssertIfFailed(s_swapChain->Present(1, 0));

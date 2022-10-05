@@ -29,7 +29,6 @@ namespace Demo
 #include "render-jobs/msaa-resolve.inl"
 #include "render-jobs/taa-resolve.inl"
 #include "render-jobs/ui-pass.inl"
-#include "render-jobs/present.inl"
 #include "render-jobs/path-tracing.inl"
 #include "render-jobs/tonemap.inl"
 #include "render-jobs/update-tlas.inl"
@@ -314,61 +313,270 @@ void FDebugDraw::Initialize()
 	}
 
 	// Buffer that contains queued debug draw commands
-	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd), true);
+	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd));
+
+	// Indirect draw buffers
+	m_indirectArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants));
+	m_indirectCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t));
 }
 
-void FDebugDraw::Render(Shape shapeType, FillMode fillType, Color color, Matrix transform, bool bPersistent)
+void FDebugDraw::Draw(Shape shapeType, Color color, Matrix transform, bool bPersistent)
 {
-	m_queuedCommands.push_back({ shapeType, fillType, color, transform, bPersistent });
+	m_queuedCommands.push_back({ color, transform, shapeType, (uint32_t)m_shapePrimitives[shapeType].m_indexCount, bPersistent });
 }
 
-void FDebugDraw::Flush()
+void FDebugDraw::Flush(const PassDesc& passDesc)
 {
+	if (m_queuedCommands.empty())
+		return;
+
+	static FFenceMarker flushCompleteFence;
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_debug_draw_cmds", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	const size_t numCommands = m_queuedCommands.size();
 	const size_t bufferSize = numCommands * sizeof(FDebugDrawCmd);
 	FResourceUploadContext uploader{ bufferSize };
 
-	// Clear the debug draw commands buffer
-	const uint32_t clearValue[] = { 0, 0, 0, 0 };
-	cmdList->m_d3dCmdList->ClearUnorderedAccessViewUint(
-		RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_queuedCommandsBuffer->m_uavIndex),
-		RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_queuedCommandsBuffer->m_nonShaderVisibleUavIndex, false),
-		m_queuedCommandsBuffer->m_resource->m_d3dResource,
-		clearValue, 0, nullptr);
-
 	// Upload the CPU debug draw commands buffer data
 	FResource* destResource = m_queuedCommandsBuffer->m_resource;
-	destResource->Transition(cmdList, destResource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_DEST);
-
 	std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
-	srcData[0].pData = m_queuedCommands.data();
+	srcData[0].pData = &m_queuedCommands[0];
 	srcData[0].RowPitch = bufferSize;
 	srcData[0].SlicePitch = bufferSize;
 	uploader.UpdateSubresources(
 		destResource,
 		srcData,
-		[destResource](FCommandList* cmdList)
+		[destResource, transitionToken = destResource->GetTransitionToken()](FCommandList* cmdList)
 		{
-			destResource->Transition(cmdList, destResource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			destResource->Transition(cmdList, transitionToken, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		});
 
-	uploader.SubmitUploads(cmdList);
+	uploader.SubmitUploads(cmdList, &flushCompleteFence);
 
-	// Now that the CPU data is uploaded, clear the entries in m_queuedCommands except for persistent ones
-	m_queuedCommands.erase(
-		std::remove_if(m_queuedCommands.begin(), m_queuedCommands.end(),
-		[](const FDebugDrawCmd& cmd)
+	// Now that the CPU data is uploaded, clear the entries in m_queuedCommands
+	m_queuedCommands.clear();
+
+	// Run a compute shader to generate the indirect draw args
+	{
+		SCOPED_CPU_EVENT("debug_draw_generation", PIX_COLOR_DEFAULT);
+		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draws_generation", 0);
+
+		// Transitions
+		m_indirectArgsBuffer->m_resource->Transition(cmdList, m_indirectArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		m_indirectCountsBuffer->m_resource->Transition(cmdList, m_indirectCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		cmdList->m_d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		// Root Signature
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+			L"debug_draw_gen_rootsig",
+			cmdList,
+			FRootsigDesc{ L"debug-drawing/drawcall-generation.hlsl", L"rootsig", L"rootsig_1_1" });
+
+		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({
+			L"debug-drawing/drawcall-generation.hlsl",
+			L"cs_main",
+			L"THREAD_GROUP_SIZE_X=32",
+			L"cs_6_6" });
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig->m_rootsig;
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		// Root Constants
+		struct Constants
+		{
+			uint32_t batchArgsBufferUavIndex;
+			uint32_t batchCountsBufferUavIndex;
+			uint32_t queuedCommandsBufferIndex;
+			uint32_t debugDrawCount;
+		};
+
+		std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+			L"debug_drawcall_gen_cb",
+			sizeof(Constants),
+			cmdList,
+			[&](uint8_t* pDest)
 			{
-				return cmd.m_persistent == false;
-			}));
+				auto cb = reinterpret_cast<Constants*>(pDest);
+				cb->batchArgsBufferUavIndex = m_indirectArgsBuffer->m_uavIndex;
+				cb->batchCountsBufferUavIndex = m_indirectCountsBuffer->m_uavIndex;
+				cb->queuedCommandsBufferIndex = m_queuedCommandsBuffer->m_srvIndex;
+				cb->debugDrawCount = (uint32_t)numCommands;
+			});
 
-	// Run a compute shader to sort the draw commands and merge them with commands generated from other shaders.
-	// The output of this generates the actual indirect arguments
+		d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+		// Dispatch
+		size_t threadGroupCountX = std::max<size_t>(std::ceil(MaxCommands / 32), 1);
+		d3dCmdList->Dispatch(threadGroupCountX, 1, 1);
+
+		// Transition back to expected state to avoid having to transition on the copy queue later
+		m_queuedCommandsBuffer->m_resource->Transition(cmdList, m_queuedCommandsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_COPY_DEST);
+	}
+
 
 	// Finally, dispatch the indirect draw commands for the debug primitives
+	/* {
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draw_render", 0);
+		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
+		passDesc.colorTarget->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		passDesc.depthTarget->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
+		m_indirectArgsBuffer->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+		m_indirectCountsBuffer->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+
+		// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
+		// https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		// Root Signature
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"debug_draw_rootsig", cmdList, FRootsigDesc{ L"debug-drawing/drawcall-submission.hlsl", L"rootsig", L"rootsig_1_1" });
+		d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
+
+		// Frame constant buffer
+		struct FrameCbLayout
+		{
+			Matrix sceneRotation;
+			int debugMeshAccessorsIndex;
+			int debugMeshBufferViewsIndex;
+			int debugPrimitivesIndex;
+		};
+
+		std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+			L"frame_cb",
+			sizeof(FrameCbLayout),
+			cmdList,
+			[this, passDesc](uint8_t* pDest)
+			{
+				auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+				cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+				cbDest->debugMeshAccessorsIndex = m_packedMeshAccessors->m_srvIndex;
+				cbDest->debugMeshBufferViewsIndex = m_packedMeshBufferViews->m_srvIndex;
+				cbDest->debugPrimitivesIndex = m_packedPrimitives->m_srvIndex;
+			});
+
+		d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+		// View constant buffer
+		struct ViewCbLayout
+		{
+			Matrix viewProjTransform;
+		};
+
+		std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+			L"view_cb",
+			sizeof(ViewCbLayout),
+			cmdList,
+			[passDesc](uint8_t* pDest)
+			{
+				auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
+				cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+			});
+
+		d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+		D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
+		D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };
+		d3dCmdList->RSSetViewports(1, &viewport);
+		d3dCmdList->RSSetScissorRects(1, &screenRect);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_renderTextureIndices[0]) };
+		D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthTarget->m_renderTextureIndices[0]);
+		d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
+
+		// Issue scene draws
+		d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		// PSO
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.NodeMask = 1;
+		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+		psoDesc.pRootSignature = rootsig->m_rootsig;
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+		psoDesc.NumRenderTargets = 1;
+		psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
+		psoDesc.SampleDesc.Count = 1;
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		// PSO - Shaders
+		{
+			D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
+			D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
+
+			IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"vs_main", L"" , L"vs_6_6" });
+			IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"ps_main", L"" , L"ps_6_6" });
+
+			vs.pShaderBytecode = vsBlob->GetBufferPointer();
+			vs.BytecodeLength = vsBlob->GetBufferSize();
+			ps.pShaderBytecode = psBlob->GetBufferPointer();
+			ps.BytecodeLength = psBlob->GetBufferSize();
+		}
+
+		// PSO - Rasterizer State
+		{
+			D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
+			desc.FillMode = D3D12_FILL_MODE_WIREFRAME;
+			desc.CullMode = D3D12_CULL_MODE_NONE;
+			desc.FrontCounterClockwise = TRUE;
+			desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+			desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+			desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+			desc.DepthClipEnable = TRUE;
+			desc.MultisampleEnable = FALSE;
+			desc.AntialiasedLineEnable = FALSE;
+			desc.ForcedSampleCount = 0;
+			desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+		}
+
+		// PSO - Blend State
+		{
+			D3D12_BLEND_DESC& desc = psoDesc.BlendState;
+			desc.AlphaToCoverageEnable = FALSE;
+			desc.IndependentBlendEnable = FALSE;
+			desc.RenderTarget[0].BlendEnable = FALSE;
+			desc.RenderTarget[0].LogicOpEnable = FALSE;
+			desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		}
+
+		// PSO - Depth Stencil State
+		{
+			D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
+			desc.DepthEnable = TRUE;
+			desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+			desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+			desc.StencilEnable = FALSE;
+		}
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		// Command signature
+		D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
+
+		d3dCmdList->ExecuteIndirect(
+			commandSignature,
+			MaxCommands,
+			m_indirectArgsBuffer->m_resource->m_d3dResource,
+			0,
+			m_indirectCountsBuffer->m_resource->m_d3dResource,
+			0);
+	}*/
+
+	flushCompleteFence = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
 void Demo::TeardownRenderer()
@@ -381,7 +589,7 @@ void Demo::TeardownRenderer()
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	RenderBackend12::WaitForSwapChain();
+	//RenderBackend12::WaitForSwapChain();
 
 	// Create a immutable copy of the render state for render jobs to use
 	const FRenderState renderState = Demo::GetRenderState();
@@ -392,7 +600,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	SCOPED_CPU_EVENT("render", PIX_COLOR_DEFAULT);
 
-	std::vector<concurrency::task<void>> renderJobs;
+	std::vector<concurrency::task<void>> sceneRenderJobs;
 	static RenderJob::Sync jobSync;
 
 	static uint64_t frameIndex = 0;
@@ -419,8 +627,10 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true);
 	std::unique_ptr<FShaderBuffer> lightGridBuffer = RenderBackend12::CreateBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)); // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
+	Vector2 pixelJitter = c.EnableTAA && c.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
-	renderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
+	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
 
 	if (c.PathTrace)
 	{
@@ -435,7 +645,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			pathtraceDesc.scene = renderState.m_scene;
 			pathtraceDesc.view = &renderState.m_view;
 			pathtraceDesc.renderConfig = c;
-			renderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
+			sceneRenderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
 
 			// Accumulate samples
 			s_pathtraceCurrentSampleIndex++;
@@ -445,12 +655,12 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		tonemapDesc.source = Demo::s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.renderConfig = c;
-		renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+		sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
 	}
 	else
 	{
-		Vector2 pixelJitter = c.EnableTAA && c.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+		GetDebugRenderer()->Draw(FDebugDraw::Icosphere, Color{ 1.f, 0.f, 0.f }, Matrix::Identity);
 
 		// Cull Pass & Draw Call Generation
 		RenderJob::BatchCullingDesc batchCullDesc = {};
@@ -461,7 +671,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		batchCullDesc.view = &renderState.m_cullingView;
 		batchCullDesc.primitiveCount = totalPrimitives;
 		batchCullDesc.jitter = pixelJitter;
-		renderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
+		sceneRenderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
 
 		// Light Culling
 		const size_t lightCount = renderState.m_scene->m_sceneLights.GetCount();
@@ -477,7 +687,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			lightCullDesc.view = &renderState.m_cullingView;
 			lightCullDesc.jitter = pixelJitter;
 			lightCullDesc.renderConfig = c;
-			renderJobs.push_back(RenderJob::LightCulling(jobSync, lightCullDesc));
+			sceneRenderJobs.push_back(RenderJob::LightCulling(jobSync, lightCullDesc));
 		}
 
 		// Visibility Pass
@@ -494,7 +704,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		visDesc.scenePrimitiveCount = totalPrimitives;
 		visDesc.jitter = pixelJitter;
 		visDesc.renderConfig = c;
-		renderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
+		sceneRenderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
 
 		// GBuffer Pass
 		RenderJob::GBufferPassDesc gbufferDesc = {};
@@ -509,8 +719,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		gbufferDesc.view = &renderState.m_view;
 		gbufferDesc.jitter = pixelJitter;
 		gbufferDesc.renderConfig = c;
-		renderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
-		renderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
+		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
+		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
@@ -523,8 +733,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.view = &renderState.m_view;
 		baseDesc.jitter = pixelJitter;
 		baseDesc.renderConfig = c;
-		renderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
-		renderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
+		sceneRenderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
+		sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{
@@ -545,7 +755,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			desc.mouseY = renderState.m_mouseY;
 			desc.scene = renderState.m_scene;
 			desc.view = &renderState.m_view;
-			renderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
+			sceneRenderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
 
 			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
 			{
@@ -558,7 +768,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				desc.scene = renderState.m_scene;
 				desc.view = &renderState.m_view;
 				desc.renderConfig = c;
-				renderJobs.push_back(RenderJob::HighlightPass(jobSync, desc));
+				sceneRenderJobs.push_back(RenderJob::HighlightPass(jobSync, desc));
 			}
 		}
 		else
@@ -579,14 +789,14 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
 				resolveDesc.depthTextureIndex = depthBuffer->m_srvIndex;
 				resolveDesc.renderConfig = c;
-				renderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
+				sceneRenderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
 
 				// Tonemap
 				RenderJob::TonemapDesc tonemapDesc = {};
 				tonemapDesc.source = Demo::s_taaAccumulationBuffer.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
-				renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+				sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 
 				// Save view projection transform for next frame's reprojection
 				s_prevViewProjectionTransform = viewProjectionTransform;
@@ -598,30 +808,42 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				tonemapDesc.source = hdrRasterSceneColor.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
-				renderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+				sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
 			}
 		}
 	}
+	
+	// Wait for all scene render jobs to finish
+	auto sceneRenderJoinTask = concurrency::when_all(std::begin(sceneRenderJobs), std::end(sceneRenderJobs));
+	sceneRenderJoinTask.wait();
 
-	frameIndex++;
+	// Render debug primitives
+	FDebugDraw::PassDesc debugDesc = {};
+	debugDesc.colorTarget = RenderBackend12::GetBackBuffer();
+	debugDesc.depthTarget = depthBuffer.get();
+	debugDesc.resX = resX;
+	debugDesc.resY = resY;
+	debugDesc.scene = renderState.m_scene;
+	debugDesc.view = &renderState.m_view;
+	debugDesc.jitter = pixelJitter;
+	debugDesc.renderConfig = c;
+	GetDebugRenderer()->Flush(debugDesc);
 
-	// UI
+	// Render UI
+	std::vector<concurrency::task<void>> uiRenderJobs;
 	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), c };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
-		renderJobs.push_back(RenderJob::UI(jobSync, uiDesc));
+		uiRenderJobs.push_back(RenderJob::UI(jobSync, uiDesc));
 	}
 
-	// Present
-	RenderJob::PresentDesc presentDesc = { RenderBackend12::GetBackBuffer() };
-	renderJobs.push_back(RenderJob::Present(jobSync, presentDesc));
-	
-	// Wait for all render jobs to finish
-	auto joinTask = concurrency::when_all(std::begin(renderJobs), std::end(renderJobs));
-	joinTask.wait();
+	// Wait for all UI render jobs to finish
+	auto uiRenderJoinTask = concurrency::when_all(std::begin(uiRenderJobs), std::end(uiRenderJobs));
+	uiRenderJoinTask.wait();
 
 	// Present the frame
+	frameIndex++;
 	RenderBackend12::PresentDisplay();
 
 	// Read back render stats from the GPU
