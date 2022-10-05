@@ -181,7 +181,6 @@ struct FDebugDraw : public FModelLoader
 		uint32_t resY;
 		const FScene* scene;
 		const FView* view;
-		Vector2 jitter;
 		FConfig renderConfig;
 	};
 
@@ -191,9 +190,6 @@ struct FDebugDraw : public FModelLoader
 
 private:
 	FMeshPrimitive m_shapePrimitives[Shape::Count];
-	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
-	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
-	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 
 	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.

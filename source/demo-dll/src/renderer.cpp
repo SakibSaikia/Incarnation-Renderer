@@ -428,14 +428,14 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 
 
 	// Finally, dispatch the indirect draw commands for the debug primitives
-	/* {
+	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draw_render", 0);
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-		passDesc.colorTarget->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-		passDesc.depthTarget->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
-		m_indirectArgsBuffer->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-		m_indirectCountsBuffer->m_resource->Transition(cmdList, 0, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+		passDesc.colorTarget->m_resource->Transition(cmdList, passDesc.colorTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		passDesc.depthTarget->m_resource->Transition(cmdList, passDesc.depthTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_DEPTH_READ);
+		m_indirectArgsBuffer->m_resource->Transition(cmdList, m_indirectArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+		m_indirectCountsBuffer->m_resource->Transition(cmdList, m_indirectCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
 
 		// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
 		// https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html
@@ -483,7 +483,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			[passDesc](uint8_t* pDest)
 			{
 				auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-				cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+				cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
 			});
 
 		d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -537,7 +537,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
 			desc.DepthClipEnable = TRUE;
 			desc.MultisampleEnable = FALSE;
-			desc.AntialiasedLineEnable = FALSE;
+			desc.AntialiasedLineEnable = TRUE;
 			desc.ForcedSampleCount = 0;
 			desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 		}
@@ -556,7 +556,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 		{
 			D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
 			desc.DepthEnable = TRUE;
-			desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+			desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 			desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 			desc.StencilEnable = FALSE;
 		}
@@ -574,7 +574,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			0,
 			m_indirectCountsBuffer->m_resource->m_d3dResource,
 			0);
-	}*/
+	}
 
 	flushCompleteFence = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
@@ -589,7 +589,7 @@ void Demo::TeardownRenderer()
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	//RenderBackend12::WaitForSwapChain();
+	RenderBackend12::WaitForSwapChain();
 
 	// Create a immutable copy of the render state for render jobs to use
 	const FRenderState renderState = Demo::GetRenderState();
@@ -825,7 +825,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	debugDesc.resY = resY;
 	debugDesc.scene = renderState.m_scene;
 	debugDesc.view = &renderState.m_view;
-	debugDesc.jitter = pixelJitter;
 	debugDesc.renderConfig = c;
 	GetDebugRenderer()->Flush(debugDesc);
 
