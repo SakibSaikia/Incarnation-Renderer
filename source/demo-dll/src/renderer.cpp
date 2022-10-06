@@ -317,7 +317,7 @@ void FDebugDraw::Initialize()
 
 	// Indirect draw buffers
 	m_indirectArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants));
-	m_indirectCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t));
+	m_indirectCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
 }
 
 void FDebugDraw::Draw(Shape shapeType, Color color, Matrix transform, bool bPersistent)
@@ -575,6 +575,15 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			m_indirectCountsBuffer->m_resource->m_d3dResource,
 			0);
 	}
+
+	// Clear for next frame
+	m_indirectCountsBuffer->m_resource->Transition(cmdList, m_indirectCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	const uint32_t clearValue[] = { 0, 0, 0, 0 };
+	cmdList->m_d3dCmdList->ClearUnorderedAccessViewUint(
+		RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectCountsBuffer->m_uavIndex),
+		RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectCountsBuffer->m_nonShaderVisibleUavIndex, false),
+		m_indirectCountsBuffer->m_resource->m_d3dResource,
+		clearValue, 0, nullptr);
 
 	flushCompleteFence = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }

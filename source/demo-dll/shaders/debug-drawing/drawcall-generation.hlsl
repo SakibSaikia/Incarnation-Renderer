@@ -33,15 +33,6 @@ struct FIndirectDebugDrawCmd
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     uint drawId = dispatchThreadId.x;
-	RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_countsBufferIndex];
-
-	// Clear the counts buffer
-	if (drawId == 0)
-	{
-		countsBuffer.Store(0, 0);
-	}
-
-	GroupMemoryBarrierWithGroupSync();
 
     if (drawId < g_drawCount)
     {
@@ -59,6 +50,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		cmd.m_drawArguments.m_startVertexLocation = 0;
 		cmd.m_drawArguments.m_startInstanceLocation = 0;
 
+		RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_countsBufferIndex];
 		uint currentIndex;
 		countsBuffer.InterlockedAdd(0, 1, currentIndex);
 
