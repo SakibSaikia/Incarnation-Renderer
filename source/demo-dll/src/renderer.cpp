@@ -342,37 +342,36 @@ void FDebugDraw::Draw(DebugShape::Type shapeType, Color color, Matrix transform,
 
 void FDebugDraw::Flush(const PassDesc& passDesc)
 {
-	if (m_queuedCommands.empty())
-		return;
-
 	static FFenceMarker flushCompleteFence;
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_debug_draw_cmds", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-	const size_t numCommands = m_queuedCommands.size();
-	const size_t bufferSize = numCommands * sizeof(FDebugDrawCmd);
-	FResourceUploadContext uploader{ bufferSize };
-
-	// Upload the CPU debug draw commands buffer data
-	FResource* destResource = m_queuedCommandsBuffer->m_resource;
-	std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
-	srcData[0].pData = &m_queuedCommands[0];
-	srcData[0].RowPitch = bufferSize;
-	srcData[0].SlicePitch = bufferSize;
-	uploader.UpdateSubresources(
-		destResource,
-		srcData,
-		[destResource, transitionToken = destResource->GetTransitionToken()](FCommandList* cmdList)
-		{
-			destResource->Transition(cmdList, transitionToken, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		});
-
-	uploader.SubmitUploads(cmdList, &flushCompleteFence);
-
-	// Now that the CPU data is uploaded, clear the entries in m_queuedCommands
-	m_queuedCommands.clear();
-
-	// Run a compute shader to generate the indirect draw args
+	if (!m_queuedCommands.empty())
 	{
+		const size_t numCommands = m_queuedCommands.size();
+		const size_t bufferSize = numCommands * sizeof(FDebugDrawCmd);
+		FResourceUploadContext uploader{ bufferSize };
+
+		// Upload the CPU debug draw commands buffer data
+		FResource* destResource = m_queuedCommandsBuffer->m_resource;
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
+		srcData[0].pData = &m_queuedCommands[0];
+		srcData[0].RowPitch = bufferSize;
+		srcData[0].SlicePitch = bufferSize;
+		uploader.UpdateSubresources(
+			destResource,
+			srcData,
+			[destResource, transitionToken = destResource->GetTransitionToken()](FCommandList* cmdList)
+			{
+				destResource->Transition(cmdList, transitionToken, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			});
+
+		uploader.SubmitUploads(cmdList, &flushCompleteFence);
+
+		// Now that the CPU data is uploaded, clear the entries in m_queuedCommands
+		m_queuedCommands.clear();
+
+		// Run a compute shader to generate the indirect draw args
+		
 		SCOPED_CPU_EVENT("debug_draw_generation", PIX_COLOR_DEFAULT);
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draws_generation", 0);
@@ -680,8 +679,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
-		GetDebugRenderer()->Draw(DebugShape::Icosphere, Color{ 1.f, 0.f, 0.f }, Matrix::Identity);
-
 		// Cull Pass & Draw Call Generation
 		RenderJob::BatchCullingDesc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
