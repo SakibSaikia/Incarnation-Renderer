@@ -73,7 +73,8 @@ enum class DescriptorType
 
 enum class DescriptorRange : uint32_t
 {
-	BufferBegin,
+	// 0-99 is reserved for special descriptors. See gpu-shared-types.h
+	BufferBegin = 100,
 	BufferEnd = BufferBegin + 4999,
 	Texture2DBegin,
 	Texture2DEnd = Texture2DBegin + 4999,
@@ -449,7 +450,9 @@ namespace RenderBackend12
 		const size_t size,
 		const bool bCreateNonShaderVisibleDescriptor = false,
 		const uint8_t* pData = nullptr,
-		FResourceUploadContext* uploadContext = nullptr);
+		FResourceUploadContext* uploadContext = nullptr,
+		const int fixedUavIndex = -1								// Use provided UAV index instead of fetching one from bindless descriptor pool
+		);
 
 	std::unique_ptr<FUploadBuffer> CreateUploadBuffer(
 		const std::wstring& name,

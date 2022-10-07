@@ -5,7 +5,6 @@ namespace RenderJob
 		FShaderBuffer* culledLightCountBuffer;
 		FShaderBuffer* culledLightListsBuffer;
 		FShaderBuffer* lightGridBuffer;
-		FShaderBuffer* renderStatsBuffer;
 		FConfig renderConfig;
 		const FScene* scene;
 		const FView* view;
@@ -76,7 +75,7 @@ namespace RenderJob
 				uint32_t packedLightTransformsBufferIndex;
 				uint32_t packedGlobalLightPropertiesBufferIndex;
 				uint32_t lightCount;
-				uint32_t renderStatsBufferUavIndex;
+				uint32_t __padding0;
 				uint32_t clusterGridSize[3];
 				uint32_t __padding1;
 				Matrix projTransform;
@@ -93,7 +92,6 @@ namespace RenderJob
 					cb->culledLightCountBufferUavIndex = passDesc.culledLightCountBuffer->m_uavIndex;
 					cb->culledLightListsBufferUavIndex = passDesc.culledLightListsBuffer->m_uavIndex;
 					cb->lightGridBufferUavIndex = passDesc.lightGridBuffer->m_uavIndex;
-					cb->renderStatsBufferUavIndex = passDesc.renderStatsBuffer->m_uavIndex;
 					cb->packedLightIndicesBufferIndex = passDesc.scene->m_packedLightIndices->m_srvIndex;
 					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
 					cb->packedGlobalLightPropertiesBufferIndex = passDesc.scene->m_packedGlobalLightProperties->m_srvIndex;

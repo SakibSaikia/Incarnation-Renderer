@@ -2768,7 +2768,8 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const size_t size,
 	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
-	FResourceUploadContext* uploadContext)
+	FResourceUploadContext* uploadContext,
+	const int fixedUavIndex)
 {
 	SCOPED_CPU_EVENT("create_buffer", PIX_COLOR_DEFAULT);
 
@@ -2856,7 +2857,7 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 			uavDesc.Buffer.StructureByteStride = 0;
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 
-			uavIndex = GetBindlessPool()->FetchIndex(ResourceType::Buffer);
+			uavIndex = (fixedUavIndex == -1 ? GetBindlessPool()->FetchIndex(ResourceType::Buffer) : fixedUavIndex);
 			D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, descriptor);
 

@@ -12,10 +12,8 @@ cbuffer cb : register(b0)
 {
     uint g_argsBufferIndex;
     uint g_countsBufferIndex;
-    uint g_renderStatsBufferIndex;
     uint g_primitivesBufferIndex;
     uint g_primitiveCount;
-    uint3 __pad;
     float4x4 g_viewProjTransform;
 };
 
@@ -46,7 +44,7 @@ bool FrustumCull(FGpuPrimitive primitive)
 [numthreads(THREAD_GROUP_SIZE_X, 1, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    RWByteAddressBuffer renderStatsBuffer = ResourceDescriptorHeap[g_renderStatsBufferIndex];
+    RWByteAddressBuffer renderStatsBuffer = ResourceDescriptorHeap[SpecialDescriptors::RenderStatsBufferUavIndex];
     if (dispatchThreadId.x == 0)
     {
         renderStatsBuffer.Store(0, 0);

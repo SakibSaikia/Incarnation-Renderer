@@ -166,7 +166,7 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 	s_taaAccumulationBuffer = RenderBackend12::CreateSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
-	s_renderStatsBuffer = RenderBackend12::CreateBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStatsBuffer));
+	s_renderStatsBuffer = RenderBackend12::CreateBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStatsBuffer), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex);
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -179,14 +179,14 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 
 void FDebugDraw::Initialize()
 {
-	std::unordered_map<std::string, FDebugDraw::Shape> primitiveNameMapping =
+	std::unordered_map<std::string, DebugShape::Type> primitiveNameMapping =
 	{	
-		{"Cube", FDebugDraw::Cube},
-		{"Icosphere", FDebugDraw::Icosphere},
-		{"Sphere", FDebugDraw::Sphere},
-		{"Cylinder", FDebugDraw::Cylinder},
-		{"Cone", FDebugDraw::Cone},
-		{"Plane", FDebugDraw::Plane}
+		{"Cube", DebugShape::Cube},
+		{"Icosphere", DebugShape::Icosphere},
+		{"Sphere", DebugShape::Sphere},
+		{"Cylinder", DebugShape::Cylinder},
+		{"Cone", DebugShape::Cone},
+		{"Plane", DebugShape::Plane}
 	};
 
 	// Debug models
@@ -277,7 +277,7 @@ void FDebugDraw::Initialize()
 	// Packed buffer that contains an array of debug primitives
 	{
 		std::vector<FGpuPrimitive> primitives;
-		for (int primitiveIndex = 0; primitiveIndex < FDebugDraw::Count; ++primitiveIndex)
+		for (int primitiveIndex = 0; primitiveIndex < DebugShape::Count; ++primitiveIndex)
 		{
 			const FMeshPrimitive& primitive = m_shapePrimitives[primitiveIndex];
 			FGpuPrimitive newPrimitive = {};
@@ -316,13 +316,13 @@ void FDebugDraw::Initialize()
 	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd));
 
 	// Indirect draw buffers
-	m_indirectArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants));
-	m_indirectCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
+	m_indirectArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectArgsUavIndex);
+	m_indirectCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectCountUavIndex);
 }
 
-void FDebugDraw::Draw(Shape shapeType, Color color, Matrix transform, bool bPersistent)
+void FDebugDraw::Draw(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
 {
-	m_queuedCommands.push_back({ color, transform, shapeType, (uint32_t)m_shapePrimitives[shapeType].m_indexCount, bPersistent });
+	m_queuedCommands.push_back({ color, transform, (uint32_t)shapeType, (uint32_t)m_shapePrimitives[shapeType].m_indexCount, bPersistent });
 }
 
 void FDebugDraw::Flush(const PassDesc& passDesc)
@@ -669,11 +669,12 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	}
 	else
 	{
+		GetDebugRenderer()->Draw(DebugShape::Icosphere, Color{ 1.f, 0.f, 0.f }, Matrix::Identity);
+
 		// Cull Pass & Draw Call Generation
 		RenderJob::BatchCullingDesc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
 		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
-		batchCullDesc.renderStatsBuffer = Demo::s_renderStatsBuffer.get();
 		batchCullDesc.scene = renderState.m_scene;
 		batchCullDesc.view = &renderState.m_cullingView;
 		batchCullDesc.primitiveCount = totalPrimitives;
@@ -688,7 +689,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
 			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
 			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
-			lightCullDesc.renderStatsBuffer = Demo::s_renderStatsBuffer.get();
 			lightCullDesc.renderConfig = c;
 			lightCullDesc.scene = renderState.m_scene;
 			lightCullDesc.view = &renderState.m_cullingView;

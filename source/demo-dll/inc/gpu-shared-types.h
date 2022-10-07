@@ -12,6 +12,21 @@
 	using namespace DirectX::SimpleMath;
 #endif
 
+namespace SpecialDescriptors
+{
+	enum Type
+	{
+		RenderStatsBufferUavIndex,
+		DebugDrawIndirectArgsUavIndex,
+		DebugDrawIndirectCountUavIndex,
+		Count
+	};
+};
+
+#ifdef __cplusplus
+static_assert(SpecialDescriptors::Count < 100, "See reserved descriptors in enum class DescriptorRange");
+#endif
+
 namespace AlphaMode
 {
 	enum Type
@@ -19,6 +34,20 @@ namespace AlphaMode
 		Opaque,
 		Masked,
 		Blend
+	};
+}
+
+namespace DebugShape
+{
+	enum Type
+	{
+		Cube,
+		Icosphere,
+		Sphere,
+		Cylinder,
+		Cone,
+		Plane,
+		Count
 	};
 }
 

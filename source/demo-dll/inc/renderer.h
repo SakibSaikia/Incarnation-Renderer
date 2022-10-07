@@ -162,17 +162,6 @@ struct FDebugDraw : public FModelLoader
 {
 	static const size_t MaxCommands = 256;
 
-	enum Shape : uint32_t
-	{
-		Cube,
-		Icosphere,
-		Sphere,
-		Cylinder,
-		Cone,
-		Plane,
-		Count
-	};
-
 	struct PassDesc
 	{
 		FShaderSurface* colorTarget;
@@ -185,11 +174,11 @@ struct FDebugDraw : public FModelLoader
 	};
 
 	void Initialize();
-	void Draw(Shape shapeType, Color color, Matrix transform, bool bPersistent = false);
+	void Draw(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent = false);
 	void Flush(const PassDesc& passDesc);
 
 private:
-	FMeshPrimitive m_shapePrimitives[Shape::Count];
+	FMeshPrimitive m_shapePrimitives[DebugShape::Count];
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 
 	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.
