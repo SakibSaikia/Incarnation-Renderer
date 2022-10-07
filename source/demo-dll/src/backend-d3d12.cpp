@@ -2769,7 +2769,8 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
 	FResourceUploadContext* uploadContext,
-	const int fixedUavIndex)
+	const int fixedUavIndex,
+	const int fixedSrvIndex)
 {
 	SCOPED_CPU_EVENT("create_buffer", PIX_COLOR_DEFAULT);
 
@@ -2899,7 +2900,7 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 			srvDesc.Buffer.StructureByteStride = 0;
 			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 
-			srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Buffer);
+			srvIndex = (fixedSrvIndex == -1 ? GetBindlessPool()->FetchIndex(ResourceType::Buffer) : fixedSrvIndex);
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 			GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 		}

@@ -451,7 +451,8 @@ namespace RenderBackend12
 		const bool bCreateNonShaderVisibleDescriptor = false,
 		const uint8_t* pData = nullptr,
 		FResourceUploadContext* uploadContext = nullptr,
-		const int fixedUavIndex = -1								// Use provided UAV index instead of fetching one from bindless descriptor pool
+		const int fixedUavIndex = -1,								// Use provided UAV index instead of fetching one from bindless descriptor pool
+		const int fixedSrvIndex = -1								// Use provided SRV index instead of fetching one from bindless descriptor pool
 		);
 
 	std::unique_ptr<FUploadBuffer> CreateUploadBuffer(

@@ -180,6 +180,7 @@ struct FDebugDraw : public FModelLoader
 private:
 	FMeshPrimitive m_shapePrimitives[DebugShape::Count];
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitiveIndexCounts;
 
 	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.
 	concurrency::concurrent_vector<FDebugDrawCmd> m_queuedCommands;

@@ -277,6 +277,7 @@ void FDebugDraw::Initialize()
 	// Packed buffer that contains an array of debug primitives
 	{
 		std::vector<FGpuPrimitive> primitives;
+		std::vector<uint32_t> primitiveIndexCounts;
 		for (int primitiveIndex = 0; primitiveIndex < DebugShape::Count; ++primitiveIndex)
 		{
 			const FMeshPrimitive& primitive = m_shapePrimitives[primitiveIndex];
@@ -292,20 +293,34 @@ void FDebugDraw::Initialize()
 			newPrimitive.m_indexCount = primitive.m_indexCount;
 			newPrimitive.m_indicesPerTriangle = 3;
 			primitives.push_back(newPrimitive);
+
+			primitiveIndexCounts.push_back(primitive.m_indexCount);
 		}
 
-		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
-		FResourceUploadContext uploader{ bufferSize };
+		const size_t uploadBufferSize = primitives.size() * sizeof(FGpuPrimitive) + primitiveIndexCounts.size() * sizeof(uint32_t);
+		FResourceUploadContext uploader{ uploadBufferSize };
 
 		m_packedPrimitives = RenderBackend12::CreateBuffer(
 			L"debug_primitives",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
-			bufferSize,
+			primitives.size() * sizeof(FGpuPrimitive),
 			false,
 			(const uint8_t*)primitives.data(),
 			&uploader);
+
+		m_packedPrimitiveIndexCounts = RenderBackend12::CreateBuffer(
+			L"debug_primitive_index_counts",
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
+			primitiveIndexCounts.size() * sizeof(uint32_t),
+			false,
+			(const uint8_t*)primitiveIndexCounts.data(),
+			&uploader,
+			-1,
+			SpecialDescriptors::DebugPrimitiveIndexCountSrvIndex);
 
 		uploader.SubmitUploads(cmdList);
 
@@ -322,7 +337,7 @@ void FDebugDraw::Initialize()
 
 void FDebugDraw::Draw(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
 {
-	m_queuedCommands.push_back({ color, transform, (uint32_t)shapeType, (uint32_t)m_shapePrimitives[shapeType].m_indexCount, bPersistent });
+	m_queuedCommands.push_back({ color, transform, (uint32_t)shapeType, bPersistent });
 }
 
 void FDebugDraw::Flush(const PassDesc& passDesc)
@@ -397,8 +412,6 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 		// Root Constants
 		struct Constants
 		{
-			uint32_t batchArgsBufferUavIndex;
-			uint32_t batchCountsBufferUavIndex;
 			uint32_t queuedCommandsBufferIndex;
 			uint32_t debugDrawCount;
 		};
@@ -410,8 +423,6 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			[&](uint8_t* pDest)
 			{
 				auto cb = reinterpret_cast<Constants*>(pDest);
-				cb->batchArgsBufferUavIndex = m_indirectArgsBuffer->m_uavIndex;
-				cb->batchCountsBufferUavIndex = m_indirectCountsBuffer->m_uavIndex;
 				cb->queuedCommandsBufferIndex = m_queuedCommandsBuffer->m_srvIndex;
 				cb->debugDrawCount = (uint32_t)numCommands;
 			});
