@@ -300,6 +300,7 @@ private:
 	FResource* m_uploadBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
+	size_t m_currentOffset;
 	size_t m_sizeInBytes;
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };

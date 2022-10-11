@@ -643,7 +643,8 @@ private:
 	std::list<std::unique_ptr<FResource>> m_useList;
 };
 
-FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes)
+FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) : 
+	m_currentOffset{ 0 }
 {
 	DebugAssert(uploadBufferSizeInBytes != 0);
 
@@ -666,18 +667,20 @@ void FResourceUploadContext::UpdateSubresources(
 {
 	D3D12_RESOURCE_DESC destinationDesc = destinationResource->m_d3dResource->GetDesc();
 
-	// Issue GPU copy from upload resource to destination resource
 	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
 		// Copy CPU data to mapped upload resource
-		memcpy(m_mappedPtr,srcData[0].pData,srcData[0].RowPitch);
+		memcpy(m_mappedPtr + m_currentOffset,srcData[0].pData,srcData[0].RowPitch);
 
+		// Issue GPU copy from upload resource to destination resource
 		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(
 			destinationResource->m_d3dResource,
 			0,
 			m_uploadBuffer->m_d3dResource,
-			0,
+			m_currentOffset,
 			std::min<uint32_t>(srcData[0].RowPitch, destinationDesc.Width));
+
+		m_currentOffset += srcData[0].RowPitch;
 	}
 	else
 	{
@@ -688,7 +691,7 @@ void FResourceUploadContext::UpdateSubresources(
 		std::vector<UINT> numRows(srcData.size());
 
 		D3D12_RESOURCE_DESC destinationDesc = destinationResource->m_d3dResource->GetDesc();
-		GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), 0, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
+		GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), m_currentOffset, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
 
 		// Copy CPU data to mapped upload resource
 		for (UINT i = 0; i < srcData.size(); ++i)
@@ -733,6 +736,8 @@ void FResourceUploadContext::UpdateSubresources(
 
 			m_copyCommandlist->m_d3dCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 		}
+
+		m_currentOffset += totalBytes;
 	}
 
 	m_pendingTransitions.push_back(transition);
