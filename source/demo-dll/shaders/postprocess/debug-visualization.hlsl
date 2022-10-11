@@ -28,7 +28,8 @@ cbuffer cb : register(b0)
 	uint g_resY;
 	uint g_mouseX;
 	uint g_mouseY;
-	float2 __pad;
+	uint g_lightClusterSlices;
+	float __pad;
 	float4x4 g_invProjectionTransform;
 }
 
@@ -147,7 +148,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		float4 pixelViewSpace = mul(pixelNdc, g_invProjectionTransform);
 		float z = pixelViewSpace.z / pixelViewSpace.w;
 
-		const uint numSlices = 24;
+		const uint numSlices = g_lightClusterSlices;
 		const float zFar = 1000.f;
 		const float zNear = 5.f;
 		const float scale = numSlices / log(zFar / zNear);

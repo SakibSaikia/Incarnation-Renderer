@@ -140,7 +140,8 @@ namespace RenderJob
 				uint32_t resY;
 				uint32_t mouseX;
 				uint32_t mouseY;
-				float __padding[2];
+				uint32_t lightClusterSlices;
+				float __padding;
 				Matrix invProjectionTransform;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_srvIndex,
@@ -157,7 +158,8 @@ namespace RenderJob
 					passDesc.resY,
 					passDesc.mouseX,
 					passDesc.mouseY,
-					0.f,0.f,
+					passDesc.renderConfig.LightClusterDimZ,
+					0.f,
 					(passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert()
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
