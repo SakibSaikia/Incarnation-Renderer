@@ -69,7 +69,7 @@ void DrawDebugFrustum(float4 color,
 	DrawDebugLine(color, NearLeftBottom, FarLeftBottom);
 	DrawDebugLine(color, NearRightBottom, FarRightBottom);
 	DrawDebugLine(color, NearRightTop, FarRightTop);
-	DrawDebugLine(color, NearLeftTop, FarRightTop);
+	DrawDebugLine(color, NearLeftTop, FarLeftTop);
 }
 
 void DrawDebugPrimitive(uint shapeType, float4 color, float4x4 transform)
