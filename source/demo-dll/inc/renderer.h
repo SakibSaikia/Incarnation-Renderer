@@ -174,7 +174,7 @@ struct FDebugDraw : public FModelLoader
 	};
 
 	void Initialize();
-	void Draw(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent = false);
+	void DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent = false);
 	void Flush(const PassDesc& passDesc);
 
 private:
@@ -185,8 +185,10 @@ private:
 	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.
 	concurrency::concurrent_vector<FDebugDrawCmd> m_queuedCommands;
 	std::unique_ptr<FShaderBuffer> m_queuedCommandsBuffer;
-	std::unique_ptr<FShaderBuffer> m_indirectArgsBuffer;
-	std::unique_ptr<FShaderBuffer> m_indirectCountsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectPrimitiveArgsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectPrimitiveCountsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectLineArgsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectLineCountsBuffer;
 };
 
 namespace Demo

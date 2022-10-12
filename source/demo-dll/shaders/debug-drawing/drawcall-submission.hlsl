@@ -15,7 +15,7 @@ struct FrameCbLayout
 	int debugPrimitivesBufferIndex;
 };
 
-struct DebugDrawData
+struct DebugPrimitiveDrawData
 {
 	float4 m_color;
 	float4x4 m_transform;
@@ -30,7 +30,7 @@ cbuffer cb1 : register(b1)
 	float4x4 g_viewProjTransform;
 };
 
-ConstantBuffer<DebugDrawData> g_debugDraw : register(b0);
+ConstantBuffer<DebugPrimitiveDrawData> g_debugDraw : register(b0);
 ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
 
 float4 vs_main(uint index : SV_VertexID) : SV_POSITION

@@ -17,8 +17,10 @@ namespace SpecialDescriptors
 	enum Type
 	{
 		RenderStatsBufferUavIndex,
-		DebugDrawIndirectArgsUavIndex,
-		DebugDrawIndirectCountUavIndex,
+		DebugDrawIndirectPrimitiveArgsUavIndex,
+		DebugDrawIndirectPrimitiveCountUavIndex,
+		DebugDrawIndirectLineArgsUavIndex,
+		DebugDrawIndirectLineCountUavIndex,
 		DebugPrimitiveIndexCountSrvIndex,
 		Count
 	};

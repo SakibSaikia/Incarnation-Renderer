@@ -331,11 +331,13 @@ void FDebugDraw::Initialize()
 	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd));
 
 	// Indirect draw buffers
-	m_indirectArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectArgsUavIndex);
-	m_indirectCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectCountUavIndex);
+	m_indirectPrimitiveArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex);
+	m_indirectPrimitiveCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex);
+	m_indirectLineArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex);
+	m_indirectLineCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex);
 }
 
-void FDebugDraw::Draw(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
+void FDebugDraw::DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
 {
 	m_queuedCommands.push_back({ color, transform, (uint32_t)shapeType, bPersistent });
 }
@@ -345,255 +347,409 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 	static FFenceMarker flushCompleteFence;
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_debug_draw_cmds", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-	if (!m_queuedCommands.empty())
 	{
-		const size_t numCommands = m_queuedCommands.size();
-		const size_t bufferSize = numCommands * sizeof(FDebugDrawCmd);
-		FResourceUploadContext uploader{ bufferSize };
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draw", 0);
 
-		// Upload the CPU debug draw commands buffer data
-		FResource* destResource = m_queuedCommandsBuffer->m_resource;
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
-		srcData[0].pData = &m_queuedCommands[0];
-		srcData[0].RowPitch = bufferSize;
-		srcData[0].SlicePitch = bufferSize;
-		uploader.UpdateSubresources(
-			destResource,
-			srcData,
-			[destResource, transitionToken = destResource->GetTransitionToken()](FCommandList* cmdList)
-			{
-				destResource->Transition(cmdList, transitionToken, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-			});
-
-		uploader.SubmitUploads(cmdList, &flushCompleteFence);
-
-		// Now that the CPU data is uploaded, clear the entries in m_queuedCommands
-		m_queuedCommands.clear();
-
-		// Run a compute shader to generate the indirect draw args
-		
-		SCOPED_CPU_EVENT("debug_draw_generation", PIX_COLOR_DEFAULT);
-		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draws_generation", 0);
-
-		// Transitions
-		m_indirectArgsBuffer->m_resource->Transition(cmdList, m_indirectArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		m_indirectCountsBuffer->m_resource->Transition(cmdList, m_indirectCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-		// Descriptor Heaps
-		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-		cmdList->m_d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
-		// Root Signature
-		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-			L"debug_draw_gen_rootsig",
-			cmdList,
-			FRootsigDesc{ L"debug-drawing/drawcall-generation.hlsl", L"rootsig", L"rootsig_1_1" });
-
-		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
-
-		// PSO
-		IDxcBlob* csBlob = RenderBackend12::CacheShader({
-			L"debug-drawing/drawcall-generation.hlsl",
-			L"cs_main",
-			L"THREAD_GROUP_SIZE_X=32",
-			L"cs_6_6" });
-
-		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.pRootSignature = rootsig->m_rootsig;
-		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
-		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
-		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
-		d3dCmdList->SetPipelineState(pso);
-
-		// Root Constants
-		struct Constants
+		if (!m_queuedCommands.empty())
 		{
-			uint32_t queuedCommandsBufferIndex;
-			uint32_t debugDrawCount;
-		};
+			const size_t numCommands = m_queuedCommands.size();
+			const size_t bufferSize = numCommands * sizeof(FDebugDrawCmd);
+			FResourceUploadContext uploader{ bufferSize };
 
-		std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
-			L"debug_drawcall_gen_cb",
-			sizeof(Constants),
-			cmdList,
-			[&](uint8_t* pDest)
+			// Upload the CPU debug draw commands buffer data
+			FResource* destResource = m_queuedCommandsBuffer->m_resource;
+			std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
+			srcData[0].pData = &m_queuedCommands[0];
+			srcData[0].RowPitch = bufferSize;
+			srcData[0].SlicePitch = bufferSize;
+			uploader.UpdateSubresources(
+				destResource,
+				srcData,
+				[destResource, transitionToken = destResource->GetTransitionToken()](FCommandList* cmdList)
+				{
+					destResource->Transition(cmdList, transitionToken, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				});
+
+			uploader.SubmitUploads(cmdList, &flushCompleteFence);
+
+			// Now that the CPU data is uploaded, clear the entries in m_queuedCommands
+			m_queuedCommands.clear();
+
+			// Run a compute shader to generate the indirect draw args
+
+			SCOPED_CPU_EVENT("primitive_draw_gen", PIX_COLOR_DEFAULT);
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_primitive_gen", 0);
+
+			// Transitions
+			m_indirectPrimitiveArgsBuffer->m_resource->Transition(cmdList, m_indirectPrimitiveArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			m_indirectPrimitiveCountsBuffer->m_resource->Transition(cmdList, m_indirectPrimitiveCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			cmdList->m_d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			// Root Signature
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"debug_draw_gen_rootsig",
+				cmdList,
+				FRootsigDesc{ L"debug-drawing/drawcall-generation.hlsl", L"rootsig", L"rootsig_1_1" });
+
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+			// PSO
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({
+				L"debug-drawing/drawcall-generation.hlsl",
+				L"cs_main",
+				L"THREAD_GROUP_SIZE_X=32",
+				L"cs_6_6" });
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig->m_rootsig;
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Root Constants
+			struct Constants
 			{
-				auto cb = reinterpret_cast<Constants*>(pDest);
-				cb->queuedCommandsBufferIndex = m_queuedCommandsBuffer->m_srvIndex;
-				cb->debugDrawCount = (uint32_t)numCommands;
-			});
+				uint32_t queuedCommandsBufferIndex;
+				uint32_t debugDrawCount;
+			};
 
-		d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+				L"debug_drawcall_gen_cb",
+				sizeof(Constants),
+				cmdList,
+				[&](uint8_t* pDest)
+				{
+					auto cb = reinterpret_cast<Constants*>(pDest);
+					cb->queuedCommandsBufferIndex = m_queuedCommandsBuffer->m_srvIndex;
+					cb->debugDrawCount = (uint32_t)numCommands;
+				});
 
-		// Dispatch
-		size_t threadGroupCountX = std::max<size_t>(std::ceil(MaxCommands / 32), 1);
-		d3dCmdList->Dispatch(threadGroupCountX, 1, 1);
+			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
-		// Transition back to expected state to avoid having to transition on the copy queue later
-		m_queuedCommandsBuffer->m_resource->Transition(cmdList, m_queuedCommandsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_COPY_DEST);
+			// Dispatch
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(MaxCommands / 32), 1);
+			d3dCmdList->Dispatch(threadGroupCountX, 1, 1);
+
+			// Transition back to expected state to avoid having to transition on the copy queue later
+			m_queuedCommandsBuffer->m_resource->Transition(cmdList, m_queuedCommandsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_COPY_DEST);
+		}
+
+
+		// Finally, dispatch the indirect draw commands for the debug primitives
+		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "primitive_render", 0);
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+			passDesc.colorTarget->m_resource->Transition(cmdList, passDesc.colorTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.depthTarget->m_resource->Transition(cmdList, passDesc.depthTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_DEPTH_READ);
+			m_indirectPrimitiveArgsBuffer->m_resource->Transition(cmdList, m_indirectPrimitiveArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+			m_indirectPrimitiveCountsBuffer->m_resource->Transition(cmdList, m_indirectPrimitiveCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+
+			// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
+			// https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			// Root Signature
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"debug_draw_rootsig", cmdList, FRootsigDesc{ L"debug-drawing/drawcall-submission.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
+
+			// Frame constant buffer
+			struct FrameCbLayout
+			{
+				Matrix sceneRotation;
+				int debugMeshAccessorsIndex;
+				int debugMeshBufferViewsIndex;
+				int debugPrimitivesIndex;
+			};
+
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+				L"frame_cb",
+				sizeof(FrameCbLayout),
+				cmdList,
+				[this, passDesc](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+					cbDest->debugMeshAccessorsIndex = m_packedMeshAccessors->m_srvIndex;
+					cbDest->debugMeshBufferViewsIndex = m_packedMeshBufferViews->m_srvIndex;
+					cbDest->debugPrimitivesIndex = m_packedPrimitives->m_srvIndex;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			// View constant buffer
+			struct ViewCbLayout
+			{
+				Matrix viewProjTransform;
+			};
+
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+				L"view_cb",
+				sizeof(ViewCbLayout),
+				cmdList,
+				[passDesc](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
+					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
+			D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };
+			d3dCmdList->RSSetViewports(1, &viewport);
+			d3dCmdList->RSSetScissorRects(1, &screenRect);
+
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_renderTextureIndices[0]) };
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthTarget->m_renderTextureIndices[0]);
+			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
+
+			// Issue scene draws
+			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			// PSO
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.NodeMask = 1;
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+			psoDesc.pRootSignature = rootsig->m_rootsig;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
+			psoDesc.SampleDesc.Count = 1;
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			// PSO - Shaders
+			{
+				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
+				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
+
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"ps_main", L"" , L"ps_6_6" });
+
+				vs.pShaderBytecode = vsBlob->GetBufferPointer();
+				vs.BytecodeLength = vsBlob->GetBufferSize();
+				ps.pShaderBytecode = psBlob->GetBufferPointer();
+				ps.BytecodeLength = psBlob->GetBufferSize();
+			}
+
+			// PSO - Rasterizer State
+			{
+				D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
+				desc.FillMode = D3D12_FILL_MODE_WIREFRAME;
+				desc.CullMode = D3D12_CULL_MODE_NONE;
+				desc.FrontCounterClockwise = TRUE;
+				desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+				desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+				desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+				desc.DepthClipEnable = TRUE;
+				desc.MultisampleEnable = FALSE;
+				desc.AntialiasedLineEnable = TRUE;
+				desc.ForcedSampleCount = 0;
+				desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+			}
+
+			// PSO - Blend State
+			{
+				D3D12_BLEND_DESC& desc = psoDesc.BlendState;
+				desc.AlphaToCoverageEnable = FALSE;
+				desc.IndependentBlendEnable = FALSE;
+				desc.RenderTarget[0].BlendEnable = FALSE;
+				desc.RenderTarget[0].LogicOpEnable = FALSE;
+				desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+			}
+
+			// PSO - Depth Stencil State
+			{
+				D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
+				desc.DepthEnable = TRUE;
+				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+				desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+				desc.StencilEnable = FALSE;
+			}
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Command signature
+			D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
+
+			d3dCmdList->ExecuteIndirect(
+				commandSignature,
+				MaxCommands,
+				m_indirectPrimitiveArgsBuffer->m_resource->m_d3dResource,
+				0,
+				m_indirectPrimitiveCountsBuffer->m_resource->m_d3dResource,
+				0);
+		}
+
+		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "line_render", 0);
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+			passDesc.colorTarget->m_resource->Transition(cmdList, passDesc.colorTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
+			passDesc.depthTarget->m_resource->Transition(cmdList, passDesc.depthTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_DEPTH_READ);
+			m_indirectLineArgsBuffer->m_resource->Transition(cmdList, m_indirectLineArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+			m_indirectLineCountsBuffer->m_resource->Transition(cmdList, m_indirectLineCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+
+			// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
+			// https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			// Root Signature
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"debug_draw_rootsig", cmdList, FRootsigDesc{ L"debug-drawing/line-submission.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
+
+			// Frame constant buffer
+			struct FrameCbLayout
+			{
+				Matrix sceneRotation;
+			};
+
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+				L"frame_cb",
+				sizeof(FrameCbLayout),
+				cmdList,
+				[this, passDesc](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			// View constant buffer
+			struct ViewCbLayout
+			{
+				Matrix viewProjTransform;
+			};
+
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+				L"view_cb",
+				sizeof(ViewCbLayout),
+				cmdList,
+				[passDesc](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
+					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
+			D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };
+			d3dCmdList->RSSetViewports(1, &viewport);
+			d3dCmdList->RSSetScissorRects(1, &screenRect);
+
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_renderTextureIndices[0]) };
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthTarget->m_renderTextureIndices[0]);
+			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
+
+			// Issue scene draws
+			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+
+			// PSO
+			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.NodeMask = 1;
+			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+			psoDesc.pRootSignature = rootsig->m_rootsig;
+			psoDesc.SampleMask = UINT_MAX;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.NumRenderTargets = 1;
+			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
+			psoDesc.SampleDesc.Count = 1;
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			// PSO - Shaders
+			{
+				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
+				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
+
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"debug-drawing/line-submission.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"debug-drawing/line-submission.hlsl", L"ps_main", L"" , L"ps_6_6" });
+
+				vs.pShaderBytecode = vsBlob->GetBufferPointer();
+				vs.BytecodeLength = vsBlob->GetBufferSize();
+				ps.pShaderBytecode = psBlob->GetBufferPointer();
+				ps.BytecodeLength = psBlob->GetBufferSize();
+			}
+
+			// PSO - Rasterizer State
+			{
+				D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
+				desc.FillMode = D3D12_FILL_MODE_WIREFRAME;
+				desc.CullMode = D3D12_CULL_MODE_NONE;
+				desc.FrontCounterClockwise = TRUE;
+				desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+				desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+				desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+				desc.DepthClipEnable = TRUE;
+				desc.MultisampleEnable = FALSE;
+				desc.AntialiasedLineEnable = TRUE;
+				desc.ForcedSampleCount = 0;
+				desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+			}
+
+			// PSO - Blend State
+			{
+				D3D12_BLEND_DESC& desc = psoDesc.BlendState;
+				desc.AlphaToCoverageEnable = FALSE;
+				desc.IndependentBlendEnable = FALSE;
+				desc.RenderTarget[0].BlendEnable = FALSE;
+				desc.RenderTarget[0].LogicOpEnable = FALSE;
+				desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+			}
+
+			// PSO - Depth Stencil State
+			{
+				D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
+				desc.DepthEnable = TRUE;
+				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+				desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+				desc.StencilEnable = FALSE;
+			}
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			// Command signature
+			D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
+
+			d3dCmdList->ExecuteIndirect(
+				commandSignature,
+				MaxCommands,
+				m_indirectLineArgsBuffer->m_resource->m_d3dResource,
+				0,
+				m_indirectLineCountsBuffer->m_resource->m_d3dResource,
+				0);
+		}
+
+		// Clear for next frame
+		const uint32_t clearValue[] = { 0, 0, 0, 0 };
+
+		m_indirectPrimitiveCountsBuffer->m_resource->Transition(cmdList, m_indirectPrimitiveCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmdList->m_d3dCmdList->ClearUnorderedAccessViewUint(
+			RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectPrimitiveCountsBuffer->m_uavIndex),
+			RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectPrimitiveCountsBuffer->m_nonShaderVisibleUavIndex, false),
+			m_indirectPrimitiveCountsBuffer->m_resource->m_d3dResource,
+			clearValue, 0, nullptr);
+
+		m_indirectLineCountsBuffer->m_resource->Transition(cmdList, m_indirectLineCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+		cmdList->m_d3dCmdList->ClearUnorderedAccessViewUint(
+			RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectLineCountsBuffer->m_uavIndex),
+			RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectLineCountsBuffer->m_nonShaderVisibleUavIndex, false),
+			m_indirectLineCountsBuffer->m_resource->m_d3dResource,
+			clearValue, 0, nullptr);
 	}
-
-
-	// Finally, dispatch the indirect draw commands for the debug primitives
-	{
-		SCOPED_COMMAND_LIST_EVENT(cmdList, "debug_draw_render", 0);
-		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
-		passDesc.colorTarget->m_resource->Transition(cmdList, passDesc.colorTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
-		passDesc.depthTarget->m_resource->Transition(cmdList, passDesc.depthTarget->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_DEPTH_READ);
-		m_indirectArgsBuffer->m_resource->Transition(cmdList, m_indirectArgsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-		m_indirectCountsBuffer->m_resource->Transition(cmdList, m_indirectCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-
-		// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
-		// https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html
-		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
-		// Root Signature
-		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"debug_draw_rootsig", cmdList, FRootsigDesc{ L"debug-drawing/drawcall-submission.hlsl", L"rootsig", L"rootsig_1_1" });
-		d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
-
-		// Frame constant buffer
-		struct FrameCbLayout
-		{
-			Matrix sceneRotation;
-			int debugMeshAccessorsIndex;
-			int debugMeshBufferViewsIndex;
-			int debugPrimitivesIndex;
-		};
-
-		std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
-			L"frame_cb",
-			sizeof(FrameCbLayout),
-			cmdList,
-			[this, passDesc](uint8_t* pDest)
-			{
-				auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
-				cbDest->sceneRotation = passDesc.scene->m_rootTransform;
-				cbDest->debugMeshAccessorsIndex = m_packedMeshAccessors->m_srvIndex;
-				cbDest->debugMeshBufferViewsIndex = m_packedMeshBufferViews->m_srvIndex;
-				cbDest->debugPrimitivesIndex = m_packedPrimitives->m_srvIndex;
-			});
-
-		d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
-
-		// View constant buffer
-		struct ViewCbLayout
-		{
-			Matrix viewProjTransform;
-		};
-
-		std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
-			L"view_cb",
-			sizeof(ViewCbLayout),
-			cmdList,
-			[passDesc](uint8_t* pDest)
-			{
-				auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-				cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
-			});
-
-		d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
-
-		D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
-		D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };
-		d3dCmdList->RSSetViewports(1, &viewport);
-		d3dCmdList->RSSetScissorRects(1, &screenRect);
-
-		D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_renderTextureIndices[0]) };
-		D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthTarget->m_renderTextureIndices[0]);
-		d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
-
-		// Issue scene draws
-		d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-		// PSO
-		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.NodeMask = 1;
-		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-		psoDesc.pRootSignature = rootsig->m_rootsig;
-		psoDesc.SampleMask = UINT_MAX;
-		psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-		psoDesc.NumRenderTargets = 1;
-		psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
-		psoDesc.SampleDesc.Count = 1;
-		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-		// PSO - Shaders
-		{
-			D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
-			D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
-
-			IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"vs_main", L"" , L"vs_6_6" });
-			IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"ps_main", L"" , L"ps_6_6" });
-
-			vs.pShaderBytecode = vsBlob->GetBufferPointer();
-			vs.BytecodeLength = vsBlob->GetBufferSize();
-			ps.pShaderBytecode = psBlob->GetBufferPointer();
-			ps.BytecodeLength = psBlob->GetBufferSize();
-		}
-
-		// PSO - Rasterizer State
-		{
-			D3D12_RASTERIZER_DESC& desc = psoDesc.RasterizerState;
-			desc.FillMode = D3D12_FILL_MODE_WIREFRAME;
-			desc.CullMode = D3D12_CULL_MODE_NONE;
-			desc.FrontCounterClockwise = TRUE;
-			desc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-			desc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-			desc.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-			desc.DepthClipEnable = TRUE;
-			desc.MultisampleEnable = FALSE;
-			desc.AntialiasedLineEnable = TRUE;
-			desc.ForcedSampleCount = 0;
-			desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-		}
-
-		// PSO - Blend State
-		{
-			D3D12_BLEND_DESC& desc = psoDesc.BlendState;
-			desc.AlphaToCoverageEnable = FALSE;
-			desc.IndependentBlendEnable = FALSE;
-			desc.RenderTarget[0].BlendEnable = FALSE;
-			desc.RenderTarget[0].LogicOpEnable = FALSE;
-			desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-		}
-
-		// PSO - Depth Stencil State
-		{
-			D3D12_DEPTH_STENCIL_DESC& desc = psoDesc.DepthStencilState;
-			desc.DepthEnable = TRUE;
-			desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-			desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
-			desc.StencilEnable = FALSE;
-		}
-
-		D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
-		d3dCmdList->SetPipelineState(pso);
-
-		// Command signature
-		D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
-
-		d3dCmdList->ExecuteIndirect(
-			commandSignature,
-			MaxCommands,
-			m_indirectArgsBuffer->m_resource->m_d3dResource,
-			0,
-			m_indirectCountsBuffer->m_resource->m_d3dResource,
-			0);
-	}
-
-	// Clear for next frame
-	m_indirectCountsBuffer->m_resource->Transition(cmdList, m_indirectCountsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	const uint32_t clearValue[] = { 0, 0, 0, 0 };
-	cmdList->m_d3dCmdList->ClearUnorderedAccessViewUint(
-		RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectCountsBuffer->m_uavIndex),
-		RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, m_indirectCountsBuffer->m_nonShaderVisibleUavIndex, false),
-		m_indirectCountsBuffer->m_resource->m_d3dResource,
-		clearValue, 0, nullptr);
 
 	flushCompleteFence = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }

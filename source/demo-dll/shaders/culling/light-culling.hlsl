@@ -1,4 +1,5 @@
 #include "gpu-shared-types.h"
+#include "debug-drawing/api.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
     #define THREAD_GROUP_SIZE_X 1
@@ -53,7 +54,7 @@ struct FFrustum
 // See light types in gpu-shared-types.h
 bool IsPunctualLight(int lightType)
 {
-    return lightType != 0;
+    return lightType != (int)Light::Directional;
 }
 
 // Flattened cluster ID corresponding to location of the cluster in the volume
@@ -66,7 +67,7 @@ uint GetClusterId(float3 clusterIndex)
 FFrustum GetClusterFrustum(uint3 clusterIndex)
 {
     // Cluster slices are evenly assigned in NDC space for X & Y directions
-    int2 NDCIndex = int2(clusterIndex.x - g_clusterGridSize.x / 2, clusterIndex.y - g_clusterGridSize.y / 2);
+    float2 NDCIndex = float2(clusterIndex.x - g_clusterGridSize.x / 2.f, clusterIndex.y - g_clusterGridSize.y / 2.f);
     float2 Stride = 2.f / g_clusterGridSize.xy;
 
     // Cluster slices should not be evenly assigned for depth in NDC space as it causes skewed placement of clusters due to z-nonlinearity.
@@ -102,6 +103,8 @@ FFrustum GetClusterFrustum(uint3 clusterIndex)
         float4 worldPos = mul(ProjectedClusterPoints[i], g_invViewProjTransform);
         P[i] = worldPos.xyz / worldPos.w;
     }
+
+    DrawDebugFrustum(float4(0.f, 0.f, 1.f, 1.f), P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7]);
 
     // Extract frustum planes from the world space frustum points
     // Equation of plane passing through 3 points A, B and C is given by
@@ -187,11 +190,13 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
                 visibleLightIndices[visibleLightCount++] = globalLightIndex;
+                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), lightTransform);
             }
             else
             {
                 int previousValue;
                 renderStatsBuffer.InterlockedAdd(sizeof(int), 1, previousValue);
+                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(1, 0.f, 0.f, 1.f), lightTransform);
             }
         }
 

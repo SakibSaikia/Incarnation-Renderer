@@ -24,6 +24,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
         ByteAddressBuffer queuedCommandsBuffer = ResourceDescriptorHeap[g_queuedCommandsBufferIndex];
         const FDebugDrawCmd srcCmd = queuedCommandsBuffer.Load<FDebugDrawCmd>(drawId * sizeof(FDebugDrawCmd));
-		DrawDebug(srcCmd.m_shapeType, srcCmd.m_color, srcCmd.m_transform);
+		DrawDebugPrimitive(srcCmd.m_shapeType, srcCmd.m_color, srcCmd.m_transform);
 	}
 }
