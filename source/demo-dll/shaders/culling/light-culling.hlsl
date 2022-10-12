@@ -1,5 +1,5 @@
 #include "gpu-shared-types.h"
-#include "debug-drawing/api.hlsli"
+#include "debug-drawing/common.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
     #define THREAD_GROUP_SIZE_X 1

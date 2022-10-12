@@ -393,13 +393,13 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"debug_draw_gen_rootsig",
 				cmdList,
-				FRootsigDesc{ L"debug-drawing/drawcall-generation.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootsigDesc{ L"debug-drawing/primitive-generation.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
-				L"debug-drawing/drawcall-generation.hlsl",
+				L"debug-drawing/primitive-generation.hlsl",
 				L"cs_main",
 				L"THREAD_GROUP_SIZE_X=32",
 				L"cs_6_6" });
@@ -458,7 +458,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"debug_draw_rootsig", cmdList, FRootsigDesc{ L"debug-drawing/drawcall-submission.hlsl", L"rootsig", L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"debug_draw_rootsig", cmdList, FRootsigDesc{ L"debug-drawing/primitive-submission.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Frame constant buffer
@@ -532,8 +532,8 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"debug-drawing/drawcall-submission.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"debug-drawing/primitive-submission.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"debug-drawing/primitive-submission.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
