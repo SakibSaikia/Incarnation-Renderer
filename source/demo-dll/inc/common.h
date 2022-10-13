@@ -29,6 +29,7 @@ struct FConfig
 	float Fov = 0.25f * DirectX::XM_PI;
 	float Exposure = 13.f;
 	float CameraSpeed = 5.f;
+	float CameraNearPlane = 1.f;
 	int Viewmode = 0;
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;

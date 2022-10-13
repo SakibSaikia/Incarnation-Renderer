@@ -77,7 +77,7 @@ namespace RenderJob
 				uint32_t lightCount;
 				uint32_t __padding0;
 				uint32_t clusterGridSize[3];
-				uint32_t __padding1;
+				float cameraNearPlane;
 				Matrix projTransform;
 				Matrix invViewProjTransform;
 			};
@@ -99,6 +99,7 @@ namespace RenderJob
 					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
 					cb->clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
 					cb->clusterGridSize[2] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
+					cb->cameraNearPlane = passDesc.renderConfig.CameraNearPlane;
 					cb->projTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
 				});

@@ -17,7 +17,7 @@
     #define MAX_LIGHTS_PER_CLUSTER 128
 #endif
 
-#define MAX_RANGE (5.f)
+#define MAX_RANGE (2.f)
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
@@ -35,7 +35,7 @@ cbuffer cb : register(b0)
     uint g_lightCount;
     uint __padding0;
     uint3 g_clusterGridSize;
-    uint __padding1;
+    float g_cameraNearPlane;
     float4x4 g_ProjTransform;
     float4x4 g_invViewProjTransform;
 };
@@ -72,8 +72,8 @@ FFrustum GetClusterFrustum(uint3 clusterIndex)
 
     // Cluster slices should not be evenly assigned for depth in NDC space as it causes skewed placement of clusters due to z-nonlinearity.
     // Instead, use an exponential scheme for slices in view space to counter this effect as per [Tiago Sousa SIGGRAPH 2016]
-    const float zFar = 1000.f;
-    const float zNear = 5.f;
+    const float zFar = 100.f;
+    const float zNear = g_cameraNearPlane;
     float ViewSpaceClusterDepthExtents[] = {
         zNear * pow(zFar / zNear, clusterIndex.z / (float)g_clusterGridSize.z),
         zNear * pow(zFar / zNear, (clusterIndex.z + 1.f) / (float)g_clusterGridSize.z)
@@ -190,13 +190,29 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
                 visibleLightIndices[visibleLightCount++] = globalLightIndex;
-                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), lightTransform);
+
+                float4x4 scaledLightTransform =
+                {
+                    lightRange, 0.f, 0.f, 0.f,
+                    0.f, lightRange, 0.f, 0.f,
+                    0.f, 0.f, lightRange, 0.f,
+                    lightTransform._41, lightTransform._42, lightTransform._43, lightTransform._44
+                };
+                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), scaledLightTransform);
             }
             else
             {
                 int previousValue;
                 renderStatsBuffer.InterlockedAdd(sizeof(int), 1, previousValue);
-                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(1, 0.f, 0.f, 1.f), lightTransform);
+
+                float4x4 scaledLightTransform =
+                {
+                    lightRange, 0.f, 0.f, 0.f,
+                    0.f, lightRange, 0.f, 0.f,
+                    0.f, 0.f, lightRange, 0.f,
+                    lightTransform._41, lightTransform._42, lightTransform._43, lightTransform._44
+                };
+                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(1, 0.f, 0.f, 1.f), scaledLightTransform);
             }
         }
 
