@@ -75,8 +75,8 @@ FFrustum GetClusterFrustum(uint3 clusterIndex)
     const float zFar = 1000.f;
     const float zNear = 5.f;
     float ViewSpaceClusterDepthExtents[] = {
-        zNear * pow(zFar / zNear, clusterIndex.z / g_clusterGridSize.z),
-        zNear * pow(zFar / zNear, (clusterIndex.z + 1) / g_clusterGridSize.z)
+        zNear * pow(zFar / zNear, clusterIndex.z / (float)g_clusterGridSize.z),
+        zNear * pow(zFar / zNear, (clusterIndex.z + 1.f) / (float)g_clusterGridSize.z)
     };
 
     // Project the view space depth extents to NDC space
