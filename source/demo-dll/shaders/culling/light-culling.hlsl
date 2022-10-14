@@ -72,7 +72,7 @@ FFrustum GetClusterFrustum(uint3 clusterIndex)
 
     // Cluster slices should not be evenly assigned for depth in NDC space as it causes skewed placement of clusters due to z-nonlinearity.
     // Instead, use an exponential scheme for slices in view space to counter this effect as per [Tiago Sousa SIGGRAPH 2016]
-    const float zFar = 100.f;
+    const float zFar = 20.f;
     const float zNear = g_cameraNearPlane;
     float ViewSpaceClusterDepthExtents[] = {
         zNear * pow(zFar / zNear, clusterIndex.z / (float)g_clusterGridSize.z),
@@ -185,7 +185,7 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
 
             // For point and spot lights, the light position is contained in the transform
             const float4x4 lightTransform = sceneLightTransformsBuffer.Load<float4x4>(i * sizeof(float4x4));
-            const float4 lightPos = mul(0.xxxx, lightTransform);
+            const float3 lightPos = float3(lightTransform._41, lightTransform._42, lightTransform._43);
 
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
@@ -196,7 +196,7 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
                     lightRange, 0.f, 0.f, 0.f,
                     0.f, lightRange, 0.f, 0.f,
                     0.f, 0.f, lightRange, 0.f,
-                    lightTransform._41, lightTransform._42, lightTransform._43, lightTransform._44
+                    lightPos.x, lightPos.y, lightPos.z, 1.f
                 };
                 DrawDebugPrimitive((uint)DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), scaledLightTransform);
             }
