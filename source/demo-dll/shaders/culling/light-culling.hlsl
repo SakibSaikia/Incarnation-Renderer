@@ -104,8 +104,6 @@ FFrustum GetClusterFrustum(uint3 clusterIndex)
         P[i] = worldPos.xyz / worldPos.w;
     }
 
-    DrawDebugFrustum(float4(0.f, 0.f, 1.f, 1.f), P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7]);
-
     // Extract frustum planes from the world space frustum points
     // Equation of plane passing through 3 points A, B and C is given by
     // n = (B - A) X (C - A) and d = -n.A
@@ -189,30 +187,12 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
 
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
-                visibleLightIndices[visibleLightCount++] = globalLightIndex;
-
-                float4x4 scaledLightTransform =
-                {
-                    lightRange, 0.f, 0.f, 0.f,
-                    0.f, lightRange, 0.f, 0.f,
-                    0.f, 0.f, lightRange, 0.f,
-                    lightPos.x, lightPos.y, lightPos.z, 1.f
-                };
-                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), scaledLightTransform);
+                visibleLightIndices[visibleLightCount++] = globalLightIndex;           
             }
             else
             {
                 int previousValue;
                 renderStatsBuffer.InterlockedAdd(sizeof(int), 1, previousValue);
-
-                float4x4 scaledLightTransform =
-                {
-                    lightRange, 0.f, 0.f, 0.f,
-                    0.f, lightRange, 0.f, 0.f,
-                    0.f, 0.f, lightRange, 0.f,
-                    lightTransform._41, lightTransform._42, lightTransform._43, lightTransform._44
-                };
-                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(1, 0.f, 0.f, 1.f), scaledLightTransform);
             }
         }
 

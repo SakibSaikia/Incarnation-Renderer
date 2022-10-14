@@ -621,7 +621,7 @@ void Demo::UpdateUI(float deltaTime)
 	{
 		FRenderStatsBuffer stats = Demo::GetRenderStats();
 		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float) GetScene()->m_primitiveCount);
-		ImGui::Text("Culled Lights			%d", stats.m_culledLights);
+		ImGui::Text("Light Culling			%.2f%%", 100.f * stats.m_culledLights / (float) (GetScene()->m_sceneLights.GetCount() * Demo::s_globalConfig.LightClusterDimX * Demo::s_globalConfig.LightClusterDimY * Demo::s_globalConfig.LightClusterDimZ));
 	}
 	ImGui::End();
 
