@@ -203,13 +203,15 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
         RWByteAddressBuffer culledLightCountBuffer = ResourceDescriptorHeap[g_culledLightCountBufferUavIndex];
         RWByteAddressBuffer culledLightListsBuffer = ResourceDescriptorHeap[g_culledLightListsBufferUavIndex];
 
-        uint previousCount;
-        culledLightCountBuffer.InterlockedAdd(0, visibleLightCount, previousCount);
-
-        const uint offset = previousCount;
-        for (uint j = 0; j < visibleLightCount; ++j)
+        uint offset = 0;
+        if (visibleLightCount > 0)
         {
-            culledLightListsBuffer.Store<uint>((offset + j) * sizeof(uint), visibleLightIndices[j]);
+            culledLightCountBuffer.InterlockedAdd(0, visibleLightCount, offset);
+
+            for (uint j = 0; j < visibleLightCount; ++j)
+            {
+                culledLightListsBuffer.Store<uint>((offset + j) * sizeof(uint), visibleLightIndices[j]);
+            }
         }
 
         // Update the light grid for the cluster
