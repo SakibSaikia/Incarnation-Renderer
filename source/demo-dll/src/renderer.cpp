@@ -789,7 +789,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true);
+	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true);
 	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT, resX, resY);
 	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true);
 	std::unique_ptr<FShaderSurface> visBuffer = RenderBackend12::CreateSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY);
@@ -928,7 +928,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.jitter = pixelJitter;
 		baseDesc.renderConfig = c;
 		//sceneRenderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
-		//sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
+		sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{
