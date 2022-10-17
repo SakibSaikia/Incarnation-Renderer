@@ -5,7 +5,7 @@
 #include "gpu-shared-types.h"
 #include "material/common.hlsli"
 
-float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
+float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos, float3 basecolor, float metallic, float roughness, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
 {
 	float3 L;
 	float3 radianceIn = 0.f;
@@ -114,16 +114,16 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 		{
 			float NoV = saturate(dot(N, V));
 
-			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-			float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+			float3 F0 = metallic * basecolor + (1.f - metallic) * 0.04;
+			float3 albedo = (1.f - metallic) * basecolor;
 
 			float3 H = normalize(L + V);
 			float NoH = saturate(dot(N, H));
 			float VoH = saturate(dot(V, H));
 
-			float D = GGX(NoH, matInfo.roughness);
+			float D = GGX(NoH, roughness);
 			float3 F = F_Schlick(VoH, F0);
-			float G = G_SmithGGXCorrelated(NoV, NoL, matInfo.roughness);
+			float G = G_SmithGGXCorrelated(NoV, NoL, roughness);
 
 			// Diffuse & Specular BRDF
 			float3 Fd = albedo * Fd_Lambert();

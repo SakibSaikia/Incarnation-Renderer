@@ -38,6 +38,7 @@ namespace Demo
 #include "render-jobs/highlight-pass.inl"
 #include "render-jobs/batch-culling.inl"
 #include "render-jobs/light-culling.inl"
+#include "render-jobs/direct-lighting.inl"
 
 namespace
 {
@@ -788,7 +789,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget, hdrFormat, resX, resY);
+	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true);
 	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT, resX, resY);
 	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true);
 	std::unique_ptr<FShaderSurface> visBuffer = RenderBackend12::CreateSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY);
@@ -893,6 +894,28 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
 		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
+		// Direct Lighting
+		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
+		if (directionalLightIndex != -1)
+		{
+			RenderJob::DirectLightingDesc directLightingDesc = {};
+			directLightingDesc.directionalLightIndex = directionalLightIndex;
+			directLightingDesc.colorTarget = hdrRasterSceneColor.get();
+			directLightingDesc.depthStencilTex = depthBuffer.get();
+			directLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+			directLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+			directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+			directLightingDesc.renderConfig = c;
+			directLightingDesc.scene = renderState.m_scene;
+			directLightingDesc.view = &renderState.m_view;
+			directLightingDesc.jitter = pixelJitter;
+			directLightingDesc.resX = resX;
+			directLightingDesc.resY = resY;
+			sceneRenderJobs.push_back(RenderJob::DirectLighting(jobSync, directLightingDesc));
+		}
+
+		// Clustered Lighting
+
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};
 		baseDesc.colorTarget = hdrRasterSceneColor.get();
@@ -904,8 +927,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.view = &renderState.m_view;
 		baseDesc.jitter = pixelJitter;
 		baseDesc.renderConfig = c;
-		sceneRenderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
-		sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
+		//sceneRenderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
+		//sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{

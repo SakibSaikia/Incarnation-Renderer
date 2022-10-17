@@ -155,7 +155,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		int lightId = lightIndicesBuffer.Load<int>(lightIndex * sizeof(int));
 		FLight light = lightPropertiesBuffer.Load<FLight>(lightId * sizeof(FLight));
 		float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightId * sizeof(float4x4));
-		radiance += GetDirectRadiance(light, lightTransform, input.worldPos.xyz, p, N, V, sceneBvh);
+		radiance += GetDirectRadiance(light, lightTransform, input.worldPos.xyz, p.basecolor, p.metallic, p.roughness, N, V, sceneBvh);
 	}
 #endif
 

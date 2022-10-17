@@ -1953,6 +1953,18 @@ void FScene::Clear()
 	m_tlas.reset(nullptr);
 }
 
+int FScene::GetDirectionalLight() const
+{
+	auto search = std::find_if(m_sceneLights.m_entityList.cbegin(), m_sceneLights.m_entityList.cend(),
+		[this](const int lightIndex)
+		{
+			const FLight& light = m_globalLightList[lightIndex];
+			return light.m_type == Light::Directional;
+		});
+
+	return search != m_sceneLights.m_entityList.cend() ? *search : -1;
+}
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														View
 //-----------------------------------------------------------------------------------------------------------------------------------------------

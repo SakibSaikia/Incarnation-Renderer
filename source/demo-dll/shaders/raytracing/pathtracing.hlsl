@@ -224,7 +224,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         int lightId = lightIndicesBuffer.Load<int>(lightIndex * sizeof(int));
         FLight light = lightPropertiesBuffer.Load<FLight>(lightId * sizeof(FLight));
         float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightId * sizeof(float4x4));
-        payload.color.xyz += payload.attenuation * GetDirectRadiance(light, lightTransform, hitPosition, matInfo, N, V, g_sceneBvh);
+        payload.color.xyz += payload.attenuation * GetDirectRadiance(light, lightTransform, hitPosition, matInfo.basecolor, matInfo.metallic, matInfo.roughness, N, V, g_sceneBvh);
     }
 #endif
 

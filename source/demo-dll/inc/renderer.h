@@ -80,6 +80,7 @@ struct FScene : public FModelLoader
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
+	int GetDirectionalLight() const;
 
 	// Scene files
 	std::wstring m_modelFilename = {};
