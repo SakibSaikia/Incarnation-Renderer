@@ -62,7 +62,6 @@ namespace RenderJob
 				uint32_t batchCountsBufferUavIndex;
 				uint32_t scenePrimitivesIndex;
 				uint32_t primitiveCount;
-				uint32_t __pad[3];
 				Matrix viewProjTransform;
 			};
 
