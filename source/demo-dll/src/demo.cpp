@@ -386,6 +386,7 @@ void Demo::Teardown(HWND& windowHandle)
 	s_scene.Clear();
 	s_textureCache.Clear();
 	s_samplerCache.Clear();
+	s_debugDraw.~FDebugDraw();
 
 	Demo::TeardownRenderer();
 
