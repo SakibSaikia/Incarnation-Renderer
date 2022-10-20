@@ -765,14 +765,14 @@ void Demo::TeardownRenderer()
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	RenderBackend12::WaitForSwapChain();
-
 	// Create a immutable copy of the render state for render jobs to use
 	const FRenderState renderState = Demo::GetRenderState();
 	const FConfig& c = renderState.m_config;
 
 	if (renderState.m_suspendRendering)
 		return;
+
+	RenderBackend12::WaitForSwapChain();
 
 	SCOPED_CPU_EVENT("render", PIX_COLOR_DEFAULT);
 
