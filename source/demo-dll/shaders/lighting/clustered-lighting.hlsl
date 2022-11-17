@@ -15,7 +15,8 @@
 
 cbuffer cb : register(b0)
 {
-    int g_directionalLightIndex;
+    uint g_lightListsBufferSrvIndex;
+    uint g_lightGridBufferSrvIndex;
     uint g_colorTargetUavIndex;
     uint g_depthTargetSrvIndex;
     uint g_gbufferBaseColorSrvIndex;
@@ -23,12 +24,11 @@ cbuffer cb : register(b0)
     uint g_gbufferMetallicRoughnessAoSrvIndex;
     uint g_packedLightTransformsBufferIndex;
     uint g_packedGlobalLightPropertiesBufferIndex;
-    uint g_sceneBvhIndex;
     uint g_resX;
     uint g_resY;
-    uint __pad0;
+    uint g_sceneBvhIndex;
     float3 g_eyePos;
-    uint __pad1;
+    uint __pad0;
     float4x4 g_invViewProjTransform;
 };
 
@@ -65,23 +65,33 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float4 pixelWorldPos = mul(float4(screenPos.x, -screenPos.y, depth, 1.f), g_invViewProjTransform);
         pixelWorldPos /= pixelWorldPos.w;
 
+        uint clusterId = 1070;// GetClusterIndex(dispatchThreadId.xy, depth);
 
         // Calculate view vector
         float3 V = normalize(g_eyePos - pixelWorldPos.xyz);
 
 
         // Calculate radiance
+        ByteAddressBuffer lightListsBuffer = ResourceDescriptorHeap[g_lightListsBufferSrvIndex];
+        ByteAddressBuffer lightGridBuffer = ResourceDescriptorHeap[g_lightGridBufferSrvIndex];
         ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_packedGlobalLightPropertiesBufferIndex];
         ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_packedLightTransformsBufferIndex];
         RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_sceneBvhIndex];
 
-        FLight light = lightPropertiesBuffer.Load<FLight>(g_directionalLightIndex * sizeof(FLight));
-        float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(g_directionalLightIndex * sizeof(float4x4));
-        float3 radiance = GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
+        float3 radiance = 0.f;
+        FLightGridData clusterInfo = lightGridBuffer.Load<FLightGridData>(clusterId * sizeof(FLightGridData));
+
+        for (int i = 0; i < clusterInfo.m_count; ++i)
+        {
+            uint lightIndex = lightListsBuffer.Load<uint>((clusterInfo.m_offset + i) * sizeof(uint));
+            FLight light = lightPropertiesBuffer.Load<FLight>(lightIndex * sizeof(FLight));
+            float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightIndex * sizeof(float4x4));
+            radiance += GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
+        }
 
 
         // Output radiance
         RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_colorTargetUavIndex];
-        colorTarget[dispatchThreadId.xy] = radiance;
+        colorTarget[dispatchThreadId.xy] += radiance;
     }
 }

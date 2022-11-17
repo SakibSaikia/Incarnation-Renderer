@@ -85,9 +85,9 @@ namespace RenderJob
 				uint32_t packedGlobalLightPropertiesBufferIndex;
 				uint32_t resX;
 				uint32_t resY;
-				uint32_t __pad0;
+				uint32_t sceneBvhIndex;
 				Vector3 eyePos;
-				uint32_t __pad1;
+				uint32_t __pad0;
 				Matrix invViewProjTransform;
 			};
 
@@ -109,6 +109,7 @@ namespace RenderJob
 					cb->packedGlobalLightPropertiesBufferIndex = passDesc.scene->m_packedGlobalLightProperties->m_srvIndex;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
+					cb->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cb->eyePos = passDesc.view->m_position;
 					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
 				});

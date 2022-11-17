@@ -189,3 +189,10 @@ struct FDebugDrawCmd
 	uint32_t m_shapeType;
 	bool m_persistent;
 };
+
+// Used in clustered lighting to reference the culled light list
+struct FLightGridData
+{
+	uint32_t m_offset;
+	uint32_t m_count;
+};

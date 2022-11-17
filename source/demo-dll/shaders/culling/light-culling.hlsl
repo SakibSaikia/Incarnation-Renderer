@@ -164,12 +164,12 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
         const uint clusterId = GetClusterId(clusterIndex);
 
         // Per cluster - visible light count and light indices list
-        uint visibleLightCount = 0;
+        FLightGridData clusterInfo = (FLightGridData)0;
         uint visibleLightIndices[MAX_LIGHTS_PER_CLUSTER];
 
         const FFrustum clusterFrustum = GetClusterFrustum(clusterIndex);
 
-        for (uint i = 0; i < g_lightCount && visibleLightCount < MAX_LIGHTS_PER_CLUSTER; ++i)
+        for (uint i = 0; i < g_lightCount && clusterInfo.m_count < MAX_LIGHTS_PER_CLUSTER; ++i)
         {
             const uint globalLightIndex = sceneLightIndicesBuffer.Load<uint>(i * sizeof(uint));
             const FLight light = globalLightPropertiesBuffer.Load<FLight>(globalLightIndex * sizeof(FLight));
@@ -187,7 +187,7 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
 
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
-                visibleLightIndices[visibleLightCount++] = globalLightIndex;           
+                visibleLightIndices[clusterInfo.m_count++] = globalLightIndex;           
             }
             else
             {
@@ -203,20 +203,18 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
         RWByteAddressBuffer culledLightCountBuffer = ResourceDescriptorHeap[g_culledLightCountBufferUavIndex];
         RWByteAddressBuffer culledLightListsBuffer = ResourceDescriptorHeap[g_culledLightListsBufferUavIndex];
 
-        uint offset = 0;
-        if (visibleLightCount > 0)
+        if (clusterInfo.m_count > 0)
         {
-            culledLightCountBuffer.InterlockedAdd(0, visibleLightCount, offset);
+            culledLightCountBuffer.InterlockedAdd(0, clusterInfo.m_count, clusterInfo.m_offset);
 
-            for (uint j = 0; j < visibleLightCount; ++j)
+            for (uint j = 0; j < clusterInfo.m_count; ++j)
             {
-                culledLightListsBuffer.Store<uint>((offset + j) * sizeof(uint), visibleLightIndices[j]);
+                culledLightListsBuffer.Store<uint>((clusterInfo.m_offset + j) * sizeof(uint), visibleLightIndices[j]);
             }
         }
 
         // Update the light grid for the cluster
         RWByteAddressBuffer lightGridBuffer = ResourceDescriptorHeap[g_lightGridBufferUavIndex];
-        lightGridBuffer.Store<uint>(clusterId * sizeof(uint2), offset);
-        lightGridBuffer.Store<uint>(clusterId * sizeof(uint2) + sizeof(uint), visibleLightCount);
+        lightGridBuffer.Store<FLightGridData>(clusterId * sizeof(FLightGridData), clusterInfo);
     }
 }
