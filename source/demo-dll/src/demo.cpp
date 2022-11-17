@@ -1966,6 +1966,18 @@ int FScene::GetDirectionalLight() const
 	return search != m_sceneLights.m_entityList.cend() ? *search : -1;
 }
 
+size_t FScene::GetPunctualLightCount() const
+{
+	size_t count = 0;
+	for (const int lightIndex : m_sceneLights.m_entityList)
+	{
+		const FLight& light = m_globalLightList[lightIndex];
+		count += light.m_type == Light::Directional ? 0 : 1;
+	}
+
+	return count;
+}
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														View
 //-----------------------------------------------------------------------------------------------------------------------------------------------

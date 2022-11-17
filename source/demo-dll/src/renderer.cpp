@@ -39,6 +39,7 @@ namespace Demo
 #include "render-jobs/batch-culling.inl"
 #include "render-jobs/light-culling.inl"
 #include "render-jobs/direct-lighting.inl"
+#include "render-jobs/clustered-lighting.inl"
 
 namespace
 {
@@ -847,8 +848,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		sceneRenderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
 
 		// Light Culling
-		const size_t lightCount = renderState.m_scene->m_sceneLights.GetCount();
-		if (lightCount > 0)
+		const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
+		if (punctualLightCount > 0)
 		{
 			RenderJob::LightCullingDesc lightCullDesc = {};
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
@@ -915,6 +916,25 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		}
 
 		// Clustered Lighting
+		const bool bRequiresClear = directionalLightIndex == -1;
+		if (punctualLightCount > 0)
+		{
+			RenderJob::ClusteredLightingDesc clusteredLightingDesc = {};
+			clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
+			clusteredLightingDesc.lightGridBuffer = lightGridBuffer.get();
+			clusteredLightingDesc.colorTarget = hdrRasterSceneColor.get();
+			clusteredLightingDesc.depthStencilTex = depthBuffer.get();
+			clusteredLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+			clusteredLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+			clusteredLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+			clusteredLightingDesc.renderConfig = c;
+			clusteredLightingDesc.scene = renderState.m_scene;
+			clusteredLightingDesc.view = &renderState.m_view;
+			clusteredLightingDesc.jitter = pixelJitter;
+			clusteredLightingDesc.resX = resX;
+			clusteredLightingDesc.resY = resY;
+			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(jobSync, clusteredLightingDesc, bRequiresClear));
+		}
 
 		// Base pass
 		RenderJob::BasePassDesc baseDesc = {};

@@ -82,6 +82,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
         // Output radiance
         RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_colorTargetUavIndex];
-        colorTarget[dispatchThreadId.xy] += radiance;
+        colorTarget[dispatchThreadId.xy] = radiance;
     }
 }

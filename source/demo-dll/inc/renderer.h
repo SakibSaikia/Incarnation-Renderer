@@ -81,6 +81,7 @@ struct FScene : public FModelLoader
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
 	int GetDirectionalLight() const;
+	size_t GetPunctualLightCount() const;
 
 	// Scene files
 	std::wstring m_modelFilename = {};
