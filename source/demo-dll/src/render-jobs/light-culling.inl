@@ -75,7 +75,7 @@ namespace RenderJob
 				uint32_t packedLightTransformsBufferIndex;
 				uint32_t packedGlobalLightPropertiesBufferIndex;
 				uint32_t lightCount;
-				uint32_t __padding0;
+				float clusterDepthExtent;
 				uint32_t clusterGridSize[3];
 				float cameraNearPlane;
 				Matrix projTransform;
@@ -96,6 +96,7 @@ namespace RenderJob
 					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
 					cb->packedGlobalLightPropertiesBufferIndex = passDesc.scene->m_packedGlobalLightProperties->m_srvIndex;
 					cb->lightCount = (uint32_t)passDesc.scene->m_sceneLights.GetCount();
+					cb->clusterDepthExtent = passDesc.renderConfig.ClusterDepthExtent;
 					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
 					cb->clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
 					cb->clusterGridSize[2] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;

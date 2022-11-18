@@ -87,8 +87,11 @@ namespace RenderJob
 				uint32_t resY;
 				uint32_t sceneBvhIndex;
 				Vector3 eyePos;
-				uint32_t __pad0;
+				uint32_t clusterGridSizeZ;
+				Vector2 clusterSliceScaleAndBias;
+				uint32_t clusterGridSizeXY[2];
 				Matrix invViewProjTransform;
+				Matrix invProjTransform;
 			};
 
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
@@ -97,6 +100,9 @@ namespace RenderJob
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
+					const float scale = (float)passDesc.renderConfig.LightClusterDimZ / std::log(passDesc.renderConfig.ClusterDepthExtent / passDesc.renderConfig.CameraNearPlane);
+					Matrix jitterMatrix = Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->lightListsBufferSrvIndex = passDesc.lightListsBuffer->m_srvIndex;
 					cb->lightGridBufferSrvIndex = passDesc.lightGridBuffer->m_srvIndex;
@@ -111,7 +117,13 @@ namespace RenderJob
 					cb->resY = passDesc.resY;
 					cb->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cb->eyePos = passDesc.view->m_position;
-					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
+					cb->clusterGridSizeZ = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
+					cb->clusterSliceScaleAndBias.x = scale;
+					cb->clusterSliceScaleAndBias.y = -scale * std::log(passDesc.renderConfig.CameraNearPlane);
+					cb->clusterGridSizeXY[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
+					cb->clusterGridSizeXY[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
+					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * jitterMatrix).Invert();
+					cb->invProjTransform = (passDesc.view->m_projectionTransform * jitterMatrix).Invert();
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());

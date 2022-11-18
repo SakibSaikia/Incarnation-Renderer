@@ -1,4 +1,5 @@
 #include "lighting/common.hlsli"
+#include "common/cluster-culling.hlsli"
 #include "geo-raster/encoding.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
@@ -28,8 +29,11 @@ cbuffer cb : register(b0)
     uint g_resY;
     uint g_sceneBvhIndex;
     float3 g_eyePos;
-    uint __pad0;
+    uint g_clusterGridSizeZ;
+    float2 g_clusterSliceScaleAndBias;
+    uint2 g_clusterGridSizeXY;
     float4x4 g_invViewProjTransform;
+    float4x4 g_invProjTransform;
 };
 
 
@@ -55,7 +59,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         #define aoBlend   (misc.a)
 
 
-        // Calculate pixel world position
+        // Calculate pixel world & view position
         float2 screenPos = dispatchThreadId.xy / float2(g_resX, g_resY);
         screenPos = 2.f * screenPos - 1.f;
 
@@ -65,7 +69,13 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float4 pixelWorldPos = mul(float4(screenPos.x, -screenPos.y, depth, 1.f), g_invViewProjTransform);
         pixelWorldPos /= pixelWorldPos.w;
 
-        uint clusterId = 1070;// GetClusterIndex(dispatchThreadId.xy, depth);
+        float4 pixelViewPos = mul(float4(screenPos.x, -screenPos.y, depth, 1.f), g_invProjTransform);
+        pixelViewPos /= pixelViewPos.w;
+
+        // Retrieve the active cluster for this pixel
+        uint3 pixelCluster = GetPixelCluster(dispatchThreadId.xy, pixelViewPos.z, g_clusterGridSizeXY, g_clusterSliceScaleAndBias);
+        uint clusterId = GetClusterId(pixelCluster, float3(g_clusterGridSizeXY.x, g_clusterGridSizeXY.y, g_clusterGridSizeZ));
+
 
         // Calculate view vector
         float3 V = normalize(g_eyePos - pixelWorldPos.xyz);
@@ -86,7 +96,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             uint lightIndex = lightListsBuffer.Load<uint>((clusterInfo.m_offset + i) * sizeof(uint));
             FLight light = lightPropertiesBuffer.Load<FLight>(lightIndex * sizeof(FLight));
             float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightIndex * sizeof(float4x4));
-            radiance += GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
+            radiance += 1000.xxx;// GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
         }
 
 

@@ -41,6 +41,7 @@ struct FConfig
 	int LightClusterDimY = 9;
 	int LightClusterDimZ = 24;
 	int MaxLightsPerCluster = 64;
+	float ClusterDepthExtent = 20.f;
 	uint32_t MaxSampleCount = 256;
 	float Pathtracing_CameraAperture = 0.01f;
 	float Pathtracing_CameraFocalLength = 7.f;
