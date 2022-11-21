@@ -37,6 +37,7 @@ struct FConfig
 	bool PathTrace = false;
 	bool EnableTAA = true;
 	bool FreezeCulling = false;
+	bool ShowLightBounds = false;
 	int LightClusterDimX = 16;
 	int LightClusterDimY = 9;
 	int LightClusterDimZ = 24;

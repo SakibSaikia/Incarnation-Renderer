@@ -614,6 +614,12 @@ void Demo::UpdateUI(float deltaTime)
 				ImGui::Checkbox("Specular IBL", &s_globalConfig.EnableSpecularIBL);
 				ImGui::TreePop();
 			}
+
+			if (ImGui::TreeNode("Debug Rendering"))
+			{
+				ImGui::Checkbox("Light Bounds", &s_globalConfig.ShowLightBounds);
+				ImGui::TreePop();
+			}
 		}
 	}
 	ImGui::End();

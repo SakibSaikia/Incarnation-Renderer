@@ -93,6 +93,20 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
             const float4x4 lightTransform = sceneLightTransformsBuffer.Load<float4x4>(i * sizeof(float4x4));
             const float3 lightPos = float3(lightTransform._41, lightTransform._42, lightTransform._43);
 
+#if SHOW_LIGHT_BOUNDS
+            if ((clusterIndex.x | clusterIndex.y | clusterIndex.z) == 0)
+            {
+                float4x4 scaledLightTransform =
+                {
+                    lightRange, 0.f, 0.f, 0.f,
+                    0.f, lightRange, 0.f, 0.f,
+                    0.f, 0.f, lightRange, 0.f,
+                    lightPos.x, lightPos.y, lightPos.z, 1.f
+                };
+                DrawDebugPrimitive((uint)DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), scaledLightTransform);
+            }
+#endif
+
             if (FrustumCull(clusterFrustum, float4(lightPos.xyz, lightRange)))
             {
                 visibleLightIndices[clusterInfo.m_count++] = globalLightIndex;           

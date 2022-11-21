@@ -47,7 +47,8 @@ namespace RenderJob
 			s << "THREAD_GROUP_SIZE_X=" << threadGroupSize[0] <<
 				" THREAD_GROUP_SIZE_Y=" << threadGroupSize[1] <<
 				" THREAD_GROUP_SIZE_Z=" << threadGroupSize[2] <<
-				" MAX_LIGHTS_PER_CLUSTER=" << passDesc.renderConfig.MaxLightsPerCluster;
+				" MAX_LIGHTS_PER_CLUSTER=" << passDesc.renderConfig.MaxLightsPerCluster <<
+				" SHOW_LIGHT_BOUNDS=" << passDesc.renderConfig.ShowLightBounds ? 1 : 0;
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
