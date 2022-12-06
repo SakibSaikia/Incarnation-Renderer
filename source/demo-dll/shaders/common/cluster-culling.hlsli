@@ -26,12 +26,12 @@ uint GetClusterId(float3 clusterIndex, uint3 clusterGridSize)
 }
 
 //Gets a pixelId (window coordinates) and returns the cluster it belongs to
-uint3 GetPixelCluster(uint2 pixelId, float viewSpaceDepth, uint2 clusterGridSizeXY, float2 clusterSliceScaleAndBias)
+uint3 GetPixelCluster(uint2 pixelId, float viewSpaceDepth, float2 clusterGridRes, float2 clusterSliceScaleAndBias)
 {
     uint3 cluster;
 
     // Clusters are evenly distributed in xy direction with no inversion for NDC space (See GetClusterFustum)
-    cluster.xy = pixelId / clusterGridSizeXY;
+    cluster.xy = pixelId / clusterGridRes;
 
     // See this for z-slice calculation: http://www.aortiz.me/2018/12/21/CG.html
     cluster.z = floor(log(viewSpaceDepth) * clusterSliceScaleAndBias.x + clusterSliceScaleAndBias.y);
