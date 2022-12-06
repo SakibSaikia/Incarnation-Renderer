@@ -76,7 +76,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float2 clusterGridRes;
         clusterGridRes.x = g_resX / (float)g_clusterGridSizeXY.x;
         clusterGridRes.y = g_resY / (float)g_clusterGridSizeXY.y;
-        uint3 pixelCluster = GetPixelCluster(dispatchThreadId.xy, pixelViewPos.z, clusterGridRes, g_clusterSliceScaleAndBias);
+        uint2 pixelId = float2(dispatchThreadId.x, g_resY - dispatchThreadId.y);
+        uint3 pixelCluster = GetPixelCluster(pixelId, pixelViewPos.z, clusterGridRes, g_clusterSliceScaleAndBias);
         uint clusterId = GetClusterId(pixelCluster, float3(g_clusterGridSizeXY.x, g_clusterGridSizeXY.y, g_clusterGridSizeZ));
 
 
