@@ -87,6 +87,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 	{
 		// Shadow ray
 		float lightVisibility = 1.f;
+		if (light.m_type == Light::Directional)
 		{
 			RayDesc ray;
 			ray.Origin = worldPos;
