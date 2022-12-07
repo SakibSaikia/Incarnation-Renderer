@@ -100,7 +100,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             uint lightIndex = lightListsBuffer.Load<uint>((clusterInfo.m_offset + i) * sizeof(uint));
             FLight light = lightPropertiesBuffer.Load<FLight>(lightIndex * sizeof(FLight));
             float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightIndex * sizeof(float4x4));
-            radiance += 1000.xxx;// GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
+            radiance += GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
         }
 
 
