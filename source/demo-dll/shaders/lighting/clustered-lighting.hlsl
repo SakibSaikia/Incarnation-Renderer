@@ -62,22 +62,22 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         // Calculate pixel world & view position
         float2 screenPos = dispatchThreadId.xy / float2(g_resX, g_resY);
         screenPos = 2.f * screenPos - 1.f;
+        screenPos.y = -screenPos.y;
 
         Texture2D<float> depthTex = ResourceDescriptorHeap[g_depthTargetSrvIndex];
         float depth = depthTex[dispatchThreadId.xy];
 
-        float4 pixelWorldPos = mul(float4(screenPos.x, -screenPos.y, depth, 1.f), g_invViewProjTransform);
+        float4 pixelWorldPos = mul(float4(screenPos.xy, depth, 1.f), g_invViewProjTransform);
         pixelWorldPos /= pixelWorldPos.w;
 
-        float4 pixelViewPos = mul(float4(screenPos.x, -screenPos.y, depth, 1.f), g_invProjTransform);
+        float4 pixelViewPos = mul(float4(screenPos.xy, depth, 1.f), g_invProjTransform);
         pixelViewPos /= pixelViewPos.w;
 
         // Retrieve the active cluster for this pixel
         float2 clusterGridRes;
         clusterGridRes.x = g_resX / (float)g_clusterGridSizeXY.x;
         clusterGridRes.y = g_resY / (float)g_clusterGridSizeXY.y;
-        uint2 pixelId = float2(dispatchThreadId.x, g_resY - dispatchThreadId.y);
-        uint3 pixelCluster = GetPixelCluster(pixelId, pixelViewPos.z, clusterGridRes, g_clusterSliceScaleAndBias);
+        uint3 pixelCluster = GetPixelCluster(dispatchThreadId.xy, pixelViewPos.z, clusterGridRes, g_clusterSliceScaleAndBias);
         uint clusterId = GetClusterId(pixelCluster, float3(g_clusterGridSizeXY.x, g_clusterGridSizeXY.y, g_clusterGridSizeZ));
 
 
@@ -99,6 +99,13 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
             uint lightIndex = lightListsBuffer.Load<uint>((clusterInfo.m_offset + i) * sizeof(uint));
             FLight light = lightPropertiesBuffer.Load<FLight>(lightIndex * sizeof(FLight));
+
+            // Don't allow infinite range
+            if (light.m_range == 0)
+            {
+                light.m_range = MAX_LIGHT_RANGE;
+            }
+
             float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightIndex * sizeof(float4x4));
             radiance += GetDirectRadiance(light, lightTransform, pixelWorldPos.xyz, basecolor, metallic, roughness, normal, V, sceneBvh);
         }

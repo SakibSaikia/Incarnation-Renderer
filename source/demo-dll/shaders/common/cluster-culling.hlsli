@@ -1,6 +1,8 @@
 #ifndef __CLUSTER_CULLING_HLSLI_
 #define __CLUSTER_CULLING_HLSLI_
 
+#define MAX_LIGHT_RANGE (4.f)
+
 struct FFrustum
 {
     // .xyz = Plane Normal, .w = d
@@ -30,7 +32,7 @@ uint3 GetPixelCluster(uint2 pixelId, float viewSpaceDepth, float2 clusterGridRes
 {
     uint3 cluster;
 
-    // Clusters are evenly distributed in xy direction with no inversion for NDC space (See GetClusterFustum)
+    // Clusters are evenly distributed in xy direction
     cluster.xy = pixelId / clusterGridRes;
 
     // See this for z-slice calculation: http://www.aortiz.me/2018/12/21/CG.html
@@ -43,10 +45,11 @@ uint3 GetPixelCluster(uint2 pixelId, float viewSpaceDepth, float2 clusterGridRes
 FFrustum GetClusterFrustum(uint3 clusterIndex, uint3 clusterGridSize, float2 viewSpaceDepthExtent, float4x4 projTransform, float4x4 invViewProjTransform)
 {
     // Cluster slices are evenly assigned in NDC space for X & Y directions
-    // Note: that this doesn't invert the direction of Y for NDC. The math works out as long as the same is
-    // done when converting back from NDC space to cluster index.
-    float2 NDCIndex = float2(clusterIndex.x - clusterGridSize.x / 2.f, clusterIndex.y - clusterGridSize.y / 2.f);
-    float2 Stride = 2.f / clusterGridSize.xy;
+    float2 clusterNDC = clusterIndex.xy / (float2) clusterGridSize.xy;
+    clusterNDC = 2.xx * clusterNDC - 1.xx;
+    clusterNDC.y = -clusterNDC.y;
+
+    float2 Stride = 2.f / (float2) clusterGridSize.xy;
 
     // Cluster slices should not be evenly assigned for depth in NDC space as it causes skewed placement of clusters due to z-nonlinearity.
     // Instead, use an exponential scheme for slices in view space to counter this effect as per [Tiago Sousa SIGGRAPH 2016]
@@ -63,15 +66,15 @@ FFrustum GetClusterFrustum(uint3 clusterIndex, uint3 clusterGridSize, float2 vie
 
     float4 ProjectedClusterPoints[] = {
         // Near plane points
-        float4(NDCIndex.x * Stride.x, NDCIndex.y * Stride.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
-        float4(NDCIndex.x * Stride.x + Stride.x, NDCIndex.y * Stride.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
-        float4(NDCIndex.x * Stride.x + Stride.x, NDCIndex.y * Stride.y + Stride.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
-        float4(NDCIndex.x * Stride.x, NDCIndex.y * Stride.y + Stride.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
+        float4(clusterNDC.x, clusterNDC.y - Stride.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
+        float4(clusterNDC.x + Stride.x, clusterNDC.y - Stride.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
+        float4(clusterNDC.x + Stride.x, clusterNDC.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
+        float4(clusterNDC.x, clusterNDC.y, NDCNearPoint.z / NDCNearPoint.w, 1.f),
         // Far plane points
-        float4(NDCIndex.x * Stride.x, NDCIndex.y * Stride.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
-        float4(NDCIndex.x * Stride.x + Stride.x, NDCIndex.y * Stride.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
-        float4(NDCIndex.x * Stride.x + Stride.x, NDCIndex.y * Stride.y + Stride.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
-        float4(NDCIndex.x * Stride.x, NDCIndex.y * Stride.y + Stride.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
+        float4(clusterNDC.x, clusterNDC.y - Stride.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
+        float4(clusterNDC.x + Stride.x, clusterNDC.y - Stride.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
+        float4(clusterNDC.x + Stride.x, clusterNDC.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
+        float4(clusterNDC.x, clusterNDC.y, NDCFarPoint.z / NDCFarPoint.w, 1.f),
     };
 
     // Unproject the NDC points to get frustum in World Space

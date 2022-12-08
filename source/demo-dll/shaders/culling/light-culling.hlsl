@@ -87,7 +87,7 @@ void cs_main(uint3 clusterIndex : SV_DispatchThreadID)
                 continue;
 
             // Don't allow infinite range
-            const float lightRange = light.m_range == 0 ? MAX_RANGE : light.m_range;
+            const float lightRange = light.m_range == 0 ? MAX_LIGHT_RANGE : light.m_range;
 
             // For point and spot lights, the light position is contained in the transform
             const float4x4 lightTransform = sceneLightTransformsBuffer.Load<float4x4>(i * sizeof(float4x4));

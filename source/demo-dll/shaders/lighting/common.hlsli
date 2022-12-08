@@ -29,7 +29,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 		float radialAttenuation;
 		if (light.m_range > 0.f)
 		{
-			float radialAttenuation = max(min(1.f, 1.f - pow(distance / light.m_range, 4)), 0.f) / distanceSquared;
+			radialAttenuation = max(min(1.f, 1.f - pow(distance / light.m_range, 4)), 0.f) / distanceSquared;
 		}
 		else
 		{
