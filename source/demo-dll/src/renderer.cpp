@@ -947,7 +947,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.view = &renderState.m_view;
 		baseDesc.jitter = pixelJitter;
 		baseDesc.renderConfig = c;
-		//sceneRenderJobs.push_back(RenderJob::BasePass(jobSync, baseDesc));
 		sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
 
 		if (c.Viewmode != (int)Viewmode::Normal)
