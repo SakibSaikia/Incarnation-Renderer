@@ -38,6 +38,7 @@ namespace Demo
 #include "render-jobs/highlight-pass.inl"
 #include "render-jobs/batch-culling.inl"
 #include "render-jobs/light-culling.inl"
+#include "render-jobs/sky-lighting.inl"
 #include "render-jobs/direct-lighting.inl"
 #include "render-jobs/clustered-lighting.inl"
 
@@ -895,6 +896,22 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
 		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
+		// Sky Lighting + Emissive
+		RenderJob::SkyLightingDesc skyLightingDesc = {};
+		skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
+		skyLightingDesc.depthStencilTex = depthBuffer.get();
+		skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+		skyLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+		skyLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+		skyLightingDesc.renderConfig = c;
+		skyLightingDesc.scene = renderState.m_scene;
+		skyLightingDesc.view = &renderState.m_view;
+		skyLightingDesc.jitter = pixelJitter;
+		skyLightingDesc.resX = resX;
+		skyLightingDesc.resY = resY;
+		skyLightingDesc.envBRDFTex = s_envBRDF.get();
+		sceneRenderJobs.push_back(RenderJob::SkyLighting(jobSync, skyLightingDesc));
+
 		// Direct Lighting
 		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
 		if (directionalLightIndex != -1)
@@ -936,7 +953,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(jobSync, clusteredLightingDesc, bRequiresClear));
 		}
 
-		// Base pass
+		// Environment/Sky pass
 		RenderJob::BasePassDesc baseDesc = {};
 		baseDesc.colorTarget = hdrRasterSceneColor.get();
 		baseDesc.depthStencilTarget = depthBuffer.get();
