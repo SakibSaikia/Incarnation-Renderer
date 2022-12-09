@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct BasePassDesc
 	{
-		FRenderTexture* colorTarget;
-		FRenderTexture* depthStencilTarget;
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
 		DXGI_FORMAT format;
 		uint32_t resX;
 		uint32_t resY;
@@ -22,12 +22,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_base_pass", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"base_pass_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"base_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "base_pass", 0);
 
 			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -43,8 +39,11 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"base-pass.hlsl", L"rootsig", L"rootsig_1_1" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"base_pass_rootsig",
+				cmdList,
+				FRootsigDesc{ L"geo-raster/base-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Frame constant buffer
 			struct FrameCbLayout
@@ -62,13 +61,13 @@ namespace RenderJob
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FTransientBuffer> frameCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_lights.size();
+					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
 
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
@@ -79,7 +78,7 @@ namespace RenderJob
 					cbDest->sceneProbeData = passDesc.scene->m_environmentSky;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->lightCount = lightCount;
-					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
+					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
 				});
@@ -95,7 +94,7 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FTransientBuffer> viewCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList,
@@ -124,7 +123,7 @@ namespace RenderJob
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
 			// Issue scene draws
-			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.GetCount(); ++meshIndex)
 			{
 				const FMesh& mesh = passDesc.scene->m_sceneMeshes.m_entityList[meshIndex];
 				SCOPED_COMMAND_LIST_EVENT(cmdList, passDesc.scene->m_sceneMeshes.m_entityNames[meshIndex].c_str(), 0);
@@ -137,7 +136,7 @@ namespace RenderJob
 					D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 					psoDesc.NodeMask = 1;
 					psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-					psoDesc.pRootSignature = rootsig.get();
+					psoDesc.pRootSignature = rootsig->m_rootsig;
 					psoDesc.SampleMask = UINT_MAX;
 					psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 					psoDesc.NumRenderTargets = 1;
@@ -156,8 +155,8 @@ namespace RenderJob
 							L" DIFFUSE_IBL=" << (passDesc.renderConfig.EnableDiffuseIBL ? L"1" : L"0") <<
 							L" SPECULAR_IBL=" << (passDesc.renderConfig.EnableSpecularIBL ? L"1" : L"0");
 
-						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
-						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
+						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
+						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
 
 						vs.pShaderBytecode = vsBlob->GetBufferPointer();
 						vs.BytecodeLength = vsBlob->GetBufferSize();

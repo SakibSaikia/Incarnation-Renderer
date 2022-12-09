@@ -1,5 +1,7 @@
 #include "raytracing/common.hlsli"
 #include "lighting/common.hlsli"
+#include "material/common.hlsli"
+#include "common/mesh-material.hlsli"
 
 #define MAX_RECURSION_DEPTH 4
 
@@ -68,7 +70,7 @@ struct GlobalCbLayout
     int scenePrimitiveCountsIndex;
     uint currentSampleIndex;
     uint sqrtSampleCount;
-    int sceneLightPropertiesBufferIndex;
+    int globalLightPropertiesBufferIndex;
     int sceneLightIndicesBufferIndex;
     int sceneLightsTransformsBufferIndex;
 };
@@ -215,14 +217,14 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
 #if DIRECT_LIGHTING
     ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightIndicesBufferIndex];
-    ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightPropertiesBufferIndex];
+    ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_globalConstants.globalLightPropertiesBufferIndex];
     ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_globalConstants.sceneLightsTransformsBufferIndex];
     for (int lightIndex = 0; lightIndex < g_globalConstants.lightCount; ++lightIndex)
     {
         int lightId = lightIndicesBuffer.Load<int>(lightIndex * sizeof(int));
         FLight light = lightPropertiesBuffer.Load<FLight>(lightId * sizeof(FLight));
         float4x4 lightTransform = lightTransformsBuffer.Load<float4x4>(lightId * sizeof(float4x4));
-        payload.color.xyz += payload.attenuation * GetDirectRadiance(light, lightTransform, hitPosition, matInfo, N, V, g_sceneBvh);
+        payload.color.xyz += payload.attenuation * GetDirectRadiance(light, lightTransform, hitPosition, matInfo.basecolor, matInfo.metallic, matInfo.roughness, N, V, g_sceneBvh);
     }
 #endif
 

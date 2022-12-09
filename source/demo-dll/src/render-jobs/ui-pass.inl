@@ -2,7 +2,7 @@ namespace RenderJob
 {
 	struct UIPassDesc
 	{
-		FRenderTexture* colorTarget;
+		FShaderSurface* colorTarget;
 		FConfig renderConfig;
 	};
 
@@ -14,10 +14,7 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_ui", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"imgui_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "imgui_commands", 0);
 
@@ -33,7 +30,7 @@ namespace RenderJob
 
 			// Vertex Buffer
 			{
-				std::unique_ptr<FTransientBuffer> vtxBuffer = RenderBackend12::CreateTransientBuffer(
+				std::unique_ptr<FUploadBuffer> vtxBuffer = RenderBackend12::CreateUploadBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
 					cmdList,
@@ -57,7 +54,7 @@ namespace RenderJob
 
 			// Index Buffer
 			{
-				std::unique_ptr<FTransientBuffer> idxBuffer = RenderBackend12::CreateTransientBuffer(
+				std::unique_ptr<FUploadBuffer> idxBuffer = RenderBackend12::CreateUploadBuffer(
 					L"imgui_ib",
 					idxBufferSize,
 					cmdList,
@@ -84,9 +81,8 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"imgui.hlsl", L"rootsig", L"rootsig_1_1" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
-			rootsig->SetName(L"imgui_rootsig");
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"imgui_rootsig", cmdList, FRootsigDesc{L"imgui.hlsl", L"rootsig", L"rootsig_1_1"});
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Vertex Constant Buffer
 			{
@@ -121,7 +117,7 @@ namespace RenderJob
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;

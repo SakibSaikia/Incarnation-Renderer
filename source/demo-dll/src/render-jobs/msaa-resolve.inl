@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct MSAAResolveDesc
 	{
-		FRenderTexture* colorSource;
-		FRenderTexture* colorTarget;
+		FShaderSurface* colorSource;
+		FShaderSurface* colorTarget;
 		uint32_t resX;
 		uint32_t resY;
 		DXGI_FORMAT format;
@@ -18,12 +18,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_msaa_resolve", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"msaa_resolve_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"msaa_resolve_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "msaa_resolve", 0);
 
 			// MSAA resolve

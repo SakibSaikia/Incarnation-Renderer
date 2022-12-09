@@ -5,31 +5,44 @@
 
 enum class Viewmode
 {
-	Normal			= 0,
-	LightingOnly	= 1,
-	Roughness		= 2,
-	Metallic		= 3,
-	BaseColor		= 4,
-	Emissive		= 5,
-	NanCheck		= 6,
-	Reflections		= 7
+	Normal				= 0,
+	LightingOnly		= 1,
+	Roughness			= 2,
+	Metallic			= 3,
+	BaseColor			= 4,
+	Emissive			= 5,
+	NanCheck			= 6,
+	Reflections			= 7,
+	ObjectIds			= 8,
+	TriangleIds			= 9,
+	Normalmap			= 10,
+	LightClusterSlices	= 11 
 };
 
 struct FConfig
 {
 	DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-	std::wstring ModelFilename = L"DamagedHelmet.gltf";
+	bool UseGpuBasedValidation = false;
+	std::wstring ModelFilename = L"sponza.gltf";
 	std::wstring EnvironmentFilename = L"lilienstein_2k.hdr";
 	bool UseContentCache = true;
 	float Fov = 0.25f * DirectX::XM_PI;
 	float Exposure = 13.f;
 	float CameraSpeed = 5.f;
+	float CameraNearPlane = 1.f;
 	int Viewmode = 0;
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = true;
-	bool PathTrace = true;
+	bool PathTrace = false;
 	bool EnableTAA = true;
+	bool FreezeCulling = false;
+	bool ShowLightBounds = false;
+	int LightClusterDimX = 16;
+	int LightClusterDimY = 9;
+	int LightClusterDimZ = 24;
+	int MaxLightsPerCluster = 64;
+	float ClusterDepthExtent = 200.f;
 	uint32_t MaxSampleCount = 256;
 	float Pathtracing_CameraAperture = 0.01f;
 	float Pathtracing_CameraFocalLength = 7.f;

@@ -2,6 +2,7 @@
 
 #include <backend-d3d12.h>
 #include <Tracy.hpp>
+#include <TracyD3D12.hpp>
 
 #define DO_TOKEN_PASTE(a, b) a ## b
 #define TOKEN_PASTE(a, b)  DO_TOKEN_PASTE(a,b)

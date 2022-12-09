@@ -14,7 +14,7 @@ namespace tinygltf
 	class Sampler;
 }
 
-class FController;
+struct FController;
 
 // Corresponds to GLTF Primitive
 struct FMeshPrimitive
@@ -27,6 +27,7 @@ struct FMeshPrimitive
 	size_t m_indexCount;
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	int m_materialIndex;
+	DirectX::BoundingSphere m_boundingSphere;
 };
 
 // Corresponds to GLTF Mesh
@@ -43,22 +44,7 @@ struct TSceneEntities
 	std::vector<std::string> m_entityNames;
 	std::vector<Matrix> m_transformList;
 	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
-
-	void Resize(const size_t count)
-	{
-		m_entityList.resize(count);
-		m_entityNames.resize(count);
-		m_transformList.resize(count);
-		m_objectSpaceBoundsList.resize(count);
-	}
-
-	void Clear()
-	{
-		m_entityList.clear();
-		m_entityNames.clear();
-		m_transformList.clear();
-		m_objectSpaceBoundsList.clear();
-	}
+	size_t GetCount() const { return m_entityList.size(); }
 };
 
 struct FCamera
@@ -74,14 +60,28 @@ struct FLightProbe
 	int m_shTextureIndex;
 };
 
-struct FScene
+struct FModelLoader
+{
+	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
+	std::unique_ptr<FShaderBuffer> m_packedMeshBufferViews;
+	std::unique_ptr<FShaderBuffer> m_packedMeshAccessors;
+
+protected:
+	void LoadMeshBuffers(const tinygltf::Model& model);
+	void LoadMeshBufferViews(const tinygltf::Model& model);
+	void LoadMeshAccessors(const tinygltf::Model& model);
+};
+
+struct FScene : public FModelLoader
 {
 	void ReloadModel(const std::wstring& gltfFilename);
 	void ReloadEnvironment(const std::wstring& hdriFilename);
-	void LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform);
+	void LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& transform = Matrix::Identity);
 	void LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void LoadCamera(int meshIndex, const tinygltf::Model& model, const Matrix& transform);
 	void Clear();
+	int GetDirectionalLight() const;
+	size_t GetPunctualLightCount() const;
 
 	// Scene files
 	std::wstring m_modelFilename = {};
@@ -93,35 +93,31 @@ struct FScene
 	using FSceneMeshEntities = TSceneEntities<FMesh>;
 	using FSceneLightEntities = TSceneEntities<int>;
 	FSceneMeshEntities m_sceneMeshes;
+	FSceneMeshEntities m_sceneMeshDecals;
 	FSceneLightEntities m_sceneLights;
+	std::unique_ptr<FShaderBuffer> m_packedLightIndices; // Index into global light list
+	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::vector<std::unique_ptr<FBindlessShaderResource>> m_meshBuffers;
-	std::unique_ptr<FBindlessShaderResource> m_packedMeshBufferViews;
-	std::unique_ptr<FBindlessShaderResource> m_packedMeshAccessors;
-	std::unique_ptr<FBindlessShaderResource> m_packedPrimitives;
-	std::unique_ptr<FBindlessShaderResource> m_packedPrimitiveCounts;
-	std::unordered_map<std::string, std::unique_ptr<FBindlessShaderResource>> m_blasList;
-	std::unique_ptr<FBindlessShaderResource> m_tlas;
-	std::unique_ptr<FBindlessShaderResource> m_packedMaterials;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
+	std::unordered_map<std::string, std::unique_ptr<FShaderBuffer>> m_blasList;
+	std::unique_ptr<FShaderBuffer> m_tlas;
+	std::unique_ptr<FShaderBuffer> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
+	size_t m_primitiveCount;
 
 	// Lights
-	std::vector<FLight> m_lights;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightProperties;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightIndices;
-	std::unique_ptr<FBindlessShaderResource> m_packedLightTransforms;
+	std::vector<FLight> m_globalLightList;
+	std::unique_ptr<FShaderBuffer> m_packedGlobalLightProperties;
 	FLightProbe m_environmentSky;
 
 	// Transform
 	Matrix m_rootTransform;
 
 private:
-	void LoadMeshBuffers(const tinygltf::Model& model);
-	void LoadMeshBufferViews(const tinygltf::Model& model);
-	void LoadMeshAccessors(const tinygltf::Model& model);
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
 	void CreateGpuPrimitiveBuffers();
@@ -159,13 +155,51 @@ struct FRenderState
 	FConfig m_config;
 	bool m_suspendRendering;
 	FScene* m_scene;
-	FView* m_view;
+	FView m_view;
+	FView m_cullingView;
+	uint32_t m_mouseX, m_mouseY;
+};
+
+struct FDebugDraw : public FModelLoader
+{
+	static const size_t MaxCommands = 256;
+
+	struct PassDesc
+	{
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthTarget;
+		uint32_t resX;
+		uint32_t resY;
+		const FScene* scene;
+		const FView* view;
+		FConfig renderConfig;
+	};
+
+	void Initialize();
+	void DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent = false);
+	void Flush(const PassDesc& passDesc);
+
+private:
+	FMeshPrimitive m_shapePrimitives[DebugShape::Count];
+	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
+	std::unique_ptr<FShaderBuffer> m_packedPrimitiveIndexCounts;
+
+	// Maintain a list of debug draw commands on the CPU-side that are copied over to the GPU and sorted when Flush() is called.
+	concurrency::concurrent_vector<FDebugDrawCmd> m_queuedCommands;
+	std::unique_ptr<FShaderBuffer> m_queuedCommandsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectPrimitiveArgsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectPrimitiveCountsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectLineArgsBuffer;
+	std::unique_ptr<FShaderBuffer> m_indirectLineCountsBuffer;
 };
 
 namespace Demo
 {
 	FRenderState GetRenderState();
+	FRenderStatsBuffer GetRenderStats();
+	FDebugDraw* GetDebugRenderer();
 	void ResetPathtraceAccumulation();
 	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
+	void LoadDebugModels();
 	void TeardownRenderer();
 }

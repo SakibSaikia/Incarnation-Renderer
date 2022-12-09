@@ -2,8 +2,8 @@ namespace RenderJob
 {
 	struct PathTracingDesc
 	{
-		FBindlessUav* targetBuffer;
-		FBindlessUav* historyBuffer;
+		FShaderSurface* targetBuffer;
+		FShaderSurface* historyBuffer;
 		uint32_t currentSampleIndex;
 		uint32_t resX;
 		uint32_t resY;
@@ -20,14 +20,12 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_path_tracing", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"path_tracing_job");
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"path_tracing_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "path_tracing", PIX_COLOR_DEFAULT);
 
 			std::wstringstream s;
-			s << L"RAY_TRACING=1" <<
+			s << L"NO_UV_DERIVATIVES=1" <<
 				L" VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
 				L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0");
 
@@ -75,7 +73,7 @@ namespace RenderJob
 
 			// Raygen shader table
 			const size_t raygenShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FTransientBuffer> raygenShaderTable = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> raygenShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"raygen_sbt",
 				1 * raygenShaderRecordSize,
 				cmdList,
@@ -86,7 +84,7 @@ namespace RenderJob
 
 			// Miss shader table
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FTransientBuffer> missShaderTable = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> missShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"miss_sbt",
 				2 * missShaderRecordSize,
 				cmdList,
@@ -98,7 +96,7 @@ namespace RenderJob
 
 			// Hit shader table
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FTransientBuffer> hitGroupShaderTable = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> hitGroupShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"hit_sbt",
 				2 * hitGroupShaderRecordSize,
 				cmdList,
@@ -117,8 +115,8 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Global Root Signature
-			winrt::com_ptr<D3DRootSignature_t> globalRootsig = RenderBackend12::FetchRootSignature(rtLib);
-			d3dCmdList->SetComputeRootSignature(globalRootsig.get());
+			std::unique_ptr<FRootSignature> globalRootsig = RenderBackend12::FetchRootSignature(L"pathtrace_rootsig", cmdList, rtLib);
+			d3dCmdList->SetComputeRootSignature(globalRootsig->m_rootsig);
 
 			// Root signature arguments
 			struct GlobalCbLayout
@@ -139,18 +137,18 @@ namespace RenderJob
 				int scenePrimitiveCountsIndex;
 				uint32_t currentSampleIndex;
 				uint32_t sqrtSampleCount;
-				int sceneLightPropertiesBufferIndex;
+				int globalLightPropertiesBufferIndex;
 				int sceneLightIndicesBufferIndex;
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FTransientBuffer> globalCb = RenderBackend12::CreateTransientBuffer(
+			std::unique_ptr<FUploadBuffer> globalCb = RenderBackend12::CreateUploadBuffer(
 				L"global_cb",
 				sizeof(GlobalCbLayout),
 				cmdList,
 				[passDesc](uint8_t* pDest)
 				{
-					const int lightCount = passDesc.scene->m_lights.size();
+					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
 
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
 					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
@@ -160,7 +158,7 @@ namespace RenderJob
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->cameraAperture = passDesc.renderConfig.Pathtracing_CameraAperture;
 					cbDest->cameraFocalLength = passDesc.renderConfig.Pathtracing_CameraFocalLength;
-					cbDest->lightCount = passDesc.scene->m_lights.size();
+					cbDest->lightCount = passDesc.scene->m_globalLightList.size();
 					cbDest->projectionToWorld = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform).Invert();
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
@@ -169,7 +167,7 @@ namespace RenderJob
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
 					cbDest->sqrtSampleCount = std::sqrt(passDesc.renderConfig.MaxSampleCount);
-					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightProperties->m_srvIndex : -1;
+					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
 				});
@@ -205,11 +203,11 @@ namespace RenderJob
 			// Combine with history buffer to integrate results over time
 			passDesc.targetBuffer->m_resource->Transition(cmdList, uavTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({
-				L"raytracing/pathtrace-integrate.hlsl",
-				L"rootsig",
-				L"rootsig_1_1" });
-			d3dCmdList->SetComputeRootSignature(rootsig.get());
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"pathtrace_integrate_rootsig",
+				cmdList,
+				FRootsigDesc { L"raytracing/pathtrace-integrate.hlsl", L"rootsig", L"rootsig_1_1" });
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"raytracing/pathtrace-integrate.hlsl",
@@ -218,7 +216,7 @@ namespace RenderJob
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
 			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
