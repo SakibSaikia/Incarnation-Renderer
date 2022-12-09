@@ -880,9 +880,10 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		visDesc.renderConfig = c;
 		sceneRenderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
 
-		// GBuffer Pass
+		// GBuffer Pass + Emissive
 		RenderJob::GBufferPassDesc gbufferDesc = {};
 		gbufferDesc.sourceVisBuffer = visBuffer.get();
+		gbufferDesc.colorTarget = hdrRasterSceneColor.get();
 		gbufferDesc.gbufferTargets[0] = gbuffer_basecolor.get();
 		gbufferDesc.gbufferTargets[1] = gbuffer_normals.get();
 		gbufferDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
@@ -896,7 +897,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
 		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
-		// Sky Lighting + Emissive
+		// Sky Lighting
 		RenderJob::SkyLightingDesc skyLightingDesc = {};
 		skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
 		skyLightingDesc.depthStencilTex = depthBuffer.get();

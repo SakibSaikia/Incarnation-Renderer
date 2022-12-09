@@ -3,6 +3,7 @@ namespace RenderJob
 	struct GBufferPassDesc
 	{
 		FShaderSurface* sourceVisBuffer;
+		FShaderSurface* colorTarget;
 		FShaderSurface* gbufferTargets[3];
 		FShaderSurface* depthStencilTarget;
 		uint32_t resX;
@@ -17,6 +18,7 @@ namespace RenderJob
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t sourceTransitionToken = passDesc.sourceVisBuffer->m_resource->GetTransitionToken();
+		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t gbufferTransitionTokens[3] = {
 			passDesc.gbufferTargets[0]->m_resource->GetTransitionToken(),
 			passDesc.gbufferTargets[1]->m_resource->GetTransitionToken(),
@@ -31,6 +33,7 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_pass", 0);
 
 			passDesc.sourceVisBuffer->m_resource->Transition(cmdList, sourceTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			passDesc.gbufferTargets[0]->m_resource->Transition(cmdList, gbufferTransitionTokens[0], 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			passDesc.gbufferTargets[1]->m_resource->Transition(cmdList, gbufferTransitionTokens[1], 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			passDesc.gbufferTargets[2]->m_resource->Transition(cmdList, gbufferTransitionTokens[2], 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -75,7 +78,8 @@ namespace RenderJob
 				int scenePrimitivesIndex;
 				uint32_t resX;
 				uint32_t resY;
-				float __pad[2];
+				uint32_t colorTargetUavIndex;
+				float __pad;
 				Matrix viewProjTransform;
 				Matrix sceneRotation;
 			};
@@ -97,11 +101,20 @@ namespace RenderJob
 					cb->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
+					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
 					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
 					cb->sceneRotation = passDesc.scene->m_rootTransform;
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			// Clear the color target
+			const uint32_t clearValue[] = { 0, 0, 0, 0 };
+			d3dCmdList->ClearUnorderedAccessViewUint(
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_uavIndices[0]),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_nonShaderVisibleUavIndices[0], false),
+				passDesc.colorTarget->m_resource->m_d3dResource,
+				clearValue, 0, nullptr);
 
 			// Dispatch
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.resX / 16), 1);

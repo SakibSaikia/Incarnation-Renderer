@@ -89,7 +89,8 @@ cbuffer cb : register(b0)
     int scenePrimitivesIndex;
     uint resX;
     uint resY;
-    float2 __pad;
+    uint g_colorTargetUavIndex;
+    float __pad;
     float4x4 viewProjTransform;
     float4x4 sceneRotation;
 };
@@ -132,6 +133,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         RWTexture2D<float4> gbufferBaseColor = ResourceDescriptorHeap[gbuffer0UavIndex];
         RWTexture2D<float2> gbufferNormals = ResourceDescriptorHeap[gbuffer1UavIndex];
         RWTexture2D<float4> gbufferMetallicRoughnessAo = ResourceDescriptorHeap[gbuffer2UavIndex];
+        RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_colorTargetUavIndex];
 
         int visBufferValue = visBufferTex[dispatchThreadId.xy];
         if (visBufferValue != 0xFFFE0000)
@@ -181,6 +183,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             N = normalize(mul(matInfo.normalmap, tangentToWorld));
 
+            colorTarget[dispatchThreadId.xy] = matInfo.emissive * 20000.f;
             gbufferBaseColor[dispatchThreadId.xy] = float4(matInfo.basecolor, 0.f);
             gbufferNormals[dispatchThreadId.xy] = OctEncode(N);
             gbufferMetallicRoughnessAo[dispatchThreadId.xy] = float4(matInfo.metallic, matInfo.roughness, matInfo.ao, matInfo.aoblend);

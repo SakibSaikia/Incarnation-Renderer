@@ -110,14 +110,6 @@ namespace RenderJob
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
-			// Clear the color target
-			const uint32_t clearValue[] = { 0, 0, 0, 0 };
-			d3dCmdList->ClearUnorderedAccessViewUint(
-				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_uavIndices[0]),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_nonShaderVisibleUavIndices[0], false),
-				passDesc.colorTarget->m_resource->m_d3dResource,
-				clearValue, 0, nullptr);
-
 			// Dispatch
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.resX / 16), 1);
 			size_t threadGroupCountY = std::max<size_t>(std::ceil(passDesc.resY / 16), 1);
