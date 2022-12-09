@@ -743,20 +743,24 @@ void FScene::ReloadModel(const std::wstring& filename)
 	}
 
 	// Load GLTF
-	std::string errors, warnings;
 	tinygltf::Model model;
-	bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, modelFilepath);
-	if (!ok)
 	{
-		if (!warnings.empty())
-		{
-			printf("Warn: %s\n", warnings.c_str());
-		}
+		SCOPED_CPU_EVENT("tiny_gltf_load", PIX_COLOR_DEFAULT);
 
-		if (!errors.empty())
+		std::string errors, warnings;
+		bool ok = loader.LoadASCIIFromFile(&model, &errors, &warnings, modelFilepath);
+		if (!ok)
 		{
-			printf("Error: %s\n", errors.c_str());
-			DebugAssert(ok, "Failed to parse glTF");
+			if (!warnings.empty())
+			{
+				printf("Warn: %s\n", warnings.c_str());
+			}
+
+			if (!errors.empty())
+			{
+				printf("Error: %s\n", errors.c_str());
+				DebugAssert(ok, "Failed to parse glTF");
+			}
 		}
 	}
 
@@ -981,6 +985,8 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 
 void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 {
+	SCOPED_CPU_EVENT("load_mesh_buffers", PIX_COLOR_DEFAULT);
+
 	size_t uploadSize = 0;
 	for (const tinygltf::Buffer& buffer : model.buffers)
 	{
@@ -1013,6 +1019,8 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 
 void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 {
+	SCOPED_CPU_EVENT("load_mesh_bufferviews", PIX_COLOR_DEFAULT);
+
 	// CPU Copy
 	std::vector<FMeshBufferView> views(model.bufferViews.size());
 	concurrency::parallel_for(0, (int)model.bufferViews.size(), [&](int viewIndex)
@@ -1043,6 +1051,8 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 
 void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 {
+	SCOPED_CPU_EVENT("load_mesh_accessors", PIX_COLOR_DEFAULT);
+
 	// CPU Copy
 	std::vector<FMeshAccessor> accessors(model.accessors.size());
 	concurrency::parallel_for(0, (int)model.accessors.size(), [&](int i)
