@@ -677,6 +677,20 @@ void Demo::UpdateUI(float deltaTime)
 			ImGui::EndDisabled();
 	}
 	ImGui::End();
+	
+	if (FScene::s_loadProgress != 1.f)
+	{
+
+
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(0.6f * viewport->WorkSize.x,20), ImGuiCond_FirstUseEver);
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground;
+		ImGui::Begin("Load Progress", nullptr, flags);
+		ImGui::ProgressBar(FScene::s_loadProgress, ImVec2(-1.f, 0.0f));
+		ImGui::End();
+	}
 
 	ImGui::PopStyleVar();
 
@@ -810,6 +824,8 @@ void FScene::ReloadModel(const std::wstring& filename)
 				DebugAssert(ok, "Failed to parse glTF");
 			}
 		}
+
+		FScene::s_loadProgress = .2f;
 	}
 
 	m_modelFilename = filename;
@@ -824,6 +840,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	LoadMeshAccessors(model);
 	LoadMaterials(model);
 	LoadLights(model);
+	FScene::s_loadProgress = 0.9f;
 
 	//m_sceneMeshes.Reserve(model.meshes.size());
 	
@@ -881,6 +898,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
 	joinTask.wait();
 	m_loadingJobs.clear();
+	FScene::s_loadProgress = 1.f;
 }
 
 void FScene::ReloadEnvironment(const std::wstring& filename)

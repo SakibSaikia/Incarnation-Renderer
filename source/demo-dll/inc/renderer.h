@@ -117,6 +117,8 @@ struct FScene : public FModelLoader
 	// Transform
 	Matrix m_rootTransform;
 
+	static inline float s_loadProgress = 0.f;
+
 private:
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
