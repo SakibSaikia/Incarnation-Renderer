@@ -1,6 +1,19 @@
 namespace RenderJob
 {
-	concurrency::task<void> EnvironmentSkyPass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
+	struct EnvmapPassDesc
+	{
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
+		DXGI_FORMAT format;
+		uint32_t resX;
+		uint32_t resY;
+		const FScene* scene;
+		const FView* view;
+		Vector2 jitter;
+		FConfig renderConfig;
+	};
+
+	concurrency::task<void> EnvironmentmapPass(RenderJob::Sync& jobSync, const EnvmapPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();

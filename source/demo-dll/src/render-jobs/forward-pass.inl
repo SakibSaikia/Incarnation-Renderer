@@ -1,6 +1,6 @@
 namespace RenderJob
 {
-	struct BasePassDesc
+	struct ForwardPassDesc
 	{
 		FShaderSurface* colorTarget;
 		FShaderSurface* depthStencilTarget;
@@ -13,7 +13,7 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> BasePass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
+	concurrency::task<void> ForwardPass(RenderJob::Sync& jobSync, const ForwardPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
@@ -21,10 +21,10 @@ namespace RenderJob
 
 		return concurrency::create_task([=]
 		{
-			SCOPED_CPU_EVENT("record_base_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"base_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
+			SCOPED_CPU_EVENT("record_forward_pass", PIX_COLOR_DEFAULT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"forward_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "base_pass", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "forward_pass", 0);
 
 			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
@@ -40,9 +40,9 @@ namespace RenderJob
 
 			// Root Signature
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"base_pass_rootsig",
+				L"forward_pass_rootsig",
 				cmdList,
-				FRootsigDesc{ L"geo-raster/base-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootsigDesc{ L"geo-raster/forward-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Frame constant buffer
@@ -155,8 +155,8 @@ namespace RenderJob
 							L" DIFFUSE_IBL=" << (passDesc.renderConfig.EnableDiffuseIBL ? L"1" : L"0") <<
 							L" SPECULAR_IBL=" << (passDesc.renderConfig.EnableSpecularIBL ? L"1" : L"0");
 
-						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/base-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
-						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/base-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
+						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/forward-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
+						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/forward-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
 
 						vs.pShaderBytecode = vsBlob->GetBufferPointer();
 						vs.BytecodeLength = vsBlob->GetBufferSize();

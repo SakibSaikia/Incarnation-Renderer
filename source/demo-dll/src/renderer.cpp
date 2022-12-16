@@ -24,8 +24,7 @@ namespace Demo
 
 // Render Jobs
 #include "render-jobs/job-sync.h"
-#include "render-jobs/base-pass.inl"
-#include "render-jobs/environment-sky.inl"
+#include "render-jobs/environmentmap.inl"
 #include "render-jobs/msaa-resolve.inl"
 #include "render-jobs/taa-resolve.inl"
 #include "render-jobs/ui-pass.inl"
@@ -955,7 +954,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		}
 
 		// Environment/Sky pass
-		RenderJob::BasePassDesc baseDesc = {};
+		RenderJob::EnvmapPassDesc baseDesc = {};
 		baseDesc.colorTarget = hdrRasterSceneColor.get();
 		baseDesc.depthStencilTarget = depthBuffer.get();
 		baseDesc.format = hdrFormat;
@@ -965,7 +964,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		baseDesc.view = &renderState.m_view;
 		baseDesc.jitter = pixelJitter;
 		baseDesc.renderConfig = c;
-		sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
+		sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(jobSync, baseDesc));
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{
