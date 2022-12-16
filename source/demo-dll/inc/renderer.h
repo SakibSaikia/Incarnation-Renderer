@@ -119,6 +119,17 @@ struct FScene : public FModelLoader
 
 	static inline float s_loadProgress = 0.f;
 
+	// Note - these should add up to 1.0
+	static inline float s_modelLoadTimeFrac = 0.2f;
+	static inline float s_materialLoadTimeFrac = 0.3f;
+	static inline float s_meshFixupTimeFrac = 0.3f;
+	static inline float s_cacheHDRITimeFrac = 0.1f;
+	static inline float s_meshBufferLoadTimeFrac = 0.03f;
+	static inline float s_meshBufferViewsLoadTimeFrac = 0.01f;
+	static inline float s_meshAccessorsLoadTimeFrac = 0.01f;
+	static inline float s_lightsLoadTimeFrac = 0.01f;
+
+
 private:
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);

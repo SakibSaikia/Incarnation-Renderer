@@ -306,6 +306,7 @@ void Demo::Tick(float deltaTime)
 			s_view.Reset(&s_scene);
 			rotX = 0.f;
 			rotY = 0.f;
+			FScene::s_loadProgress = 1.f;
 		});
 
 		// Block when loading for the first time so that we have a scene to render.
@@ -680,8 +681,6 @@ void Demo::UpdateUI(float deltaTime)
 	
 	if (FScene::s_loadProgress != 1.f)
 	{
-
-
 		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize(ImVec2(0.6f * viewport->WorkSize.x,20), ImGuiCond_FirstUseEver);
@@ -790,6 +789,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	SCOPED_CPU_EVENT("reload_model", PIX_COLOR_DEFAULT);
 
 	std::string modelFilepath = GetFilepathA(ws2s(filename));
+	FScene::s_loadProgress = 0.f;
 
 	tinygltf::TinyGLTF loader;
 	m_textureCachePath = GetContentCachePath(modelFilepath);
@@ -825,7 +825,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 			}
 		}
 
-		FScene::s_loadProgress = .2f;
+		FScene::s_loadProgress += FScene::s_modelLoadTimeFrac;
 	}
 
 	m_modelFilename = filename;
@@ -835,12 +835,12 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// Load assets
 	bool requiresResave = MeshUtils::FixupMeshes(model);
+	FScene::s_loadProgress += FScene::s_meshFixupTimeFrac;
 	LoadMeshBuffers(model);
 	LoadMeshBufferViews(model);
 	LoadMeshAccessors(model);
 	LoadMaterials(model);
 	LoadLights(model);
-	FScene::s_loadProgress = 0.9f;
 
 	//m_sceneMeshes.Reserve(model.meshes.size());
 	
@@ -898,13 +898,13 @@ void FScene::ReloadModel(const std::wstring& filename)
 	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
 	joinTask.wait();
 	m_loadingJobs.clear();
-	FScene::s_loadProgress = 1.f;
 }
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
 	m_environmentSky = Demo::s_textureCache.CacheHDRI(filename);
 	m_environmentFilename = filename;
+	FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
 }
 
 void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
@@ -1059,6 +1059,8 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 		uploadSize += buffer.data.size();
 	}
 
+	float progressIncrement = FScene::s_meshBufferLoadTimeFrac / (float) model.buffers.size();
+
 	FResourceUploadContext uploader{ uploadSize };
 
 	m_meshBuffers.resize(model.buffers.size());
@@ -1076,6 +1078,8 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 			false,
 			model.buffers[bufferIndex].data.data(),
 			&uploader);
+
+		FScene::s_loadProgress += progressIncrement;
 	}
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -1113,6 +1117,8 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffer_views", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	FScene::s_loadProgress += FScene::s_meshBufferViewsLoadTimeFrac;
 }
 
 void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
@@ -1145,6 +1151,8 @@ void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_accessors", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	FScene::s_loadProgress += FScene::s_meshAccessorsLoadTimeFrac;
 }
 
 void FScene::CreateGpuPrimitiveBuffers()
@@ -1437,11 +1445,14 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 
 	// Load material and initialize CPU-side copy
 	m_materialList.resize(model.materials.size());
+
+	const float progressIncrement = FScene::s_materialLoadTimeFrac / (float)model.materials.size();
 	
 	//concurrency::parallel_for(0, (int)model.materials.size(), [&](int i)
 	for(int i = 0; i < model.materials.size(); ++i)
 	{
 		m_materialList[i] = LoadMaterial(model, i);
+		FScene::s_loadProgress += progressIncrement;
 	}//);
 
 
@@ -2019,6 +2030,8 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
+
+	FScene::s_loadProgress += FScene::s_lightsLoadTimeFrac;
 }
 
 void FScene::Clear()
