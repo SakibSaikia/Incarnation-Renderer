@@ -40,6 +40,7 @@ namespace Demo
 #include "render-jobs/sky-lighting.inl"
 #include "render-jobs/direct-lighting.inl"
 #include "render-jobs/clustered-lighting.inl"
+#include "render-jobs/dynamic-sky.inl"
 
 namespace
 {
