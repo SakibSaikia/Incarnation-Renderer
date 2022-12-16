@@ -524,7 +524,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
@@ -666,7 +666,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
@@ -792,7 +792,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
 	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true);
-	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT, resX, resY);
+	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY);
 	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true);
 	std::unique_ptr<FShaderSurface> visBuffer = RenderBackend12::CreateSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY);
 	std::unique_ptr<FShaderSurface> gbuffer_basecolor = RenderBackend12::CreateSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
