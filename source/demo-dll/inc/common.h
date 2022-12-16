@@ -19,11 +19,17 @@ enum class Viewmode
 	LightClusterSlices	= 11 
 };
 
+enum class EnvSkyMode
+{
+	Environmentmap = 0,
+	DynamicSky = 1
+};
+
 struct FConfig
 {
 	DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	bool UseGpuBasedValidation = false;
-	std::wstring ModelFilename = L"sponza.gltf";
+	std::wstring ModelFilename = L"DamagedHelmet.gltf";
 	std::wstring EnvironmentFilename = L"lilienstein_2k.hdr";
 	bool UseContentCache = true;
 	float Fov = 0.25f * DirectX::XM_PI;
@@ -31,6 +37,7 @@ struct FConfig
 	float CameraSpeed = 5.f;
 	float CameraNearPlane = 1.f;
 	int Viewmode = 0;
+	int EnvSkyMode = 0;
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = true;
@@ -46,6 +53,7 @@ struct FConfig
 	uint32_t MaxSampleCount = 256;
 	float Pathtracing_CameraAperture = 0.01f;
 	float Pathtracing_CameraFocalLength = 7.f;
+	float Turbidity = 2.f;
 };
 
 inline void AssertIfFailed(HRESULT hr)
