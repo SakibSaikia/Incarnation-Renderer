@@ -436,10 +436,14 @@ void Demo::UpdateUI(float deltaTime)
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
 	bool bResetPathtracelAccumulation = false;
 
-	ImGui::Begin("Menu");
+	ImGui::SetNextWindowPos(ImVec2(0.8f * viewport->WorkSize.x,0), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(0.2f * viewport->WorkSize.x, viewport->WorkSize.y), ImGuiCond_FirstUseEver);
+
+	ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 	{
 		ImGui::Checkbox("TAA", &s_globalConfig.EnableTAA);
 		ImGui::SameLine();
@@ -681,7 +685,6 @@ void Demo::UpdateUI(float deltaTime)
 	
 	if (FScene::s_loadProgress != 1.f)
 	{
-		const ImGuiViewport* viewport = ImGui::GetMainViewport();
 		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowSize(ImVec2(0.6f * viewport->WorkSize.x,20), ImGuiCond_FirstUseEver);
 
