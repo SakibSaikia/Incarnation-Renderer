@@ -440,8 +440,8 @@ void Demo::UpdateUI(float deltaTime)
 
 	bool bResetPathtracelAccumulation = false;
 
-	ImGui::SetNextWindowPos(ImVec2(0.8f * viewport->WorkSize.x,0), ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2(0.2f * viewport->WorkSize.x, viewport->WorkSize.y), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowPos(ImVec2(0.8f * viewport->WorkSize.x,0), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(0.2f * viewport->WorkSize.x, viewport->WorkSize.y), ImGuiCond_Always);
 
 	ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 	{
@@ -685,8 +685,8 @@ void Demo::UpdateUI(float deltaTime)
 	
 	if (FScene::s_loadProgress != 1.f)
 	{
-		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowSize(ImVec2(0.6f * viewport->WorkSize.x,20), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(0.6f * viewport->WorkSize.x,20), ImGuiCond_Always);
 
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground;
 		ImGui::Begin("Load Progress", nullptr, flags);
