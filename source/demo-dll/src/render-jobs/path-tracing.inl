@@ -25,7 +25,7 @@ namespace RenderJob
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "path_tracing", PIX_COLOR_DEFAULT);
 
 			std::wstringstream s;
-			s << L"NO_UV_DERIVATIVES=1" <<
+			s << L"PATH_TRACING=1" <<
 				L" VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
 				L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0");
 
