@@ -115,23 +115,52 @@ namespace RenderJob
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+			FPerezDistribution perezConstants;
+			const float t = passDesc.renderConfig.Turbidity;
+			perezConstants.A = Vector4(0.1787 * t - 1.4630, -0.0193 * t - 0.2592, -0.0167 * t - 0.2608, 0.f);
+			perezConstants.B = Vector4(-0.3554 * t + 0.4275, -0.0665 * t + 0.0008, -0.0950 * t + 0.0092, 0.f);
+			perezConstants.C = Vector4(-0.0227 * t + 5.3251, -0.0004 * t + 0.2125, -0.0079 * t + 0.2102, 0.f);
+			perezConstants.D = Vector4(0.1206 * t - 2.5771, -0.0641 * t - 0.8989, -0.0441 * t - 1.6537, 0.f);
+			perezConstants.E = Vector4(-0.0670 * t + 0.3703, -0.0033 * t + 0.0452, -0.0109 * t + 0.0529, 0.f);
+
 			// Constant buffer
-			struct CbLayout
+			struct Constants
 			{
 				Matrix invParallaxViewProjMatrix;
-				int envmapTextureIndex;
-				float exposure;
+				FPerezDistribution perez;
+				float turbidity;
+				Vector3 sunDir;
 			};
 
-			Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
-			parallaxViewMatrix.Translation(Vector3::Zero);
+			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+				L"dynamic_sky_cb",
+				sizeof(Constants),
+				cmdList,
+				[passDesc, perezConstants](uint8_t* pDest)
+				{
+					Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
+					parallaxViewMatrix.Translation(Vector3::Zero);
 
-			CbLayout constants{};
-			constants.envmapTextureIndex = passDesc.scene->m_environmentSky.m_envmapTextureIndex;
-			constants.invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
-			constants.exposure = passDesc.renderConfig.Exposure;
-			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(CbLayout) / 4, &constants, 0);
+					// Sun direction
+					Vector4 L = Vector4(0,1,0,0);
+					int sun = passDesc.scene->GetDirectionalLight();
+					if (sun != -1)
+					{
+						Matrix sunTransform = passDesc.scene->m_sceneLights.m_transformList[sun];
+						sunTransform.Translation(Vector3::Zero);
+						L = Vector4::Transform( Vector4(0, 0, -1, 0), sunTransform);
+					}
+					L.Normalize();
 
+					auto cb = reinterpret_cast<Constants*>(pDest);
+					cb->invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
+					cb->perez = perezConstants;
+					cb->turbidity = passDesc.renderConfig.Turbidity;
+					cb->sunDir = Vector3(L);
+					
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);
 
 			return cmdList;

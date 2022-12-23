@@ -954,18 +954,35 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(jobSync, clusteredLightingDesc, bRequiresClear));
 		}
 
-		// Environment/Sky pass
-		RenderJob::EnvmapPassDesc baseDesc = {};
-		baseDesc.colorTarget = hdrRasterSceneColor.get();
-		baseDesc.depthStencilTarget = depthBuffer.get();
-		baseDesc.format = hdrFormat;
-		baseDesc.resX = resX;
-		baseDesc.resY = resY;
-		baseDesc.scene = renderState.m_scene;
-		baseDesc.view = &renderState.m_view;
-		baseDesc.jitter = pixelJitter;
-		baseDesc.renderConfig = c;
-		sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(jobSync, baseDesc));
+		if (c.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
+		{
+			// Environmentmap pass
+			RenderJob::EnvmapPassDesc envmapDesc = {};
+			envmapDesc.colorTarget = hdrRasterSceneColor.get();
+			envmapDesc.depthStencilTarget = depthBuffer.get();
+			envmapDesc.format = hdrFormat;
+			envmapDesc.resX = resX;
+			envmapDesc.resY = resY;
+			envmapDesc.scene = renderState.m_scene;
+			envmapDesc.view = &renderState.m_view;
+			envmapDesc.jitter = pixelJitter;
+			envmapDesc.renderConfig = c;
+			sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(jobSync, envmapDesc));
+		}
+		else
+		{
+			RenderJob::DynamicSkyPassDesc skyDesc = {};
+			skyDesc.colorTarget = hdrRasterSceneColor.get();
+			skyDesc.depthStencilTarget = depthBuffer.get();
+			skyDesc.format = hdrFormat;
+			skyDesc.resX = resX;
+			skyDesc.resY = resX;
+			skyDesc.scene = renderState.m_scene;
+			skyDesc.view = &renderState.m_view;
+			skyDesc.jitter = pixelJitter;
+			skyDesc.renderConfig = c;
+			sceneRenderJobs.push_back(RenderJob::DynamicSkyPass(jobSync, skyDesc));
+		}
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{

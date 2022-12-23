@@ -189,3 +189,9 @@ struct FDebugDrawCmd
 	uint32_t m_shapeType;
 	bool m_persistent;
 };
+
+// Used for Preetham sky model
+struct FPerezDistribution
+{
+	Vector4 A, B, C, D, E;
+};
