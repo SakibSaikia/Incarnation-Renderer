@@ -57,15 +57,12 @@ float3 Yxy2XYZ(float3 Yxy)
 
 float3 XYZ2RGB(float3 XYZ)
 {
-	// CIE/E
-	float3x3 M = float3x3
-	(
-		2.3706743, -0.9000405, -0.4706338,
-		-0.5138850, 1.4253036, 0.0885814,
-		0.0052982, -0.0146949, 1.0093968
-	);
+	float3 RGB;
+	RGB.r = 3.2404542 * XYZ.x - 1.5371385 * XYZ.y - 0.4985314 * XYZ.z;
+	RGB.g = -0.9692660 * XYZ.x + 1.8760108 * XYZ.y + 0.0415560 * XYZ.z;
+	RGB.b = 0.0556434 * XYZ.x - 0.2040259 * XYZ.y + 1.0572252 * XYZ.z;
 
-	return mul(XYZ, M);
+	return RGB;
 }
 
 
