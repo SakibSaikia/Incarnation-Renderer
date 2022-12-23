@@ -536,7 +536,7 @@ void Demo::UpdateUI(float deltaTime)
 					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::DynamicSky)
 						ImGui::BeginDisabled();
 
-					ImGui::SliderFloat("Turbidity", &s_globalConfig.Turbidity, 2.f, 6.f);
+					ImGui::SliderFloat("Turbidity", &s_globalConfig.Turbidity, 2.f, 10.f);
 
 					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::DynamicSky)
 						ImGui::EndDisabled();
