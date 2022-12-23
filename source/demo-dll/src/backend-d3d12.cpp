@@ -1690,6 +1690,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		D3D12_MESSAGE_ID hide[] =
 		{
 			D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,	// Disables warning about clear value mismatch
+			D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,	// Disables warning about clear value mismatch for DSV
 			D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED					// Disables warning about buffers being created in resource state COMMON
 		};
 
