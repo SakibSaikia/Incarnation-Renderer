@@ -334,10 +334,10 @@ void FDebugDraw::Initialize()
 	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd));
 
 	// Indirect draw buffers
-	m_indirectPrimitiveArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex);
-	m_indirectPrimitiveCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex);
-	m_indirectLineArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex);
-	m_indirectLineCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex);
+	m_indirectPrimitiveArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex);
+	m_indirectPrimitiveCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex);
+	m_indirectLineArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex);
+	m_indirectLineCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex);
 }
 
 void FDebugDraw::DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
