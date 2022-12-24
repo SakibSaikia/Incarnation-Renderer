@@ -1,6 +1,19 @@
 namespace RenderJob
 {
-	concurrency::task<void> EnvironmentSkyPass(RenderJob::Sync& jobSync, const BasePassDesc& passDesc)
+	struct EnvmapPassDesc
+	{
+		FShaderSurface* colorTarget;
+		FShaderSurface* depthStencilTarget;
+		DXGI_FORMAT format;
+		uint32_t resX;
+		uint32_t resY;
+		const FScene* scene;
+		const FView* view;
+		Vector2 jitter;
+		FConfig renderConfig;
+	};
+
+	concurrency::task<void> EnvironmentmapPass(RenderJob::Sync& jobSync, const EnvmapPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
@@ -8,10 +21,10 @@ namespace RenderJob
 
 		return concurrency::create_task([=]
 		{
-			SCOPED_CPU_EVENT("record_envsky_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"envsky_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
+			SCOPED_CPU_EVENT("record_envmap_pass", PIX_COLOR_DEFAULT);
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"envmap_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "envsky_pass", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "envmap_pass", 0);
 
 			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_READ);
@@ -22,9 +35,9 @@ namespace RenderJob
 
 			// Root Signature
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"envsky_rootsig",
+				L"envmap_rootsig",
 				cmdList,
-				FRootsigDesc{ L"envmap.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootsigDesc{ L"environment-sky/envmap.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO
@@ -33,7 +46,7 @@ namespace RenderJob
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.format;
 			psoDesc.SampleDesc.Count = 1;
@@ -44,8 +57,8 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"envmap.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"envmap.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"environment-sky/envmap.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"environment-sky/envmap.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

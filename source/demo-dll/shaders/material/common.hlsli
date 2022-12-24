@@ -1,7 +1,7 @@
 #ifndef __MATERIAL_COMMON_HLSLI_
 #define __MATERIAL_COMMON_HLSLI_
 
-#if NO_UV_DERIVATIVES
+#if PATH_TRACING // No UV derivatives available
 	#define TEX_SAMPLE(t,s,uv) (t.SampleLevel(s, uv, 0))
 #else
 	#define TEX_SAMPLE(t,s,uv) (t.Sample(s,uv))

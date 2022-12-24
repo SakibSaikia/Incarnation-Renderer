@@ -306,6 +306,7 @@ void Demo::Tick(float deltaTime)
 			s_view.Reset(&s_scene);
 			rotX = 0.f;
 			rotY = 0.f;
+			FScene::s_loadProgress = 1.f;
 		});
 
 		// Block when loading for the first time so that we have a scene to render.
@@ -434,75 +435,172 @@ void Demo::UpdateUI(float deltaTime)
 
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f);
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
 	bool bResetPathtracelAccumulation = false;
 
-	ImGui::Begin("Menu");
+	ImGui::SetNextWindowPos(ImVec2(0.8f * viewport->WorkSize.x,0), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(0.2f * viewport->WorkSize.x, viewport->WorkSize.y), ImGuiCond_Always);
+
+	ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 	{
-		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::Spacing();
 		ImGui::Checkbox("TAA", &s_globalConfig.EnableTAA);
+		ImGui::SameLine();
+		ImGui::Checkbox("Pathtracing", &s_globalConfig.PathTrace);
+
+		// Model
+		static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), s_globalConfig.ModelFilename) - s_modelList.begin();
+		std::string comboLabel = ws2s(s_modelList[curModelIndex]);
+		if (ImGui::BeginCombo("Model", comboLabel.c_str(), ImGuiComboFlags_None))
+		{
+			for (int n = 0; n < s_modelList.size(); n++)
+			{
+				const bool bSelected = (curModelIndex == n);
+				if (ImGui::Selectable(ws2s(s_modelList[n]).c_str(), bSelected))
+				{
+					curModelIndex = n;
+					s_globalConfig.ModelFilename = s_modelList[n];
+				}
+
+				if (bSelected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+
+			ImGui::EndCombo();
+		}
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
+		if (!s_globalConfig.PathTrace)
+			ImGui::BeginDisabled();
+
 		if (ImGui::CollapsingHeader("Path Tracing"))
 		{
-			ImGui::Checkbox("Pathtracing", &s_globalConfig.PathTrace);
-
 			bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*) &s_globalConfig.MaxSampleCount, 1, 1024);
 			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &s_globalConfig.Pathtracing_CameraAperture, 0.f, 0.1f);
 			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &s_globalConfig.Pathtracing_CameraFocalLength, 1.f, 15.f);
 		}
 
+		if (!s_globalConfig.PathTrace)
+			ImGui::EndDisabled();
+
 		// -----------------------------------------------------------------------------------------------------------------------------------------
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
-			// Model
-			static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), s_globalConfig.ModelFilename) - s_modelList.begin();
-			std::string comboLabel = ws2s(s_modelList[curModelIndex]);
-			if (ImGui::BeginCombo("Model", comboLabel.c_str(), ImGuiComboFlags_None))
+			if (ImGui::BeginTabBar("ScaneTabs", ImGuiTabBarFlags_None))
 			{
-				for (int n = 0; n < s_modelList.size(); n++)
+				if (ImGui::BeginTabItem("Environment/Sky"))
 				{
-					const bool bSelected = (curModelIndex == n);
-					if (ImGui::Selectable(ws2s(s_modelList[n]).c_str(), bSelected))
+					ImGui::RadioButton("Environment Map", &s_globalConfig.EnvSkyMode, (int)EnvSkyMode::Environmentmap);
+					ImGui::SameLine();
+					ImGui::RadioButton("Dynamic Sky", &s_globalConfig.EnvSkyMode, (int)EnvSkyMode::DynamicSky);
+
+
+					// ----------------------------------------------------------
+					// Environment map
+					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::Environmentmap)
+						ImGui::BeginDisabled();
+						
+					static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), s_globalConfig.EnvironmentFilename) - s_hdriList.begin();
+					comboLabel = ws2s(s_hdriList[curHdriIndex]);
+					if (ImGui::BeginCombo("Environment map", comboLabel.c_str(), ImGuiComboFlags_None))
 					{
-						curModelIndex = n;
-						s_globalConfig.ModelFilename = s_modelList[n];
+						for (int n = 0; n < s_hdriList.size(); n++)
+						{
+							const bool bSelected = (curHdriIndex == n);
+							if (ImGui::Selectable(ws2s(s_hdriList[n]).c_str(), bSelected))
+							{
+								curHdriIndex = n;
+								s_globalConfig.EnvironmentFilename = s_hdriList[n];
+								bResetPathtracelAccumulation = true;
+							}
+
+							if (bSelected)
+							{
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+
+						ImGui::EndCombo();
 					}
 
-					if (bSelected)
-					{
-						ImGui::SetItemDefaultFocus();
-					}
+					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::Environmentmap)
+						ImGui::EndDisabled();
+
+					// ----------------------------------------------------------
+					// Dynamic Sky
+					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::DynamicSky)
+						ImGui::BeginDisabled();
+
+					ImGui::SliderFloat("Turbidity", &s_globalConfig.Turbidity, 2.f, 10.f);
+
+					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::DynamicSky)
+						ImGui::EndDisabled();
+
+					ImGui::EndTabItem();
 				}
 
-				ImGui::EndCombo();
-			}
-
-			// Background Environment
-			static int curHdriIndex = std::find(s_hdriList.begin(), s_hdriList.end(), s_globalConfig.EnvironmentFilename) - s_hdriList.begin();
-			comboLabel = ws2s(s_hdriList[curHdriIndex]);
-			if (ImGui::BeginCombo("Environment", comboLabel.c_str(), ImGuiComboFlags_None))
-			{
-				for (int n = 0; n < s_hdriList.size(); n++)
+				if (ImGui::BeginTabItem("Lights"))
 				{
-					const bool bSelected = (curHdriIndex == n);
-					if (ImGui::Selectable(ws2s(s_hdriList[n]).c_str(), bSelected))
+					int lightCount = GetScene()->m_sceneLights.GetCount();
+					if (lightCount > 0)
 					{
-						curHdriIndex = n;
-						s_globalConfig.EnvironmentFilename = s_hdriList[n];
-						bResetPathtracelAccumulation = true;
-					}
+						for (int i = 0; i < lightCount; ++i)
+						{
+							// Add indent
+							ImGui::TreePush();
 
-					if (bSelected)
-					{
-						ImGui::SetItemDefaultFocus();
+							int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
+							const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
+
+							FLight& light = GetScene()->m_globalLightList[lightIndex];
+							if (ImGui::CollapsingHeader(lightName.c_str()))
+							{
+								switch (light.m_type)
+								{
+								case Light::Directional:
+									ImGui::LabelText("Type", "Directional Light");
+									break;
+								case Light::Point:
+									ImGui::LabelText("Type", "Point Light");
+									break;
+								case Light::Spot:
+									ImGui::LabelText("Type", "Spot Light");
+									break;
+								}
+
+								static float color[4] = { light.m_color.x, light.m_color.y, light.m_color.z, 1.f };
+								ImGui::ColorEdit4("Color", (float*)&color, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha);
+
+								if (light.m_type != Light::Directional)
+								{
+									ImGui::SliderFloat("Intensity (cd)", &light.m_intensity, 0.f, 10000.f);
+									ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
+								}
+								else
+								{
+									ImGui::SliderFloat("Intensity (lux)", &light.m_intensity, 0.f, 10000.f);
+								}
+
+								if (light.m_type == Light::Spot)
+								{
+									ImGui::SliderFloat("Inner Cone Angle (rad)", &light.m_spotAngles.x, 0.f, 3.14159f);
+									ImGui::SliderFloat("Outer Cone Angle (rad)", &light.m_spotAngles.y, 0.f, 3.14159f);
+								}
+							}
+
+							// Remove indent
+							ImGui::TreePop();
+						}
 					}
+					ImGui::EndTabItem();
 				}
 
-				ImGui::EndCombo();
+				ImGui::EndTabBar();
 			}
 		}
 
@@ -522,64 +620,7 @@ void Demo::UpdateUI(float deltaTime)
 			{
 				s_view.Reset(&Demo::s_scene);
 			}
-		}
-
-		// --------------------------------------------------------------------------------------------------------------------------------------------
-
-		int lightCount = GetScene()->m_sceneLights.GetCount();
-		if (lightCount > 0)
-		{
-			if (ImGui::CollapsingHeader("Lights"))
-			{
-				for (int i = 0; i < lightCount; ++i)
-				{
-					// Add indent
-					ImGui::TreePush();
-
-					int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
-					const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
-
-					FLight& light = GetScene()->m_globalLightList[lightIndex];
-					if (ImGui::CollapsingHeader(lightName.c_str()))
-					{
-						switch (light.m_type)
-						{
-						case Light::Directional:
-							ImGui::LabelText("Type", "Directional Light");
-							break;
-						case Light::Point:
-							ImGui::LabelText("Type", "Point Light");
-							break;
-						case Light::Spot:
-							ImGui::LabelText("Type", "Spot Light");
-							break;
-						}
-
-						static float color[3] = { light.m_color.x, light.m_color.y, light.m_color.z };
-						ImGui::SliderFloat3("Color", &color[0], 0.0f, 1.0f);
-
-						if (light.m_type != Light::Directional)
-						{
-							ImGui::SliderFloat("Intensity (cd)", &light.m_intensity, 0.f, 10000.f);
-							ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
-						}
-						else
-						{
-							ImGui::SliderFloat("Intensity (lux)", &light.m_intensity, 0.f, 10000.f);
-						}
-
-						if (light.m_type == Light::Spot)
-						{
-							ImGui::SliderFloat("Inner Cone Angle (rad)", &light.m_spotAngles.x, 0.f, 3.14159f);
-							ImGui::SliderFloat("Outer Cone Angle (rad)", &light.m_spotAngles.y, 0.f, 3.14159f);
-						}
-					}
-
-					// Remove indent
-					ImGui::TreePop();
-				}
-			}
-		}
+		}		
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -626,11 +667,34 @@ void Demo::UpdateUI(float deltaTime)
 
 	ImGui::Begin("Render Stats");
 	{
+		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
 		FRenderStatsBuffer stats = Demo::GetRenderStats();
 		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float) GetScene()->m_primitiveCount);
-		ImGui::Text("Light Culling			%.2f%%", 100.f * stats.m_culledLights / (float) (GetScene()->m_sceneLights.GetCount() * Demo::s_globalConfig.LightClusterDimX * Demo::s_globalConfig.LightClusterDimY * Demo::s_globalConfig.LightClusterDimZ));
+
+		const size_t numLights = GetScene()->m_sceneLights.GetCount();
+		if (numLights == 0)
+			ImGui::BeginDisabled();
+
+		ImGui::Text("Light Culling			%.2f%%", numLights == 0 ? 0.f : 100.f * stats.m_culledLights / (float) (numLights * Demo::s_globalConfig.LightClusterDimX * Demo::s_globalConfig.LightClusterDimY * Demo::s_globalConfig.LightClusterDimZ));
+
+		if (numLights == 0)
+			ImGui::EndDisabled();
 	}
 	ImGui::End();
+	
+	if (FScene::s_loadProgress != 1.f)
+	{
+		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_Always);
+		ImGui::SetNextWindowSize(ImVec2(0.6f * viewport->WorkSize.x,20), ImGuiCond_Always);
+
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground;
+		ImGui::Begin("Load Progress", nullptr, flags);
+		ImGui::ProgressBar(FScene::s_loadProgress, ImVec2(-1.f, 0.0f));
+		ImGui::End();
+	}
+
+	ImGui::PopStyleVar();
 
 	ImGui::EndFrame();
 	ImGui::Render();
@@ -728,6 +792,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	SCOPED_CPU_EVENT("reload_model", PIX_COLOR_DEFAULT);
 
 	std::string modelFilepath = GetFilepathA(ws2s(filename));
+	FScene::s_loadProgress = 0.f;
 
 	tinygltf::TinyGLTF loader;
 	m_textureCachePath = GetContentCachePath(modelFilepath);
@@ -762,6 +827,8 @@ void FScene::ReloadModel(const std::wstring& filename)
 				DebugAssert(ok, "Failed to parse glTF");
 			}
 		}
+
+		FScene::s_loadProgress += FScene::s_modelLoadTimeFrac;
 	}
 
 	m_modelFilename = filename;
@@ -771,6 +838,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 	// Load assets
 	bool requiresResave = MeshUtils::FixupMeshes(model);
+	FScene::s_loadProgress += FScene::s_meshFixupTimeFrac;
 	LoadMeshBuffers(model);
 	LoadMeshBufferViews(model);
 	LoadMeshAccessors(model);
@@ -839,6 +907,7 @@ void FScene::ReloadEnvironment(const std::wstring& filename)
 {
 	m_environmentSky = Demo::s_textureCache.CacheHDRI(filename);
 	m_environmentFilename = filename;
+	FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
 }
 
 void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
@@ -993,6 +1062,8 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 		uploadSize += buffer.data.size();
 	}
 
+	float progressIncrement = FScene::s_meshBufferLoadTimeFrac / (float) model.buffers.size();
+
 	FResourceUploadContext uploader{ uploadSize };
 
 	m_meshBuffers.resize(model.buffers.size());
@@ -1010,6 +1081,8 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 			false,
 			model.buffers[bufferIndex].data.data(),
 			&uploader);
+
+		FScene::s_loadProgress += progressIncrement;
 	}
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -1047,6 +1120,8 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffer_views", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	FScene::s_loadProgress += FScene::s_meshBufferViewsLoadTimeFrac;
 }
 
 void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
@@ -1079,6 +1154,8 @@ void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_accessors", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	FScene::s_loadProgress += FScene::s_meshAccessorsLoadTimeFrac;
 }
 
 void FScene::CreateGpuPrimitiveBuffers()
@@ -1371,11 +1448,14 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 
 	// Load material and initialize CPU-side copy
 	m_materialList.resize(model.materials.size());
+
+	const float progressIncrement = FScene::s_materialLoadTimeFrac / (float)model.materials.size();
 	
 	//concurrency::parallel_for(0, (int)model.materials.size(), [&](int i)
 	for(int i = 0; i < model.materials.size(); ++i)
 	{
 		m_materialList[i] = LoadMaterial(model, i);
+		FScene::s_loadProgress += progressIncrement;
 	}//);
 
 
@@ -1953,6 +2033,8 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
+
+	FScene::s_loadProgress += FScene::s_lightsLoadTimeFrac;
 }
 
 void FScene::Clear()

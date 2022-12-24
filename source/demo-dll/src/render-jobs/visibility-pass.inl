@@ -106,7 +106,7 @@ namespace RenderJob
 			uint32_t clearValue = 0xFFFE0000;
 			float clearColor[] = { clearValue, clearValue, clearValue, clearValue };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
-			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
+			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.f, 0xff, 0, nullptr);
 
 			// Issue scene draws
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -117,7 +117,7 @@ namespace RenderJob
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.visBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
@@ -169,11 +169,23 @@ namespace RenderJob
 				desc.DepthEnable = TRUE;
 				desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 				desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
-				desc.StencilEnable = FALSE;
+				desc.StencilEnable = TRUE;
+				desc.StencilReadMask = 0xff;
+				desc.StencilWriteMask = 0xff;
+				desc.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+				desc.FrontFace.StencilPassOp = D3D12_STENCIL_OP_REPLACE;
+				desc.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+				desc.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+				desc.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+				desc.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+				desc.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+				desc.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
 			}
 
 			D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
+
+			d3dCmdList->OMSetStencilRef(0);
 
 			// Command signature
 			D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);

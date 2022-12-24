@@ -201,8 +201,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	AddDllDirectory(DXC_BIN_DIR);
 	AddDllDirectory(PIX_BIN_DIR);
 
-	const uint32_t windowWidth = 1280;
-	const uint32_t windowHeight = 720;
+	const uint32_t windowWidth = 1920;
+	const uint32_t windowHeight = 1080;
 
 	HMODULE demoDll = {};
 	FILETIME lastWriteTimestamp = {};

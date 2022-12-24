@@ -244,7 +244,7 @@ namespace RenderJob
 					psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 					psoDesc.pRootSignature = rootsig->m_rootsig;
 					psoDesc.SampleMask = UINT_MAX;
-					psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+					psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 					psoDesc.NumRenderTargets = 3;
 					psoDesc.RTVFormats[0] = passDesc.gbufferTargets[0]->m_resource->m_d3dResource->GetDesc().Format;
 					psoDesc.RTVFormats[1] = passDesc.gbufferTargets[1]->m_resource->m_d3dResource->GetDesc().Format;

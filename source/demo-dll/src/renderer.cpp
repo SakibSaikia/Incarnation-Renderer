@@ -24,8 +24,7 @@ namespace Demo
 
 // Render Jobs
 #include "render-jobs/job-sync.h"
-#include "render-jobs/base-pass.inl"
-#include "render-jobs/environment-sky.inl"
+#include "render-jobs/environmentmap.inl"
 #include "render-jobs/msaa-resolve.inl"
 #include "render-jobs/taa-resolve.inl"
 #include "render-jobs/ui-pass.inl"
@@ -41,6 +40,7 @@ namespace Demo
 #include "render-jobs/sky-lighting.inl"
 #include "render-jobs/direct-lighting.inl"
 #include "render-jobs/clustered-lighting.inl"
+#include "render-jobs/dynamic-sky.inl"
 
 namespace
 {
@@ -334,10 +334,10 @@ void FDebugDraw::Initialize()
 	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd));
 
 	// Indirect draw buffers
-	m_indirectPrimitiveArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex);
-	m_indirectPrimitiveCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex);
-	m_indirectLineArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex);
-	m_indirectLineCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex);
+	m_indirectPrimitiveArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex);
+	m_indirectPrimitiveCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex);
+	m_indirectLineArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex);
+	m_indirectLineCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex);
 }
 
 void FDebugDraw::DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
@@ -524,7 +524,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
@@ -666,7 +666,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
-			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
 			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
 			psoDesc.SampleDesc.Count = 1;
@@ -792,7 +792,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
 	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true);
-	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT, resX, resY);
+	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY);
 	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true);
 	std::unique_ptr<FShaderSurface> visBuffer = RenderBackend12::CreateSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY);
 	std::unique_ptr<FShaderSurface> gbuffer_basecolor = RenderBackend12::CreateSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
@@ -954,18 +954,35 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(jobSync, clusteredLightingDesc, bRequiresClear));
 		}
 
-		// Environment/Sky pass
-		RenderJob::BasePassDesc baseDesc = {};
-		baseDesc.colorTarget = hdrRasterSceneColor.get();
-		baseDesc.depthStencilTarget = depthBuffer.get();
-		baseDesc.format = hdrFormat;
-		baseDesc.resX = resX;
-		baseDesc.resY = resY;
-		baseDesc.scene = renderState.m_scene;
-		baseDesc.view = &renderState.m_view;
-		baseDesc.jitter = pixelJitter;
-		baseDesc.renderConfig = c;
-		sceneRenderJobs.push_back(RenderJob::EnvironmentSkyPass(jobSync, baseDesc));
+		if (c.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
+		{
+			// Environmentmap pass
+			RenderJob::EnvmapPassDesc envmapDesc = {};
+			envmapDesc.colorTarget = hdrRasterSceneColor.get();
+			envmapDesc.depthStencilTarget = depthBuffer.get();
+			envmapDesc.format = hdrFormat;
+			envmapDesc.resX = resX;
+			envmapDesc.resY = resY;
+			envmapDesc.scene = renderState.m_scene;
+			envmapDesc.view = &renderState.m_view;
+			envmapDesc.jitter = pixelJitter;
+			envmapDesc.renderConfig = c;
+			sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(jobSync, envmapDesc));
+		}
+		else
+		{
+			RenderJob::DynamicSkyPassDesc skyDesc = {};
+			skyDesc.colorTarget = hdrRasterSceneColor.get();
+			skyDesc.depthStencilTarget = depthBuffer.get();
+			skyDesc.format = hdrFormat;
+			skyDesc.resX = resX;
+			skyDesc.resY = resX;
+			skyDesc.scene = renderState.m_scene;
+			skyDesc.view = &renderState.m_view;
+			skyDesc.jitter = pixelJitter;
+			skyDesc.renderConfig = c;
+			sceneRenderJobs.push_back(RenderJob::DynamicSkyPass(jobSync, skyDesc));
+		}
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{

@@ -87,7 +87,11 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 	{
 		// Shadow ray
 		float lightVisibility = 1.f;
+
+#if !PATH_TRACING
+		// For raster, trace shadow ray for directional light only
 		if (light.m_type == Light::Directional)
+#endif
 		{
 			RayDesc ray;
 			ray.Origin = worldPos;
