@@ -2,129 +2,10 @@
 #define __LIGHTING_COMMON_HLSLI_
 
 #include "pbr.hlsli"
-#include "common/mesh-material.hlsli"
+#include "gpu-shared-types.h"
+#include "material/common.hlsli"
 
-#if RAY_TRACING
-	#define TEX_SAMPLE(t,s,uv) (t.SampleLevel(s, uv, 0))
-#else
-	#define TEX_SAMPLE(t,s,uv) (t.Sample(s,uv))
-#endif
-
-struct FMaterialProperties
-{
-	float3 emissive;
-	float3 basecolor;
-	bool bHasNormalmap;
-	float3 normalmap;
-	float metallic;
-	float roughness;
-	float ao;
-	float aoblend;
-	float transmission;
-	float clearcoat;
-	float clearcoatRoughness;
-	bool bHasClearcoatNormalmap;
-	float3 clearcoatNormalmap;
-};
-
-FMaterialProperties EvaluateMaterialProperties(FMaterial mat, float2 uv, SamplerState s)
-{
-	FMaterialProperties output;
-
-#if !RAY_TRACING
-	// Alpha clip
-	if (mat.m_baseColorTextureIndex != -1)
-	{
-		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-		float alpha = TEX_SAMPLE(baseColorTex, s, uv).a;
-		clip(alpha - 0.5);
-	}
-#endif
-
-	// Emissive
-	output.emissive = mat.m_emissiveFactor;
-	if (mat.m_emissiveTextureIndex != -1)
-	{
-		Texture2D emissiveTex = ResourceDescriptorHeap[mat.m_emissiveTextureIndex];
-		output.emissive *= TEX_SAMPLE(emissiveTex, s, uv).rgb;
-	}
-
-	// Base Color
-	output.basecolor = mat.m_baseColorFactor;
-	if (mat.m_baseColorTextureIndex != -1)
-	{
-		Texture2D baseColorTex = ResourceDescriptorHeap[mat.m_baseColorTextureIndex];
-		output.basecolor *= TEX_SAMPLE(baseColorTex, s, uv).rgb;
-	}
-
-	// Normalmap
-	output.bHasNormalmap = mat.m_normalTextureIndex != -1;
-	if (output.bHasNormalmap)
-	{
-		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_normalTextureIndex];
-		float2 normalXY = TEX_SAMPLE(normalmapTex, s, uv).rg;
-		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
-		output.normalmap = float3(normalXY, normalZ);
-	}
-
-	// Metallic/Roughness
-	// GLTF specifies metalness in blue channel and roughness in green channel but we swizzle them on import and
-	// use a BC5 texture. So, metalness ends up in the red channel and roughness stays on the green channel.
-	output.metallic = mat.m_metallicFactor;
-	output.roughness = mat.m_roughnessFactor;
-	if (mat.m_metallicRoughnessTextureIndex != -1)
-	{
-		Texture2D metallicRoughnessTex = ResourceDescriptorHeap[mat.m_metallicRoughnessTextureIndex];
-		float2 metallicRoughnessMap = TEX_SAMPLE(metallicRoughnessTex, s, uv).rg;
-		output.metallic = metallicRoughnessMap.x;
-		output.roughness = metallicRoughnessMap.y;
-	}
-
-	// Ambient Occlusion
-	output.aoblend = mat.m_aoStrength;
-	output.ao = 1.f;
-	if (mat.m_aoTextureIndex != -1)
-	{
-		Texture2D aoTex = ResourceDescriptorHeap[mat.m_aoTextureIndex];
-		output.ao = TEX_SAMPLE(aoTex, s, uv).r;
-	}
-
-	// Transmission
-	output.transmission = mat.m_transmissionFactor;
-	if (mat.m_transmissionTextureIndex != -1)
-	{
-		Texture2D transmissionTex = ResourceDescriptorHeap[mat.m_transmissionTextureIndex];
-		output.transmission *= TEX_SAMPLE(transmissionTex, s, uv).r;
-	}
-
-	// Clearcoat
-	output.clearcoat = mat.m_clearcoatFactor;
-	if (mat.m_clearcoatTextureIndex != -1)
-	{
-		Texture2D clearcoatTex = ResourceDescriptorHeap[mat.m_clearcoatTextureIndex];
-		output.clearcoat *= TEX_SAMPLE(clearcoatTex, s, uv).r;
-	}
-
-	output.clearcoatRoughness = mat.m_clearcoatRoughnessFactor;
-	if (mat.m_clearcoatRoughnessTextureIndex != -1)
-	{
-		Texture2D clearcoatRoughnessTex = ResourceDescriptorHeap[mat.m_clearcoatRoughnessTextureIndex];
-		output.clearcoatRoughness *= TEX_SAMPLE(clearcoatRoughnessTex, s, uv).r;
-	}
-
-	output.bHasClearcoatNormalmap = mat.m_clearcoatNormalTextureIndex != -1;
-	if (output.bHasClearcoatNormalmap)
-	{
-		Texture2D normalmapTex = ResourceDescriptorHeap[mat.m_clearcoatNormalTextureIndex];
-		float2 normalXY = TEX_SAMPLE(normalmapTex, s, uv).rg;
-		float normalZ = sqrt(1.f - dot(normalXY, normalXY));
-		output.clearcoatNormalmap = float3(normalXY, normalZ);
-	}
-
-	return output;
-}
-
-float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos, FMaterialProperties matInfo, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
+float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos, float3 basecolor, float metallic, float roughness, float3 N, float3 V, RaytracingAccelerationStructure sceneBvh)
 {
 	float3 L;
 	float3 radianceIn = 0.f;
@@ -148,7 +29,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 		float radialAttenuation;
 		if (light.m_range > 0.f)
 		{
-			float radialAttenuation = max(min(1.f, 1.f - pow(distance / light.m_range, 4)), 0.f) / distanceSquared;
+			radialAttenuation = max(min(1.f, 1.f - pow(distance / light.m_range, 4)), 0.f) / distanceSquared;
 		}
 		else
 		{
@@ -206,6 +87,11 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 	{
 		// Shadow ray
 		float lightVisibility = 1.f;
+
+#if !PATH_TRACING
+		// For raster, trace shadow ray for directional light only
+		if (light.m_type == Light::Directional)
+#endif
 		{
 			RayDesc ray;
 			ray.Origin = worldPos;
@@ -233,16 +119,16 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 		{
 			float NoV = saturate(dot(N, V));
 
-			float3 F0 = matInfo.metallic * matInfo.basecolor + (1.f - matInfo.metallic) * 0.04;
-			float3 albedo = (1.f - matInfo.metallic) * matInfo.basecolor;
+			float3 F0 = metallic * basecolor + (1.f - metallic) * 0.04;
+			float3 albedo = (1.f - metallic) * basecolor;
 
 			float3 H = normalize(L + V);
 			float NoH = saturate(dot(N, H));
 			float VoH = saturate(dot(V, H));
 
-			float D = GGX(NoH, matInfo.roughness);
+			float D = GGX(NoH, roughness);
 			float3 F = F_Schlick(VoH, F0);
-			float G = G_SmithGGXCorrelated(NoV, NoL, matInfo.roughness);
+			float G = G_SmithGGXCorrelated(NoV, NoL, roughness);
 
 			// Diffuse & Specular BRDF
 			float3 Fd = albedo * Fd_Lambert();

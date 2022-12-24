@@ -13,3 +13,6 @@
 [submodule "ext/MikkTSpace"]
 	path = ext/MikkTSpace
 	url = https://github.com/mmikk/MikkTSpace.git
+[submodule "ext/DRED"]
+	path = ext/DRED
+	url = https://github.com/microsoft/DirectX-Debugging-Tools.git

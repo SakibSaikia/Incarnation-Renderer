@@ -6,9 +6,28 @@
 	#define Vector3		float3
 	#define Vector4		float4
 	#define Matrix		float4x4
+	#define Color		float4
 #else
 	#include <SimpleMath.h>
 	using namespace DirectX::SimpleMath;
+#endif
+
+namespace SpecialDescriptors
+{
+	enum Type
+	{
+		RenderStatsBufferUavIndex,
+		DebugDrawIndirectPrimitiveArgsUavIndex,
+		DebugDrawIndirectPrimitiveCountUavIndex,
+		DebugDrawIndirectLineArgsUavIndex,
+		DebugDrawIndirectLineCountUavIndex,
+		DebugPrimitiveIndexCountSrvIndex,
+		Count
+	};
+};
+
+#ifdef __cplusplus
+static_assert(SpecialDescriptors::Count < 100, "See reserved descriptors in enum class DescriptorRange");
 #endif
 
 namespace AlphaMode
@@ -18,6 +37,20 @@ namespace AlphaMode
 		Opaque,
 		Masked,
 		Blend
+	};
+}
+
+namespace DebugShape
+{
+	enum Type
+	{
+		Cube,
+		Icosphere,
+		Sphere,
+		Cylinder,
+		Cone,
+		Plane,
+		Count
 	};
 }
 
@@ -41,6 +74,7 @@ struct FMeshAccessor
 struct FGpuPrimitive
 {
 	Matrix m_localToWorld;
+	Vector4 m_boundingSphere;
 	int m_indexAccessor;
 	int m_positionAccessor;
 	int m_uvAccessor;
@@ -48,6 +82,7 @@ struct FGpuPrimitive
 	int m_tangentAccessor;
 	int m_materialIndex;
 	int m_indicesPerTriangle;
+	int m_indexCount;
 };
 
 struct FMaterial
@@ -107,3 +142,56 @@ struct FLight
 	Vector2 m_spotAngles;
 };
 
+// Corresponds to D3D12_DRAW_ARGUMENTS
+struct FDrawInstanced
+{
+	uint32_t m_vertexCount;
+	uint32_t m_instanceCount;
+	uint32_t m_startVertexLocation;
+	uint32_t m_startInstanceLocation;
+};
+
+struct FIndirectDrawWithRootConstants
+{
+	uint32_t m_rootConstants[32];
+	FDrawInstanced m_drawArguments;
+
+#ifdef __cplusplus
+	static D3DCommandSignature_t* GetCommandSignature(D3DRootSignature_t* rootsig)
+	{
+		D3D12_INDIRECT_ARGUMENT_DESC argumentDescs[2] = {};
+		argumentDescs[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
+		argumentDescs[0].Constant.RootParameterIndex = 0;
+		argumentDescs[0].Constant.DestOffsetIn32BitValues = 0;
+		argumentDescs[0].Constant.Num32BitValuesToSet = 32;
+		argumentDescs[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+
+		D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc = {};
+		commandSignatureDesc.pArgumentDescs = argumentDescs;
+		commandSignatureDesc.NumArgumentDescs = 2;
+		commandSignatureDesc.ByteStride = sizeof(FIndirectDrawWithRootConstants);
+
+		return RenderBackend12::CacheCommandSignature(commandSignatureDesc, rootsig);
+	}
+#endif
+};
+
+struct FRenderStatsBuffer
+{
+	int m_culledPrimitives;
+	int m_culledLights;
+};
+
+struct FDebugDrawCmd
+{
+	Color m_color;
+	Matrix m_transform;
+	uint32_t m_shapeType;
+	bool m_persistent;
+};
+
+// Used for Preetham sky model
+struct FPerezDistribution
+{
+	Vector4 A, B, C, D, E;
+};

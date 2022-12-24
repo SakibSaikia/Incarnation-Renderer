@@ -7,7 +7,7 @@
 #include <Tracy.hpp>
 
 // D3D12 Agility SDK hooks
-extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 600; }
+extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 602; }
 extern "C" { __declspec(dllexport) extern const char* D3D12SDKPath = D3D_SDK_RELATIVE_PATH; }
 
 struct ModuleProcs
@@ -201,8 +201,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	AddDllDirectory(DXC_BIN_DIR);
 	AddDllDirectory(PIX_BIN_DIR);
 
-	const uint32_t windowWidth = 1280;
-	const uint32_t windowHeight = 720;
+	const uint32_t windowWidth = 1920;
+	const uint32_t windowHeight = 1080;
 
 	HMODULE demoDll = {};
 	FILETIME lastWriteTimestamp = {};

@@ -1,16 +1,14 @@
 namespace RenderJob
 {
-	template<typename SourceType>
 	struct TonemapDesc
 	{
-		SourceType* source;
-		FRenderTexture* target;
+		FShaderSurface* source;
+		FShaderSurface* target;
 		FConfig renderConfig;
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	template<typename SourceType>
-	concurrency::task<void> Tonemap(RenderJob::Sync& jobSync, const TonemapDesc<SourceType>& passDesc)
+	concurrency::task<void> Tonemap(RenderJob::Sync& jobSync, const TonemapDesc& passDesc)
 	{
 		size_t renderToken = jobSync.GetToken();
 		size_t sourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();
@@ -19,12 +17,8 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_tonemap_pass", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"tonemap_job");
-
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tonemap_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "tonemap", 0);
 
 			// Descriptor Heaps
@@ -32,14 +26,14 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 			
 			// Root Signature
-			winrt::com_ptr<D3DRootSignature_t> rootsig = RenderBackend12::FetchRootSignature({ L"postprocess/tonemap.hlsl", L"rootsig", L"rootsig_1_1" });
-			d3dCmdList->SetGraphicsRootSignature(rootsig.get());
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"tonemap_rootsig", cmdList, FRootsigDesc{L"postprocess/tonemap.hlsl", L"rootsig", L"rootsig_1_1"});
+			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
 			psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-			psoDesc.pRootSignature = rootsig.get();
+			psoDesc.pRootSignature = rootsig->m_rootsig;
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 			psoDesc.NumRenderTargets = 1;
@@ -119,7 +113,7 @@ namespace RenderJob
 				int hdrSceneColorTextureIndex;
 				float exposure;
 			} rootConstants = { 
-					passDesc.source->m_srvIndex, 
+					(int)passDesc.source->m_srvIndex, 
 					passDesc.renderConfig.Exposure, 
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);

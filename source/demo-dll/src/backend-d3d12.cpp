@@ -22,6 +22,7 @@ using namespace RenderBackend12;
 //														Constants
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 constexpr uint32_t k_backBufferCount = 3;
+constexpr uint32_t k_maxFrameLatency = k_backBufferCount - 1;
 constexpr size_t k_rtvHeapSize = 32;
 constexpr size_t k_dsvHeapSize = 8;
 constexpr size_t k_samplerHeapSize = 16;
@@ -260,6 +261,25 @@ struct std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>
 };
 
 template<>
+struct std::hash< D3D12_COMMAND_SIGNATURE_DESC>
+{
+	std::size_t operator()(const D3D12_COMMAND_SIGNATURE_DESC& key, const D3DRootSignature_t* rootsig) const
+	{
+		uint64_t seed1{}, seed2{};
+		spookyhash_context context;
+		spookyhash_context_init(&context, seed1, seed2);
+		spookyhash_update(&context, &key.ByteStride, sizeof(key.ByteStride));
+		spookyhash_update(&context, &key.NumArgumentDescs, sizeof(key.NumArgumentDescs));
+		spookyhash_update(&context, key.pArgumentDescs, key.NumArgumentDescs * sizeof(D3D12_INDIRECT_ARGUMENT_DESC));
+		spookyhash_update(&context, &key.NodeMask, sizeof(key.NodeMask));
+		spookyhash_update(&context, rootsig, sizeof(rootsig));
+		spookyhash_final(&context, &seed1, &seed2);
+
+		return seed1 ^ (seed2 << 1);
+	}
+};
+
+template<>
 struct std::hash<D3D12_STATE_OBJECT_DESC>
 {
 	std::size_t operator()(const D3D12_STATE_OBJECT_DESC& key) const
@@ -389,6 +409,28 @@ bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
 		lhs.Flags == rhs.Flags;
 }
 
+#pragma endregion
+#pragma region Programmatic_Captures
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+//														Programmatic Captures
+//-----------------------------------------------------------------------------------------------------------------------------------------------
+FScopedGpuCapture::FScopedGpuCapture(FCommandList* cl) :
+	m_waitFence{ cl->GetFence() }
+{
+	PIXCaptureParameters params = {};
+	params.GpuCaptureParameters.FileName = L"PIXGpuCapture.wpix";
+	PIXBeginCapture(PIX_CAPTURE_GPU, &params);
+}
+FScopedGpuCapture::~FScopedGpuCapture()
+{
+	concurrency::create_task([fence = m_waitFence]()
+	{
+		fence.BlockingWait();
+	}).then([]()
+	{
+		PIXEndCapture(false);
+	});
+}
 #pragma endregion
 #pragma region Command_Lists
 //-----------------------------------------------------------------------------------------------------------------------------------------------
@@ -601,7 +643,7 @@ private:
 	std::list<std::unique_ptr<FResource>> m_useList;
 };
 
-FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) :
+FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBytes) : 
 	m_currentOffset{ 0 }
 {
 	DebugAssert(uploadBufferSizeInBytes != 0);
@@ -612,7 +654,7 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 	m_sizeInBytes = (1 << (n + 1));
 	m_sizeInBytes = std::max<size_t>(m_sizeInBytes, 256);
 
-	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
+	m_copyCommandlist = FetchCommandlist(L"upload_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 
 	m_uploadBuffer = GetUploadBufferPool()->GetOrCreate(L"upload_context_buffer", m_sizeInBytes);
 	m_uploadBuffer->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
@@ -623,57 +665,63 @@ void FResourceUploadContext::UpdateSubresources(
 	const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 	std::function<void(FCommandList*)> transition)
 {
-	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
-	UINT64 totalBytes = 0;
-	std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(srcData.size());
-	std::vector<UINT64> rowSizeInBytes(srcData.size());
-	std::vector<UINT> numRows(srcData.size());
-
 	D3D12_RESOURCE_DESC destinationDesc = destinationResource->m_d3dResource->GetDesc();
-	GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), m_currentOffset, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
-
-	size_t capacity = m_sizeInBytes - m_currentOffset;
-	DebugAssert(totalBytes <= capacity, "Upload buffer is too small!");
-
-	for (UINT i = 0; i < srcData.size(); ++i)
-	{
-		D3D12_SUBRESOURCE_DATA src;
-		src.pData = srcData[i].pData;
-		src.RowPitch = srcData[i].RowPitch;
-		src.SlicePitch = srcData[i].SlicePitch;
-
-		D3D12_MEMCPY_DEST dest;
-		dest.pData = m_mappedPtr + layouts[i].Offset;
-		dest.RowPitch = layouts[i].Footprint.RowPitch;
-		dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
-
-		UINT numSlices = layouts[i].Footprint.Depth;
-
-		for (UINT z = 0; z < numSlices; ++z)
-		{
-			BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
-			const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
-
-			for (UINT y = 0; y < numRows[i]; ++y)
-			{
-				memcpy(pDestSlice + dest.RowPitch * y,
-					pSrcSlice + src.RowPitch * y,
-					rowSizeInBytes[i]);
-			}
-		}
-	}
 
 	if (destinationDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
 	{
+		// Copy CPU data to mapped upload resource
+		memcpy(m_mappedPtr + m_currentOffset,srcData[0].pData,srcData[0].RowPitch);
+
+		// Issue GPU copy from upload resource to destination resource
 		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(
 			destinationResource->m_d3dResource,
 			0,
 			m_uploadBuffer->m_d3dResource,
-			layouts[0].Offset,
-			layouts[0].Footprint.Width);
+			m_currentOffset,
+			std::min<uint32_t>(srcData[0].RowPitch, destinationDesc.Width));
+
+		m_currentOffset += srcData[0].RowPitch;
 	}
 	else
 	{
+		// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
+		UINT64 totalBytes = 0;
+		std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> layouts(srcData.size());
+		std::vector<UINT64> rowSizeInBytes(srcData.size());
+		std::vector<UINT> numRows(srcData.size());
+
+		D3D12_RESOURCE_DESC destinationDesc = destinationResource->m_d3dResource->GetDesc();
+		GetDevice()->GetCopyableFootprints(&destinationDesc, 0, srcData.size(), m_currentOffset, layouts.data(), numRows.data(), rowSizeInBytes.data(), &totalBytes);
+
+		// Copy CPU data to mapped upload resource
+		for (UINT i = 0; i < srcData.size(); ++i)
+		{
+			D3D12_SUBRESOURCE_DATA src;
+			src.pData = srcData[i].pData;
+			src.RowPitch = srcData[i].RowPitch;
+			src.SlicePitch = srcData[i].SlicePitch;
+
+			D3D12_MEMCPY_DEST dest;
+			dest.pData = m_mappedPtr + layouts[i].Offset;
+			dest.RowPitch = layouts[i].Footprint.RowPitch;
+			dest.SlicePitch = layouts[i].Footprint.RowPitch * numRows[i];
+
+			UINT numSlices = layouts[i].Footprint.Depth;
+
+			for (UINT z = 0; z < numSlices; ++z)
+			{
+				BYTE* pDestSlice = reinterpret_cast<BYTE*>(dest.pData) + dest.SlicePitch * z;
+				const BYTE* pSrcSlice = reinterpret_cast<const BYTE*>(src.pData) + src.SlicePitch * z;
+
+				for (UINT y = 0; y < numRows[i]; ++y)
+				{
+					memcpy(pDestSlice + dest.RowPitch * y,
+						pSrcSlice + src.RowPitch * y,
+						src.RowPitch);
+				}
+			}
+		}
+
 		for (UINT i = 0; i < srcData.size(); ++i)
 		{
 			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
@@ -688,14 +736,22 @@ void FResourceUploadContext::UpdateSubresources(
 
 			m_copyCommandlist->m_d3dCmdList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, nullptr);
 		}
+
+		m_currentOffset += totalBytes;
 	}
 
-	m_currentOffset += totalBytes;
 	m_pendingTransitions.push_back(transition);
 }
 
-FFenceMarker FResourceUploadContext::SubmitUploads(FCommandList* owningCL)
+FFenceMarker FResourceUploadContext::SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent)
 {
+	// If a wait event is provided, stall until the fence is hit.
+	// Used for cross-queue synchronization since transitions along cannot avoid data races in that case.
+	if (waitEvent && waitEvent->m_fence)
+	{
+		GetCopyQueue()->Wait(waitEvent->m_fence, waitEvent->m_value);
+	}
+
 	FFenceMarker fenceMarker = ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
 
 	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
@@ -721,7 +777,7 @@ FResourceUploadContext::~FResourceUploadContext()
 }
 
 FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
-	m_mappedPtr {nullptr}
+	m_source {resource}, m_mappedPtr {nullptr}
 {
 	size_t readbackSizeInBytes = resource->GetSizeBytes();
 	DebugAssert(readbackSizeInBytes != 0);
@@ -732,13 +788,13 @@ FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
 	readbackSizeInBytes = (1 << (n + 1));
 	readbackSizeInBytes = std::max<size_t>(readbackSizeInBytes, 256);
 
-	m_copyCommandlist = FetchCommandlist(D3D12_COMMAND_LIST_TYPE_COPY);
+	m_copyCommandlist = FetchCommandlist(L"readback_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 	m_readbackBuffer = GetReadbackBufferPool()->GetOrCreate(L"readback_context_buffer", readbackSizeInBytes);
 }
 
-FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResource, const FFenceMarker sourceReadyMarker)
+FFenceMarker FResourceReadbackContext::StageSubresources(const FFenceMarker sourceReadyMarker)
 {
-	D3D12_RESOURCE_DESC desc = sourceResource->m_d3dResource->GetDesc();
+	D3D12_RESOURCE_DESC desc = m_source->m_d3dResource->GetDesc();
 
 	// NOTE layout.Footprint.RowPitch is the D3D12 aligned pitch whereas rowSizeInBytes is the unaligned pitch
 	UINT64 totalBytes = 0;
@@ -756,7 +812,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResour
 		m_copyCommandlist->m_d3dCmdList->CopyBufferRegion(
 			m_readbackBuffer->m_d3dResource,
 			m_layouts[0].Offset,
-			sourceResource->m_d3dResource,
+			m_source->m_d3dResource,
 			0,
 			m_layouts[0].Footprint.Width);
 	}
@@ -765,7 +821,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResour
 		for (UINT i = 0; i < desc.MipLevels; ++i)
 		{
 			D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
-			srcLocation.pResource = sourceResource->m_d3dResource;
+			srcLocation.pResource = m_source->m_d3dResource;
 			srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 			srcLocation.SubresourceIndex = i;
 
@@ -782,7 +838,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(FResource* sourceResour
 	return copyMarker;
 }
 
-D3D12_SUBRESOURCE_DATA FResourceReadbackContext::GetData(int subresourceIndex)
+D3D12_SUBRESOURCE_DATA FResourceReadbackContext::GetTextureData(int subresourceIndex)
 {
 	DebugAssert(subresourceIndex < m_layouts.size());
 	const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& subresourceLayout = m_layouts[subresourceIndex];
@@ -1003,7 +1059,7 @@ void FResource::UavBarrier(FCommandList* cmdList)
 	cmdList->m_d3dCmdList->ResourceBarrier(1, &barrierDesc);
 }
 
-FTransientBuffer::~FTransientBuffer()
+FUploadBuffer::~FUploadBuffer()
 {
 	GetUploadBufferPool()->Retire(m_resource, m_fenceMarker);
 }
@@ -1022,78 +1078,78 @@ public:
 
 		// Buffer
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
-		for (int i = (uint32_t)BindlessDescriptorRange::BufferBegin; i <= (uint32_t)BindlessDescriptorRange::BufferEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::BufferBegin; i <= (uint32_t)DescriptorRange::BufferEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
-			m_indices[(uint32_t)BindlessResourceType::Buffer].push(i);
+			m_indices[(uint32_t)ResourceType::Buffer].push(i);
 		}
 
 		// Texture2D
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
-		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::Texture2DBegin; i <= (uint32_t)DescriptorRange::Texture2DEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, srv);
-			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(i);
+			m_indices[(uint32_t)ResourceType::Texture2D].push(i);
 		}
 
 		// Texture2DMultisample
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DMultisampleDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DMS);
-		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DMultisampleBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::Texture2DMultisampleBegin; i <= (uint32_t)DescriptorRange::Texture2DMultisampleEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, srv);
-			m_indices[(uint32_t)BindlessResourceType::Texture2DMultisample].push(i);
+			m_indices[(uint32_t)ResourceType::Texture2DMultisample].push(i);
 		}
 
 		// Texture2DArray
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DArrayDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
-		for (int i = (uint32_t)BindlessDescriptorRange::Texture2DArrayBegin; i <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::Texture2DArrayBegin; i <= (uint32_t)DescriptorRange::Texture2DArrayEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, srv);
-			m_indices[(uint32_t)BindlessResourceType::Texture2DArray].push(i);
+			m_indices[(uint32_t)ResourceType::Texture2DArray].push(i);
 		}
 
 		// Texture Cube
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
-		for (int i = (uint32_t)BindlessDescriptorRange::TextureCubeBegin; i <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::TextureCubeBegin; i <= (uint32_t)DescriptorRange::TextureCubeEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, srv);
-			m_indices[(uint32_t)BindlessResourceType::TextureCube].push(i);
+			m_indices[(uint32_t)ResourceType::TextureCube].push(i);
 		}
 
 		// RWTexture2D
 		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
-		for (int i = (uint32_t)BindlessDescriptorRange::RWTexture2DBegin; i <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::RWTexture2DBegin; i <= (uint32_t)DescriptorRange::RWTexture2DEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, uav);
-			m_indices[(uint32_t)BindlessResourceType::RWTexture2D].push(i);
+			m_indices[(uint32_t)ResourceType::RWTexture2D].push(i);
 		}
 
 		// RWTexture2DArray
 		D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
-		for (int i = (uint32_t)BindlessDescriptorRange::RWTexture2DArrayBegin; i <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::RWTexture2DArrayBegin; i <= (uint32_t)DescriptorRange::RWTexture2DArrayEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, uav);
-			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(i);
+			m_indices[(uint32_t)ResourceType::RWTexture2DArray].push(i);
 		}
 
 		// AccelerationStructure
 		D3D12_SHADER_RESOURCE_VIEW_DESC nullASDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE);
-		for (int i = (uint32_t)BindlessDescriptorRange::AccelerationStructureBegin; i <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd; ++i)
+		for (int i = (uint32_t)DescriptorRange::AccelerationStructureBegin; i <= (uint32_t)DescriptorRange::AccelerationStructureEnd; ++i)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, srv);
-			m_indices[(uint32_t)BindlessResourceType::AccelerationStructure].push(i);
+			m_indices[(uint32_t)ResourceType::AccelerationStructure].push(i);
 		}
 	}
 
-	uint32_t FetchIndex(BindlessResourceType type)
+	uint32_t FetchIndex(ResourceType type)
 	{
 		uint32_t index;
 		bool ok = m_indices[(uint32_t)type].try_pop(index);
@@ -1106,53 +1162,53 @@ public:
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, index);
 
-		if (index <= (uint32_t)BindlessDescriptorRange::BufferEnd)
+		if (index <= (uint32_t)DescriptorRange::BufferEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::Buffer].push(index);
+			m_indices[(uint32_t)ResourceType::Buffer].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DEnd)
+		else if (index <= (uint32_t)DescriptorRange::Texture2DEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::Texture2D].push(index);
+			m_indices[(uint32_t)ResourceType::Texture2D].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DMultisampleEnd)
+		else if (index <= (uint32_t)DescriptorRange::Texture2DMultisampleEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DMultisampleDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DMS);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::Texture2DMultisample].push(index);
+			m_indices[(uint32_t)ResourceType::Texture2DMultisample].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::Texture2DArrayEnd)
+		else if (index <= (uint32_t)DescriptorRange::Texture2DArrayEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DArrayDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::Texture2DArray].push(index);
+			m_indices[(uint32_t)ResourceType::Texture2DArray].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::TextureCubeEnd)
+		else if (index <= (uint32_t)DescriptorRange::TextureCubeEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::TextureCube].push(index);
+			m_indices[(uint32_t)ResourceType::TextureCube].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::RWTexture2DEnd)
+		else if (index <= (uint32_t)DescriptorRange::RWTexture2DEnd)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::RWTexture2D].push(index);
+			m_indices[(uint32_t)ResourceType::RWTexture2D].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::RWTexture2DArrayEnd)
+		else if (index <= (uint32_t)DescriptorRange::RWTexture2DArrayEnd)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::RWTexture2DArray].push(index);
+			m_indices[(uint32_t)ResourceType::RWTexture2DArray].push(index);
 		}
-		else if (index <= (uint32_t)BindlessDescriptorRange::AccelerationStructureEnd)
+		else if (index <= (uint32_t)DescriptorRange::AccelerationStructureEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullASDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, descriptor);
-			m_indices[(uint32_t)BindlessResourceType::AccelerationStructure].push(index);
+			m_indices[(uint32_t)ResourceType::AccelerationStructure].push(index);
 		}
 		else
 		{
@@ -1162,14 +1218,14 @@ public:
 
 	void Clear()
 	{
-		for (int i = 0; i < (uint32_t)BindlessResourceType::Count; ++i)
+		for (int i = 0; i < (uint32_t)ResourceType::Count; ++i)
 		{
 			m_indices[i].clear();
 		}
 	}
 
 private:
-	concurrency::concurrent_queue<uint32_t> m_indices[(uint32_t)BindlessResourceType::Count];
+	concurrency::concurrent_queue<uint32_t> m_indices[(uint32_t)ResourceType::Count];
 };
 #pragma endregion
 #pragma region Pooled_Resources
@@ -1229,7 +1285,7 @@ public:
 		return m_useList.back().get();
 	}
 
-	void Retire(const FRenderTexture* rt)
+	void Retire(const FShaderSurface* surface)
 	{
 		auto waitForFenceTask = concurrency::create_task([this]() mutable
 		{
@@ -1242,19 +1298,53 @@ public:
 			}
 		});
 
-		auto addToFreePool = [this, resource = rt->m_resource, depthStencil = rt->m_isDepthStencil, textureIndices = std::move(rt->m_renderTextureIndices), srvIndex = rt->m_srvIndex]() mutable
+		auto addToFreePool = [
+			this, 
+			surfaceType = surface->m_type,
+			resource = surface->m_resource, 
+			rtIndices = surface->m_renderTextureIndices,
+			uavIndices = surface->m_uavIndices,
+			srvIndex = surface->m_srvIndex,
+			nonShaderVisibleDescriptorIndices = surface->m_nonShaderVisibleUavIndices
+		]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
-			concurrency::concurrent_queue<uint32_t>& descriptorIndexPool = depthStencil ? GetDSVIndexPool() : GetRTVIndexPool();
-			for (uint32_t descriptorIndex : textureIndices)
+			// Return surface descriptor indices
+			if (surfaceType & SurfaceType::RenderTarget)
 			{
-				descriptorIndexPool.push(descriptorIndex);
+				for (uint32_t id : rtIndices)
+				{
+					GetRTVIndexPool().push(id);
+				}
+			}
+			else if(surfaceType & SurfaceType::DepthStencil)
+			{
+				for (uint32_t id : rtIndices)
+				{
+					GetDSVIndexPool().push(id);
+				}
 			}
 
+			// This is not `else if` because a surface can be a render texture and also an UAV
+			if (surfaceType & SurfaceType::UAV)
+			{
+				for (uint32_t id : uavIndices)
+				{
+					GetBindlessPool()->ReturnIndex(id);
+				}
+			}
+
+			// Return SRV index
 			if (srvIndex != ~0u)
 			{
 				GetBindlessPool()->ReturnIndex(srvIndex);
+			}
+
+			// Return any non shader visible UAV indices
+			for (uint32_t id : nonShaderVisibleDescriptorIndices)
+			{
+				GetNonShaderVisibleDescriptorPool().push(id);
 			}
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
@@ -1275,7 +1365,7 @@ public:
 		waitForFenceTask.then(addToFreePool);
 	}
 
-	void Retire(const FBindlessUav* uav)
+	void Retire(const FShaderBuffer* buffer)
 	{
 		auto waitForFenceTask = concurrency::create_task([this]() mutable
 		{
@@ -1288,13 +1378,19 @@ public:
 			}
 		});
 
-		auto addToFreePool = [this, resource = uav->m_resource, uavIndices = std::move(uav->m_uavIndices), srvIndex = uav->m_srvIndex, nonShaderVisibleUavIndices = std::move(uav->m_nonShaderVisibleUavIndices)]() mutable
+		auto addToFreePool = [
+			this, 
+			resource = buffer->m_resource, 
+			uavIndex = buffer->m_uavIndex,
+			nonShaderVisibleUavIndex = buffer->m_nonShaderVisibleUavIndex,
+			srvIndex = buffer->m_srvIndex
+		]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
-			for (uint32_t descriptorIndex : uavIndices)
+			if (uavIndex != ~0u)
 			{
-				GetBindlessPool()->ReturnIndex(descriptorIndex);
+				GetBindlessPool()->ReturnIndex(uavIndex);
 			}
 
 			if (srvIndex != ~0u)
@@ -1302,9 +1398,9 @@ public:
 				GetBindlessPool()->ReturnIndex(srvIndex);
 			}
 
-			for (uint32_t descriptorIndex : nonShaderVisibleUavIndices)
+			if (nonShaderVisibleUavIndex != ~0u)
 			{
-				GetNonShaderVisibleDescriptorPool().push(descriptorIndex);
+				GetNonShaderVisibleDescriptorPool().push(nonShaderVisibleUavIndex);
 			}
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
@@ -1350,7 +1446,7 @@ private:
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 //														Resource Definitions
 //-----------------------------------------------------------------------------------------------------------------------------------------------
-FBindlessShaderResource::~FBindlessShaderResource()
+FTexture::~FTexture()
 {
 	auto waitForFenceTask = concurrency::create_task([this]() mutable
 	{
@@ -1380,20 +1476,52 @@ FBindlessShaderResource::~FBindlessShaderResource()
 	waitForFenceTask.then(freeResource);
 }
 
-FBindlessUav::~FBindlessUav()
+FShaderSurface::~FShaderSurface()
 {
-	GetSharedResourcePool()->Retire(this);
-}
-
-FRenderTexture::~FRenderTexture()
-{
-	if (m_isSwapChainBuffer)
+	if (m_type & SurfaceType::SwapChain)
 	{
 		delete m_resource;
 	}
 	else
 	{
 		GetSharedResourcePool()->Retire(this);
+	}
+}
+
+FShaderBuffer::~FShaderBuffer()
+{
+	if (m_allocType == ResourceAllocationType::Pooled)
+	{
+		GetSharedResourcePool()->Retire(this);
+	}
+	else
+	{
+		auto waitForFenceTask = concurrency::create_task([this]() mutable
+		{
+			winrt::com_ptr<D3DFence_t> fence;
+			AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
+
+			GetGraphicsQueue()->Signal(fence.get(), 1);
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				fence->SetEventOnCompletion(1, event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		});
+
+		// Make a copy of the resource contents as it will be cleaned up by the destructor
+		auto freeResource = [resource = m_resource, srvIndex = m_srvIndex]() mutable
+		{
+			if (srvIndex != ~0u)
+			{
+				GetBindlessPool()->ReturnIndex(srvIndex);
+			}
+
+			delete resource;
+		};
+
+		waitForFenceTask.then(freeResource);
 	}
 }
 
@@ -1413,7 +1541,7 @@ namespace RenderBackend12
 #if defined (_DEBUG)
 	winrt::com_ptr<D3DDebug_t> s_debugController;
 	winrt::com_ptr<D3DInfoQueue_t> s_infoQueue;
-	winrt::com_ptr<IDXGraphicsAnalysis> s_graphicsAnalysis;
+	winrt::com_ptr<D3DDredSettings_t> s_dredController;
 #endif
 
 	winrt::com_ptr<DXGIFactory_t> s_dxgiFactory;
@@ -1422,7 +1550,7 @@ namespace RenderBackend12
 	D3D12_FEATURE_DATA_D3D12_OPTIONS1 s_d3d12OptionsFlags1;
 
 	winrt::com_ptr<DXGISwapChain_t> s_swapChain;
-	std::unique_ptr<FRenderTexture> s_backBuffers[k_backBufferCount];
+	std::unique_ptr<FShaderSurface> s_backBuffers[k_backBufferCount];
 	uint32_t s_currentBufferIndex;
 
 	winrt::com_ptr<D3DFence_t> s_frameFence;
@@ -1436,6 +1564,10 @@ namespace RenderBackend12
 	winrt::com_ptr<D3DCommandQueue_t> s_computeQueue;
 	winrt::com_ptr<D3DCommandQueue_t> s_copyQueue;
 
+	tracy::D3D12QueueCtx* s_tracyGraphicsQueueCtx;
+	tracy::D3D12QueueCtx* s_tracyComputeQueueCtx;
+	tracy::D3D12QueueCtx* s_tracyCopyQueueCtx;
+
 	FCommandListPool s_commandListPool;
 	TBufferPool<D3D12_HEAP_TYPE_UPLOAD> s_uploadBufferPool;
 	TBufferPool<D3D12_HEAP_TYPE_READBACK> s_readbackBufferPool;
@@ -1447,6 +1579,7 @@ namespace RenderBackend12
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
+	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DCommandSignature_t>> s_commandSignaturePool;
 	concurrency::concurrent_queue<uint32_t> s_rtvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_dsvIndexPool;
 	concurrency::concurrent_queue<uint32_t> s_samplerIndexPool;
@@ -1521,14 +1654,20 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	s_debugController->EnableDebugLayer();
 	dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 
-	#if 0
+	// DRED
+	AssertIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(s_dredController.put())));
+
+	// Turn on auto-breadcrumbs and page fault reporting.
+	s_dredController->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+	s_dredController->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+
+	if (config.UseGpuBasedValidation)
+	{
 		// GPU-based validation
 		s_debugController->SetEnableGPUBasedValidation(true);
 		s_debugController->SetEnableSynchronizedCommandQueueValidation(true);
-	#endif
+	}
 
-	// Programmatic Capture
-	DXGIGetDebugInterface1(0, IID_PPV_ARGS(s_graphicsAnalysis.put()));
 #endif
 
 	// DXGI Factory
@@ -1551,6 +1690,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		D3D12_MESSAGE_ID hide[] =
 		{
 			D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,	// Disables warning about clear value mismatch
+			D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,	// Disables warning about clear value mismatch for DSV
 			D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED					// Disables warning about buffers being created in resource state COMMON
 		};
 
@@ -1590,19 +1730,22 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	cmdQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_graphicsQueue.put())));
 	s_graphicsQueue->SetName(L"graphics_queue");
+	s_tracyGraphicsQueueCtx = TracyD3D12Context(s_d3dDevice.get(), s_graphicsQueue.get());
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_computeQueue.put())));
 	s_computeQueue->SetName(L"compute_queue");
+	s_tracyComputeQueueCtx = TracyD3D12Context(s_d3dDevice.get(), s_computeQueue.get());
 
 	cmdQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
 	AssertIfFailed(s_d3dDevice->CreateCommandQueue(&cmdQueueDesc, IID_PPV_ARGS(s_copyQueue.put())));
 	s_copyQueue->SetName(L"copy_queue");
+	s_tracyCopyQueueCtx = TracyD3D12Context(s_d3dDevice.get(), s_copyQueue.get());
 
 	// Shader Visible Bindless heap
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvUavHeapDesc = {};
-		cbvSrvUavHeapDesc.NumDescriptors = (uint32_t)BindlessDescriptorRange::TotalCount;
+		cbvSrvUavHeapDesc.NumDescriptors = (uint32_t)DescriptorRange::TotalCount;
 		cbvSrvUavHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		cbvSrvUavHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		AssertIfFailed(
@@ -1709,17 +1852,21 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = k_backBufferCount;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
-	winrt::com_ptr<IDXGISwapChain1> swapChain;
+	winrt::com_ptr<IDXGISwapChain1> baseChain;
 	AssertIfFailed(s_dxgiFactory->CreateSwapChainForHwnd(
 			s_graphicsQueue.get(),
 			windowHandle,
 			&swapChainDesc,
 			nullptr,
 			nullptr,
-			swapChain.put()));
+			baseChain.put()));
 
-	AssertIfFailed(swapChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
+	AssertIfFailed(baseChain->QueryInterface(IID_PPV_ARGS(s_swapChain.put())));
+
+	s_swapChain->SetMaximumFrameLatency(std::max(1u, k_maxFrameLatency));
+
 
 	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
 	rtvDesc.Format = config.BackBufferFormat;
@@ -1728,11 +1875,10 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	// Back buffers
 	for (size_t bufferIdx = 0; bufferIdx < k_backBufferCount; bufferIdx++)
 	{
-		s_backBuffers[bufferIdx] = std::make_unique<FRenderTexture>();
-		FRenderTexture* backBuffer = s_backBuffers[bufferIdx].get();
+		s_backBuffers[bufferIdx] = std::make_unique<FShaderSurface>();
+		FShaderSurface* backBuffer = s_backBuffers[bufferIdx].get();
 		backBuffer->m_resource = new FResource;
-		backBuffer->m_isDepthStencil = false;
-		backBuffer->m_isSwapChainBuffer = true;
+		backBuffer->m_type = SurfaceType::SwapChain;
 		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&backBuffer->m_resource->m_d3dResource)));
 
 		std::wstringstream s;
@@ -1818,6 +1964,10 @@ void RenderBackend12::Teardown()
 		}
 	}
 
+	TracyD3D12Destroy(s_tracyGraphicsQueueCtx);
+	TracyD3D12Destroy(s_tracyComputeQueueCtx);
+	TracyD3D12Destroy(s_tracyCopyQueueCtx);
+
 	s_swapChain.get()->Release();
 	s_dxgiFactory.get()->Release();
 	s_d3dDevice.get()->Release();
@@ -1832,13 +1982,17 @@ void RenderBackend12::Teardown()
 #endif
 }
 
-FCommandList* RenderBackend12::FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type)
+FCommandList* RenderBackend12::FetchCommandlist(const std::wstring& name, const D3D12_COMMAND_LIST_TYPE type)
 {
-	return s_commandListPool.GetOrCreate(type);
+	SCOPED_CPU_EVENT("fetch_commandlist", PIX_COLOR_DEFAULT);
+	FCommandList* cl = s_commandListPool.GetOrCreate(type);
+	cl->SetName(name.c_str());
+	return cl;
 }
 
 IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 {
+	SCOPED_CPU_EVENT("cache_shader", PIX_COLOR_DEFAULT);
 	auto search = s_shaderCache.find(shaderDesc);
 	if (search != s_shaderCache.cend())
 	{
@@ -1867,6 +2021,7 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 
 IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 {
+	SCOPED_CPU_EVENT("cache_rootsig", PIX_COLOR_DEFAULT);
 	auto search = s_rootsigCache.find(rootsigDesc);
 	if (search != s_rootsigCache.cend())
 	{
@@ -1892,8 +2047,20 @@ IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
 	}
 }
 
+FRootSignature::~FRootSignature()
+{
+	concurrency::create_task([fence = m_fenceMarker]()
+	{
+		fence.BlockingWait();
+	}).then([rootsig = m_rootsig]()
+	{
+		rootsig->Release();
+	});
+}
+
 void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 {
+	SCOPED_CPU_EVENT("recompile_shaders", PIX_COLOR_DEFAULT);
 	bool bDirty = false;;
 
 	for (auto& [shaderDesc, blob] : s_shaderCache)
@@ -1953,23 +2120,32 @@ void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 	}
 }
 
-winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(const FRootsigDesc& rootsig)
+std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& desc)
 {
-	IDxcBlob* rsBlob = CacheRootsignature(rootsig);
-	winrt::com_ptr<D3DRootSignature_t> rs;
-	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
+	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
+	auto rs = std::make_unique<FRootSignature>();
+	rs->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
+
+	IDxcBlob* rsBlob = CacheRootsignature(desc);
+	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(&rs->m_rootsig));
+	rs->m_rootsig->SetName(name.c_str());
 	return rs;
 }
 
-winrt::com_ptr<D3DRootSignature_t> RenderBackend12::FetchRootSignature(IDxcBlob* blob)
+std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, IDxcBlob* blob)
 {
-	winrt::com_ptr<D3DRootSignature_t> rs;
-	s_d3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(rs.put()));
+	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
+	auto rs = std::make_unique<FRootSignature>();
+	rs->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
+
+	s_d3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rs->m_rootsig));
+	rs->m_rootsig->SetName(name.c_str());
 	return rs;
 }
 
 D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc)
 {
+	SCOPED_CPU_EVENT("fetch_pso", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_GRAPHICS_PIPELINE_STATE_DESC>{}(desc);
 
 	auto search = s_graphicsPSOPool.find(descHash);
@@ -1991,6 +2167,7 @@ D3DPipelineState_t* RenderBackend12::FetchGraphicsPipelineState(const D3D12_GRAP
 
 D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPUTE_PIPELINE_STATE_DESC& desc)
 {
+	SCOPED_CPU_EVENT("fetch_pso", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_COMPUTE_PIPELINE_STATE_DESC>{}(desc);
 
 	auto search = s_computePSOPool.find(descHash);
@@ -2012,6 +2189,7 @@ D3DPipelineState_t* RenderBackend12::FetchComputePipelineState(const D3D12_COMPU
 
 D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc)
 {
+	SCOPED_CPU_EVENT("fetch_rtpso", PIX_COLOR_DEFAULT);
 	size_t descHash = std::hash<D3D12_STATE_OBJECT_DESC>{}(desc);
 
 	auto search = s_raytracePSOPool.find(descHash);
@@ -2031,7 +2209,26 @@ D3DStateObject_t* RenderBackend12::FetchRaytracePipelineState(const D3D12_STATE_
 	}
 }
 
-FRenderTexture* RenderBackend12::GetBackBuffer()
+D3DCommandSignature_t* RenderBackend12::CacheCommandSignature(const D3D12_COMMAND_SIGNATURE_DESC desc, D3DRootSignature_t* rootsig)
+{
+	SCOPED_CPU_EVENT("cache_commandsig", PIX_COLOR_DEFAULT);
+	size_t descHash = std::hash<D3D12_COMMAND_SIGNATURE_DESC>{}(desc, rootsig);
+
+	auto search = s_commandSignaturePool.find(descHash);
+	if (search != s_commandSignaturePool.cend())
+	{
+		return search->second.get();
+	}
+	else
+	{
+		winrt::com_ptr<D3DCommandSignature_t> newSignature;
+		AssertIfFailed(s_d3dDevice->CreateCommandSignature(&desc, rootsig, IID_PPV_ARGS(newSignature.put())));
+		s_commandSignaturePool[descHash] = newSignature;
+		return s_commandSignaturePool[descHash].get();
+	}
+}
+
+FShaderSurface* RenderBackend12::GetBackBuffer()
 {
 	return s_backBuffers[s_currentBufferIndex].get();
 }
@@ -2093,11 +2290,31 @@ D3DCommandQueue_t* RenderBackend12::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type
 	return nullptr;
 }
 
+void RenderBackend12::WaitForSwapChain()
+{
+	SCOPED_CPU_EVENT("wait_for_swap_chain", PIX_COLOR_DEFAULT);
+	HANDLE swapEvent = s_swapChain->GetFrameLatencyWaitableObject();
+	WaitForSingleObject(swapEvent, INFINITE);
+}
+
 void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
 
-	s_swapChain->Present(0, 0);
+	// Transition back buffer
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"transition_back_buffer", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	GetBackBuffer()->m_resource->Transition(cmdList, GetBackBuffer()->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_PRESENT);
+	ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	// VSync - SyncInterval 1
+	AssertIfFailed(s_swapChain->Present(1, 0));
+
+	/*winrt::com_ptr<ID3D12DeviceRemovedExtendedData> dredData;
+	AssertIfFailed(GetDevice()->QueryInterface(IID_PPV_ARGS(dredData.put())));
+	D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT DredAutoBreadcrumbsOutput;
+	D3D12_DRED_PAGE_FAULT_OUTPUT DredPageFaultOutput;
+	AssertIfFailed(dredData->GetAutoBreadcrumbsOutput(&DredAutoBreadcrumbsOutput));
+	AssertIfFailed(dredData->GetPageFaultAllocationOutput(&DredPageFaultOutput));*/
 
 	// Signal current frame is done
 	auto currentFenceValue = s_frameFenceValues[s_currentBufferIndex];
@@ -2107,6 +2324,7 @@ void RenderBackend12::PresentDisplay()
 	s_currentBufferIndex = (s_currentBufferIndex + 1) % k_backBufferCount;
 
 	// If the buffer that was swapped in hasn't finished rendering on the GPU (from a previous submit), then wait!
+	// This wait will not be hit when using the waitable object
 	if (s_frameFence->GetCompletedValue() < s_frameFenceValues[s_currentBufferIndex])
 	{
 		SCOPED_CPU_EVENT("wait_on_previous_frame", PIX_COLOR_DEFAULT);
@@ -2151,12 +2369,13 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 	return descriptor;
 }
 
-std::unique_ptr<FTransientBuffer> RenderBackend12::CreateTransientBuffer(
+std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	const FCommandList* dependentCL,
 	std::function<void(uint8_t*)> uploadFunc)
 {
+	SCOPED_CPU_EVENT("create_upload_buffer", PIX_COLOR_DEFAULT);
 	DebugAssert(sizeInBytes != 0);
 
 	DWORD n;
@@ -2174,96 +2393,241 @@ std::unique_ptr<FTransientBuffer> RenderBackend12::CreateTransientBuffer(
 		buffer->m_d3dResource->Unmap(0, nullptr);
 	}
 
-	auto tempBuffer = std::make_unique<FTransientBuffer>();
+	auto tempBuffer = std::make_unique<FUploadBuffer>();
 	tempBuffer->m_resource = buffer;
 	tempBuffer->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
 
 	return std::move(tempBuffer);
 }
 
-std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
+std::unique_ptr<FShaderSurface> RenderBackend12::CreateSurface(
 	const std::wstring& name,
+	const uint32_t surfaceType,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
 	const size_t mipLevels,
 	const size_t depth,
+	const size_t arraySize,
 	const size_t sampleCount,
-	const bool bCreateSRV)
+	const bool bCreateSRV,
+	const bool bCreateNonShaderVisibleDescriptors)
 {
+	SCOPED_CPU_EVENT("create_surface", PIX_COLOR_DEFAULT);
 
-	D3D12_RESOURCE_DESC rtDesc = {};
-	rtDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	rtDesc.Width = width;
-	rtDesc.Height = (UINT)height;
-	rtDesc.DepthOrArraySize = (UINT16)depth;
-	rtDesc.MipLevels = (UINT16)mipLevels;
-	rtDesc.Format = format;
-	rtDesc.SampleDesc.Count = sampleCount;
-	rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	// Default clear color for RTVs
+	D3D12_CLEAR_VALUE defaultClearColor = {};
+	defaultClearColor.Format = format;
+	defaultClearColor.Color[0] = defaultClearColor.Color[1] = defaultClearColor.Color[2] = defaultClearColor.Color[3] = 0.f;
 
-	D3D12_CLEAR_VALUE clearValue = {};
-	clearValue.Format = format;
-	clearValue.Color[0] = clearValue.Color[1] = clearValue.Color[2] = clearValue.Color[3] = 0.f;
+	// Default clear value for DSVs
+	D3D12_CLEAR_VALUE defaultClearDSV = {};
+	defaultClearDSV.Format = format;
+	defaultClearDSV.DepthStencil.Depth = 0.f;
+	defaultClearDSV.DepthStencil.Stencil = 0;
 
-	FResource* rtResource = s_sharedResourcePool.GetOrCreate(name, rtDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue);
+	// Initialize settings based on surface type
+	D3D12_RESOURCE_FLAGS surfaceFlags = {};
+	DXGI_FORMAT surfaceFormat = format;
+	D3D12_CLEAR_VALUE* clearValue = {};
+	D3D12_RESOURCE_STATES initialState = {};
+	std::vector<uint32_t> renderTextureDescriptorIndices;
+	std::vector<uint32_t> uavDescriptorIndices;
+	std::vector<uint32_t> nonShaderVisibleUavIndices;
 
-	// RTV Descriptor
-	std::vector<uint32_t> rtvIndices;
-	for(int mip = 0; mip < mipLevels; ++mip)
+	if (surfaceType & (uint32_t)SurfaceType::RenderTarget)
 	{
-		uint32_t rtvIndex;
-		bool ok = s_rtvIndexPool.try_pop(rtvIndex);
-		DebugAssert(ok, "Ran out of RTV descriptors");
-		D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtvIndex);
+		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+		clearValue = &defaultClearColor;
+		initialState = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
-		D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-		rtvDesc.Format = format;
-		if (depth == 1)
+		for (int mip = 0; mip < mipLevels; ++mip)
 		{
-			if (sampleCount > 1)
+			uint32_t id;
+			bool ok = s_rtvIndexPool.try_pop(id);
+			DebugAssert(ok, "Ran out of RTV descriptors");
+			renderTextureDescriptorIndices.push_back(id);
+		}
+	}
+	else if (surfaceType & (uint32_t)SurfaceType::DepthStencil)
+	{
+		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+		surfaceFormat = GetTypelessDepthStencilFormat(format);
+		clearValue = &defaultClearDSV;
+		initialState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+
+		for (int mip = 0; mip < mipLevels; ++mip)
+		{
+			uint32_t id;
+			bool ok = s_dsvIndexPool.try_pop(id);
+			DebugAssert(ok, "Ran out of DSV descriptors");
+			renderTextureDescriptorIndices.push_back(id);
+		}
+	}
+
+	if (surfaceType & (uint32_t)SurfaceType::UAV)
+	{
+		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+		initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+		ResourceType descriptorType = arraySize > 1 ? ResourceType::RWTexture2DArray : ResourceType::RWTexture2D;
+		for (int mip = 0; mip < mipLevels; ++mip)
+		{
+			uint32_t id = GetBindlessPool()->FetchIndex(descriptorType);
+			uavDescriptorIndices.push_back(id);
+
+			if (bCreateNonShaderVisibleDescriptors)
 			{
-				rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+				uint32_t id2;
+				bool ok = s_nonShaderVisibleDescriptorPool.try_pop(id2);
+				DebugAssert(ok, "Ran out of non shader visible descriptors");
+				nonShaderVisibleUavIndices.push_back(id2);
+			}
+		}
+	}
+
+	// Create resource 
+	D3D12_RESOURCE_DESC surfaceDesc = {};
+	surfaceDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	surfaceDesc.Width = width;
+	surfaceDesc.Height = (UINT)height;
+	surfaceDesc.DepthOrArraySize = (UINT16)(depth > 1 ? depth : arraySize);
+	surfaceDesc.MipLevels = (UINT16)mipLevels;
+	surfaceDesc.Format = surfaceFormat;
+	surfaceDesc.SampleDesc.Count = sampleCount;
+	surfaceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	surfaceDesc.Flags = surfaceFlags;
+	FResource* resource = s_sharedResourcePool.GetOrCreate(name, surfaceDesc, initialState, clearValue);
+
+	// Create render texture descriptors
+	if (surfaceType & SurfaceType::RenderTarget)
+	{
+		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, renderTextureDescriptorIndices[mipIndex]);
+			D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+			rtvDesc.Format = format;
+			if (depth == 1)
+			{
+				if (sampleCount > 1)
+				{
+					rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+				}
+				else
+				{
+					rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+					rtvDesc.Texture2D.MipSlice = mipIndex;
+				}
 			}
 			else
 			{
-				rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-				rtvDesc.Texture2D.MipSlice = mip;
+				rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+				rtvDesc.Texture3D.MipSlice = mipIndex;
 			}
-		}
-		else
-		{
-			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
-			rtvDesc.Texture3D.MipSlice = mip;
-		}
 
-		GetDevice()->CreateRenderTargetView(rtResource->m_d3dResource, &rtvDesc, rtv);
-		rtvIndices.push_back(rtvIndex);
+			GetDevice()->CreateRenderTargetView(resource->m_d3dResource, &rtvDesc, rtv);
+		}
+	}
+	else if (surfaceType & SurfaceType::DepthStencil)
+	{
+		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, renderTextureDescriptorIndices[mipIndex]);
+			D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+			dsvDesc.Format = format;
+
+			if (sampleCount > 1)
+			{
+				dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+			}
+			else
+			{
+				dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+				dsvDesc.Texture2D.MipSlice = mipIndex;
+			}
+
+			GetDevice()->CreateDepthStencilView(resource->m_d3dResource, &dsvDesc, dsv);
+		}
 	}
 
-	// SRV Descriptor
+	// Create UAV descriptors
+	if (surfaceType & SurfaceType::UAV)
+	{
+		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
+		{
+			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavDescriptorIndices[mipIndex]);
+
+			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+			uavDesc.Format = format;
+
+			if (arraySize > 1)
+			{
+				uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+				uavDesc.Texture2DArray.MipSlice = mipIndex;
+				uavDesc.Texture2DArray.FirstArraySlice = 0;
+				uavDesc.Texture2DArray.ArraySize = arraySize;
+				uavDesc.Texture2DArray.PlaneSlice = 0;
+			}
+			else
+			{
+				uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+				uavDesc.Texture2D.MipSlice = mipIndex;
+				uavDesc.Texture2D.PlaneSlice = 0;
+			}
+
+			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, uav);
+
+			if (bCreateNonShaderVisibleDescriptors)
+			{
+				D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, nonShaderVisibleUavIndices[mipIndex], false);
+				GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
+			}
+		}
+	}
+
+
+	// Create SRV descriptor
 	uint32_t srvIndex = ~0u;
 	if(bCreateSRV)
 	{
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = format;
+		srvDesc.Format = (surfaceType & SurfaceType::DepthStencil) ? GetSrvDepthFormat(format) : format;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		BindlessResourceType resourceType;
+		ResourceType resourceType;
 
 		if (depth == 1)
 		{
-			if (sampleCount > 1)
+			if (arraySize == 6)
 			{
-				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-				resourceType = BindlessResourceType::Texture2DMultisample;
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+				srvDesc.TextureCube.MipLevels = mipLevels;
+				srvDesc.TextureCube.MostDetailedMip = 0;
+				resourceType = ResourceType::TextureCube;
+			}
+			else if (arraySize > 1)
+			{
+				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+				srvDesc.Texture2DArray.MipLevels = mipLevels;
+				srvDesc.Texture2DArray.FirstArraySlice = 0;
+				srvDesc.Texture2DArray.ArraySize = arraySize;
+				srvDesc.Texture2DArray.MostDetailedMip = 0;
+				srvDesc.Texture2DArray.PlaneSlice = 0;
+				resourceType = ResourceType::Texture2DArray;
 			}
 			else
 			{
-				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-				srvDesc.Texture2D.MipLevels = mipLevels;
-				srvDesc.Texture2D.MostDetailedMip = 0;
-				resourceType = BindlessResourceType::Texture2D;
+				if (sampleCount > 1)
+				{
+					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+					resourceType = ResourceType::Texture2DMultisample;
+				}
+				else
+				{
+					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+					srvDesc.Texture2D.MipLevels = mipLevels;
+					srvDesc.Texture2D.MostDetailedMip = 0;
+					resourceType = ResourceType::Texture2D;
+				}
 			}
 		}
 		else
@@ -2271,118 +2635,28 @@ std::unique_ptr<FRenderTexture> RenderBackend12::CreateRenderTexture(
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
 			srvDesc.Texture3D.MipLevels = mipLevels;
 			srvDesc.Texture3D.MostDetailedMip = 0;
-			resourceType = BindlessResourceType::Texture3D;
+			resourceType = ResourceType::Texture3D;
 		}
 
 		srvIndex = GetBindlessPool()->FetchIndex(resourceType);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
-		GetDevice()->CreateShaderResourceView(rtResource->m_d3dResource, &srvDesc, srv);
+		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
 
-	auto rt = std::make_unique<FRenderTexture>();
-	rt->m_resource = rtResource;
-	rt->m_renderTextureIndices = std::move(rtvIndices);
-	rt->m_srvIndex = srvIndex;
-	rt->m_isDepthStencil = false;
-	rt->m_isSwapChainBuffer = false;
+	auto surface = std::make_unique<FShaderSurface>();
+	surface->m_type = surfaceType;
+	surface->m_resource = resource;
+	surface->m_renderTextureIndices = std::move(renderTextureDescriptorIndices);
+	surface->m_uavIndices = std::move(uavDescriptorIndices);
+	surface->m_nonShaderVisibleUavIndices = std::move(nonShaderVisibleUavIndices);
+	surface->m_srvIndex = srvIndex;
 
-	return std::move(rt);
+	return std::move(surface);
 }
 
-std::unique_ptr<FRenderTexture> RenderBackend12::CreateDepthStencilTexture(
+std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
 	const std::wstring& name,
-	const DXGI_FORMAT format,
-	const size_t width,
-	const size_t height,
-	const size_t mipLevels,
-	const size_t sampleCount,
-	const bool bCreateSRV)
-{
-	D3D12_RESOURCE_DESC dsDesc = {};
-	dsDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	dsDesc.Width = width;
-	dsDesc.Height = (UINT)height;
-	dsDesc.DepthOrArraySize = 1;
-	dsDesc.MipLevels = (UINT16)mipLevels;
-	dsDesc.Format = GetTypelessDepthStencilFormat(format);
-	dsDesc.SampleDesc.Count = sampleCount;
-	dsDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	dsDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-
-	D3D12_CLEAR_VALUE clearValue = {};
-	clearValue.Format = format;
-	clearValue.DepthStencil.Depth = 0.f;
-	clearValue.DepthStencil.Stencil = 0;
-
-	FResource* rtResource = s_sharedResourcePool.GetOrCreate(name, dsDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clearValue);
-
-	// DSV Descriptor
-	std::vector<uint32_t> dsvIndices;
-	for (int mip = 0; mip < mipLevels; ++mip)
-	{
-		uint32_t dsvIndex;
-		bool ok = s_dsvIndexPool.try_pop(dsvIndex);
-		DebugAssert(ok, "Ran out of DSV descriptors");
-		D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, dsvIndex);
-
-		D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-		dsvDesc.Format = format;
-
-		if (sampleCount > 1)
-		{
-			dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
-		}
-		else
-		{
-			dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-			dsvDesc.Texture2D.MipSlice = mip;
-		}
-
-		GetDevice()->CreateDepthStencilView(rtResource->m_d3dResource, &dsvDesc, dsv);
-		dsvIndices.push_back(dsvIndex);
-	}
-
-	// SRV Descriptor
-	uint32_t srvIndex = ~0u;
-	if(bCreateSRV)
-	{
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = GetSrvDepthFormat(format);
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		BindlessResourceType resourceType;
-
-		if (sampleCount > 1)
-		{
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-			resourceType = BindlessResourceType::Texture2DMultisample;
-		}
-		else
-		{
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MipLevels = mipLevels;
-			srvDesc.Texture2D.MostDetailedMip = 0;
-			resourceType = BindlessResourceType::Texture2D;
-		}
-
-		srvIndex = GetBindlessPool()->FetchIndex(resourceType);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
-		GetDevice()->CreateShaderResourceView(rtResource->m_d3dResource, &srvDesc, srv);
-	}
-
-	auto rt = std::make_unique<FRenderTexture>();
-	rt->m_resource = rtResource;
-	rt->m_renderTextureIndices = std::move(dsvIndices);
-	rt->m_srvIndex = srvIndex;
-	rt->m_isDepthStencil = true;
-	rt->m_isSwapChainBuffer = false;
-
-
-	return std::move(rt);
-}
-
-std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
-	const std::wstring& name,
-	const BindlessResourceType type,
+	const TextureType type,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
@@ -2392,7 +2666,8 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 	const DirectX::Image* images,
 	FResourceUploadContext* uploadContext)
 {
-	auto newTexture = std::make_unique<FBindlessShaderResource>();
+	SCOPED_CPU_EVENT("create_texture", PIX_COLOR_DEFAULT);
+	auto newTexture = std::make_unique<FTexture>();
 
 	// Create resource
 	{
@@ -2446,29 +2721,35 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 	}
 
 	// Descriptor
-	newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(type);
-	D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-
-	switch(type)
+	if (type == TextureType::Tex2D)
 	{
-	case BindlessResourceType::Texture2D:
+		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2D);
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		srvDesc.Texture2D.MipLevels = numMips;
 		srvDesc.Texture2D.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
-		break;
-	case BindlessResourceType::TextureCube:
+	}
+	else if (type == TextureType::TexCube)
+	{
+		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(ResourceType::TextureCube);
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
 		srvDesc.TextureCube.MipLevels = numMips;
 		srvDesc.TextureCube.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
-		break;
-	case BindlessResourceType::Texture2DArray:
+	}
+	else if (type == TextureType::Tex2DArray)
+	{
+		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2DArray);
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
 		srvDesc.Texture2DArray.ArraySize = numSlices;
@@ -2476,212 +2757,52 @@ std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessTexture(
 		srvDesc.Texture2DArray.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
-		break;
-	default:
+	}
+	else
+	{
 		DebugAssert(false, "Not Implemented");
 	}
 
 	return std::move(newTexture);
 }
 
-std::unique_ptr<FBindlessShaderResource> RenderBackend12::CreateBindlessBuffer(
+std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 	const std::wstring& name,
-	const BindlessResourceType type,
+	const BufferType type,
+	const ResourceAccessMode accessMode,
+	const ResourceAllocationType allocType,
 	const size_t size,
-	D3D12_RESOURCE_STATES resourceState,
+	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
-	FResourceUploadContext* uploadContext)
+	FResourceUploadContext* uploadContext,
+	const int fixedUavIndex,
+	const int fixedSrvIndex)
 {
-	auto newBuffer = std::make_unique<FBindlessShaderResource>();
+	SCOPED_CPU_EVENT("create_buffer", PIX_COLOR_DEFAULT);
 
-	// Create resource
+	// Resource Flags & State
+	D3D12_RESOURCE_FLAGS resourceFlags = {};
+	D3D12_RESOURCE_STATES resourceState = {};
+	if (accessMode == ResourceAccessMode::GpuReadWrite)
 	{
-		D3D12_HEAP_PROPERTIES heapProps = {};
-		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-		D3D12_RESOURCE_DESC desc = {};
-		desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		desc.Alignment = 0;
-		desc.Width = size;
-		desc.Height = 1;
-		desc.DepthOrArraySize = 1;
-		desc.MipLevels = 1;
-		desc.Format = DXGI_FORMAT_UNKNOWN;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-		desc.Flags = (type == BindlessResourceType::AccelerationStructure ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE);
-
-		newBuffer->m_resource = new FResource;
-		AssertIfFailed(newBuffer->m_resource->InitCommittedResource(name, heapProps, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
-	}
-
-	// Upload buffer data
-	if(pData)
-	{
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
-		srcData[0].pData = pData;
-		srcData[0].RowPitch = size;
-		srcData[0].SlicePitch = size;
-		uploadContext->UpdateSubresources(
-			newBuffer->m_resource,
-			srcData,
-			[buffer = newBuffer.get(), resourceState](FCommandList* cmdList)
-			{
-				buffer->m_resource->Transition(cmdList, buffer->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
-			});
-	}
-
-	// Descriptor
-	{
-		newBuffer->m_srvIndex = GetBindlessPool()->FetchIndex(type);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newBuffer->m_srvIndex);
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-
-		switch (type)
+		if (type == BufferType::AccelerationStructure)
 		{
-		case BindlessResourceType::Buffer:
-			srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-			srvDesc.Buffer.FirstElement = 0;
-			srvDesc.Buffer.NumElements = size / 4; // number of R32 elements
-			srvDesc.Buffer.StructureByteStride = 0;
-			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			GetDevice()->CreateShaderResourceView(newBuffer->m_resource->m_d3dResource, &srvDesc, srv);
-			break;
-		case BindlessResourceType::AccelerationStructure:
-			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			srvDesc.RaytracingAccelerationStructure.Location = newBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
-			break;
-		default:
-			DebugAssert(false, "Not Implemented");
-		}
-	}
-
-	return std::move(newBuffer);
-}
-
-std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavTexture(
-	const std::wstring& name,
-	const DXGI_FORMAT format,
-	const size_t width,
-	const size_t height,
-	const size_t mipLevels,
-	const size_t arraySize,
-	const bool bCreateSRV, 
-	const bool bRequiresClear)
-{
-	D3D12_RESOURCE_DESC uavDesc = {};
-	uavDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	uavDesc.Width = width;
-	uavDesc.Height = (UINT)height;
-	uavDesc.DepthOrArraySize = (UINT16)arraySize;
-	uavDesc.MipLevels = mipLevels;
-	uavDesc.Format = format;
-	uavDesc.SampleDesc.Count = 1;
-	uavDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	uavDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-	FResource* uavResource = s_sharedResourcePool.GetOrCreate(name, uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr);
-
-	// Descriptor(s)
-	std::vector<uint32_t> uavIndices;
-	std::vector<uint32_t> nonShaderVisibleUavIndices;
-	for(int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
-	{
-		uint32_t uavIndex = GetBindlessPool()->FetchIndex(arraySize > 1 ? BindlessResourceType::RWTexture2DArray : BindlessResourceType::RWTexture2D);
-		D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
-
-		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-		uavDesc.Format = format;
-
-		if (arraySize > 1)
-		{
-			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
-			uavDesc.Texture2DArray.MipSlice = mipIndex;
-			uavDesc.Texture2DArray.FirstArraySlice = 0;
-			uavDesc.Texture2DArray.ArraySize = arraySize;
-			uavDesc.Texture2DArray.PlaneSlice = 0;
+			resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+			resourceState = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
 		}
 		else
 		{
-			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-			uavDesc.Texture2D.MipSlice = mipIndex;
-			uavDesc.Texture2D.PlaneSlice = 0;
-		}
-	
-		GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, uav);
-		uavIndices.push_back(uavIndex);
-
-		if (bRequiresClear)
-		{
-			uint32_t descriptorIndex;
-			bool ok = s_nonShaderVisibleDescriptorPool.try_pop(descriptorIndex);
-			DebugAssert(ok, "Ran out of Non Shader Visible descriptors");
-			D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, descriptorIndex, false);
-			GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
-			nonShaderVisibleUavIndices.push_back(descriptorIndex);
+			resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+			resourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		}
 	}
-
-	// SRV Descriptor
-	uint32_t srvIndex = ~0u;
-	if(bCreateSRV)
+	else if (accessMode == ResourceAccessMode::GpuReadOnly)
 	{
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = format;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		BindlessResourceType resourceType;
-		if (arraySize == 6)
-		{
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-			srvDesc.TextureCube.MipLevels = mipLevels;
-			srvDesc.TextureCube.MostDetailedMip = 0;
-			resourceType = BindlessResourceType::TextureCube;
-		}
-		else if (arraySize > 1)
-		{
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-			srvDesc.Texture2DArray.MipLevels = mipLevels;
-			srvDesc.Texture2DArray.FirstArraySlice = 0;
-			srvDesc.Texture2DArray.ArraySize = arraySize;
-			srvDesc.Texture2DArray.MostDetailedMip = 0;
-			srvDesc.Texture2DArray.PlaneSlice = 0;
-			resourceType = BindlessResourceType::Texture2DArray;
-		}
-		else
-		{
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MipLevels = mipLevels;
-			srvDesc.Texture2D.MostDetailedMip = 0;
-			resourceType = BindlessResourceType::Texture2D;
-		}
-
-		srvIndex = GetBindlessPool()->FetchIndex(resourceType);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
-		GetDevice()->CreateShaderResourceView(uavResource->m_d3dResource, &srvDesc, srv);
+		resourceFlags = D3D12_RESOURCE_FLAG_NONE;
+		resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 	}
 
-	auto uav = std::make_unique<FBindlessUav>();
-	uav->m_resource = uavResource;
-	uav->m_uavIndices = std::move(uavIndices);
-	uav->m_nonShaderVisibleUavIndices = std::move(nonShaderVisibleUavIndices);
-	uav->m_srvIndex = srvIndex;
-
-	return std::move(uav);
-}
-
-std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
-	const std::wstring& name,
-	const size_t size,
-	const bool bCreateSRV)
-{
+	// Resource Description
 	D3D12_RESOURCE_DESC desc = {};
 	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 	desc.Alignment = 0;
@@ -2693,55 +2814,123 @@ std::unique_ptr<FBindlessUav> RenderBackend12::CreateBindlessUavBuffer(
 	desc.SampleDesc.Count = 1;
 	desc.SampleDesc.Quality = 0;
 	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	desc.Flags = resourceFlags;
 
-	FResource* uavResource = s_sharedResourcePool.GetOrCreate(name, desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr);
+	// Create Resource
+	FResource* resource = {};
+	if (allocType == ResourceAllocationType::Pooled)
+	{
+		resource = s_sharedResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState, nullptr);
+	}
+	else if (allocType == ResourceAllocationType::Committed)
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
-	// Descriptor
-	uint32_t uavIndex = GetBindlessPool()->FetchIndex(BindlessResourceType::Buffer);
-	D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
+		resource = new FResource;
+		AssertIfFailed(resource->InitCommittedResource(name, heapProps, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
+	}
 
-	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-	uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	uavDesc.Buffer.FirstElement = 0;
-	uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
-	uavDesc.Buffer.StructureByteStride = 0;
-	uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
-	GetDevice()->CreateUnorderedAccessView(uavResource->m_d3dResource, nullptr, &uavDesc, descriptor);
+	// Upload buffer data if specified
+	if (pData)
+	{
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
+		srcData[0].pData = pData;
+		srcData[0].RowPitch = size;
+		srcData[0].SlicePitch = size;
+		uploadContext->UpdateSubresources(
+			resource,
+			srcData,
+			[resource, resourceState](FCommandList* cmdList)
+			{
+				resource->Transition(cmdList, resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+			});
+	}
+
+	// UAV Descriptor
+	uint32_t uavIndex = ~0u;
+	uint32_t nonShaderVisibleUavIndex = ~0u;
+	if (accessMode != ResourceAccessMode::GpuReadOnly)
+	{
+		if (type == BufferType::Raw)
+		{
+			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+			uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+			uavDesc.Buffer.FirstElement = 0;
+			uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
+			uavDesc.Buffer.StructureByteStride = 0;
+			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
+
+			uavIndex = (fixedUavIndex == -1 ? GetBindlessPool()->FetchIndex(ResourceType::Buffer) : fixedUavIndex);
+			D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
+			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, descriptor);
+
+			if (bCreateNonShaderVisibleDescriptor)
+			{
+				bool ok = s_nonShaderVisibleDescriptorPool.try_pop(nonShaderVisibleUavIndex);
+				DebugAssert(ok, "Ran out of non shader visible descriptors");
+
+				D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, nonShaderVisibleUavIndex, false);
+				GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
+			}
+		}
+	}
 
 	// SRV Descriptor
 	uint32_t srvIndex = ~0u;
-	if (bCreateSRV)
+	if (accessMode != ResourceAccessMode::GpuWriteOnly)
 	{
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = size / 4;
-		srvDesc.Buffer.StructureByteStride = 0;
-		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-		BindlessResourceType resourceType = BindlessResourceType::Buffer;
+		if (type == BufferType::AccelerationStructure)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			srvDesc.RaytracingAccelerationStructure.Location = resource->m_d3dResource->GetGPUVirtualAddress();
 
-		srvIndex = GetBindlessPool()->FetchIndex(resourceType);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
-		GetDevice()->CreateShaderResourceView(uavResource->m_d3dResource, &srvDesc, srv);
+			srvIndex = GetBindlessPool()->FetchIndex(ResourceType::AccelerationStructure);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
+			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
+		}
+		else
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+			srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			srvDesc.Buffer.FirstElement = 0;
+			srvDesc.Buffer.NumElements = size / 4;
+			srvDesc.Buffer.StructureByteStride = 0;
+			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+
+			srvIndex = (fixedSrvIndex == -1 ? GetBindlessPool()->FetchIndex(ResourceType::Buffer) : fixedSrvIndex);
+			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
+			GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
+		}
 	}
 
-	auto uav = std::make_unique<FBindlessUav>();
-	uav->m_resource = uavResource;
-	uav->m_uavIndices.push_back(uavIndex);
-	uav->m_srvIndex = srvIndex;
+	auto buffer = std::make_unique<FShaderBuffer>();
+	buffer->m_accessMode = accessMode;
+	buffer->m_allocType = allocType;
+	buffer->m_resource = resource;
+	buffer->m_uavIndex = uavIndex;
+	buffer->m_nonShaderVisibleUavIndex = nonShaderVisibleUavIndex;
+	buffer->m_srvIndex = srvIndex;
 
-	return std::move(uav);
+	return std::move(buffer);
 }
 
-uint32_t RenderBackend12::CreateBindlessSampler(
+uint32_t RenderBackend12::CreateSampler(
 	const D3D12_FILTER filter,
 	const D3D12_TEXTURE_ADDRESS_MODE addressU,
 	const D3D12_TEXTURE_ADDRESS_MODE addressV,
 	const D3D12_TEXTURE_ADDRESS_MODE addressW)
 {
+	SCOPED_CPU_EVENT("create_sampler", PIX_COLOR_DEFAULT);
+
 	uint32_t samplerIndex;
 	bool ok = s_samplerIndexPool.try_pop(samplerIndex);
 	DebugAssert(ok, "Ran out of Sampler descriptors");
@@ -2772,26 +2961,6 @@ size_t RenderBackend12::GetResourceSize(const DirectX::ScratchImage& image)
 	GetDevice()->GetCopyableFootprints(&desc, 0, image.GetImageCount(), 0, nullptr, nullptr, nullptr, &totalBytes);
 
 	return totalBytes;
-}
-
-void RenderBackend12::BeginCapture()
-{
-#if defined (_DEBUG)
-	if (s_graphicsAnalysis)
-	{
-		s_graphicsAnalysis->BeginCapture();
-	}
-#endif
-}
-
-void RenderBackend12::EndCapture()
-{
-#if defined (_DEBUG)
-	if (s_graphicsAnalysis)
-	{
-		s_graphicsAnalysis->EndCapture();
-	}
-#endif
 }
 
 uint32_t RenderBackend12::GetLaneCount()

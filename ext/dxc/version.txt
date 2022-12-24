@@ -1,10 +1,13 @@
-DX Compiler release for April 2021
-@hekota hekota released this 22 days ago
+DX Compiler release for July 2022 Latest
+DX Compiler release for July 2022. Contains shader model 6.7 and many bug fixes and improvements, such as:
 
-DX Compiler release for April 2021. Contains shader model 6.6, DXIL version 1.6, and many bug fixes and improvements. A new feature called slim pdbs is also introduced which greatly reduces .pdb sizes.
+Features: Shader Model 6.7 includes support for Raw Gather, Programmable Offsets, QuadAny/QuadAll, WaveOpsIncludeHelperLanes, and more!
+Platforms: ARM64 support
+HLSL 2021 : Enable “using” keyword
+Optimizations: Loop unrolling and dead code elimination improvements
+Developer tools: Improved disassembly output
+The package includes dxc.exe, dxcompiler.dll, corresponding lib and headers, and dxil.dll for x64 and, for the first time, arm64 platforms!
 
-The package includes dxc.exe, dxcompiler.dll, corresponding lib and headers, and dxil.dll.
+The new DirectX 12 Agility SDK and a hardware driver with appropriate support are required to run shader model 6.7 shaders.
 
-The new DirectX 12 Agility SDK is required to run shader model 6.6 shaders.
-
-SPIR-V: Per community request the SPIR-V backend of the compiler has been enabled in this release. Please note that Microsoft does not perform testing/verification of the SPIR-V backend.
+The SPIR-V backend of the compiler has been enabled in this release. Please note that Microsoft does not perform testing/verification of the SPIR-V backend.

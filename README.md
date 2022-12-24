@@ -3,10 +3,15 @@ Experimetal rendering engine for loading and displaying Gltf models as shown bel
  
 
 ![image](https://user-images.githubusercontent.com/8186559/132597501-5a13ab40-7f4c-40af-926a-332e30fe29bb.png)
+![FJh3zLDVcAUQLq-](https://user-images.githubusercontent.com/8186559/159191105-567666ba-bd47-4a0d-be22-6fbe45eb4953.jpg)
+![FJh8O0oUcAAodYI](https://user-images.githubusercontent.com/8186559/159191107-497177b7-3138-4e57-b413-a01cfc4b82ab.jpg)
+
 
 ## Features
 * Supports both Path Tracing and Rasterization 
 * Physically Based Rendering
+* Visibility Buffer
+* Clustered Lighting
 * Image Based Lighting using Split Sum Approximation
 * Job-based renderer with parallel recording and submission
 * Normalmap and Roughness map filtering using von Mises-Fisher convolution

@@ -7,7 +7,6 @@
 #include <DirectXTex.h>
 #include <winrt/base.h>
 #include <pix3.h>
-#include <DXProgrammableCapture.h>
 #include <vector>
 #include <string>
 #include <functional>
@@ -20,6 +19,7 @@ using DXGIAdapter_t = IDXGIAdapter;
 using DXGISwapChain_t = IDXGISwapChain3;
 using D3DDebug_t = ID3D12Debug5;
 using D3DInfoQueue_t = ID3D12InfoQueue;
+using D3DDredSettings_t = ID3D12DeviceRemovedExtendedDataSettings;
 using D3DDevice_t = ID3D12Device5;
 using D3DCommandQueue_t = ID3D12CommandQueue;
 using D3DCommandAllocator_t = ID3D12CommandAllocator;
@@ -32,13 +32,14 @@ using D3DPipelineState_t = ID3D12PipelineState;
 using D3DRootSignature_t = ID3D12RootSignature;
 using D3DStateObject_t = ID3D12StateObject;
 using D3DStateObjectProperties_t = ID3D12StateObjectProperties;
+using D3DCommandSignature_t = ID3D12CommandSignature;
 using PhysicalAlloc_t = std::vector<uint32_t>;
 
 struct IDxcBlob;
 struct FResource;
 struct FConfig;
 
-enum class BindlessResourceType
+enum class ResourceType
 {
 	Buffer,
 	Texture2D,
@@ -52,7 +53,13 @@ enum class BindlessResourceType
 	Count
 };
 
-enum class BindlessDescriptorType
+enum class ResourceAllocationType
+{
+	Committed,
+	Pooled
+};
+
+enum class DescriptorType
 {
 	Buffer,
 	Texture2D,
@@ -64,9 +71,10 @@ enum class BindlessDescriptorType
 	AccelerationStructure
 };
 
-enum class BindlessDescriptorRange : uint32_t
+enum class DescriptorRange : uint32_t
 {
-	BufferBegin,
+	// 0-99 is reserved for special descriptors. See gpu-shared-types.h
+	BufferBegin = 100,
 	BufferEnd = BufferBegin + 4999,
 	Texture2DBegin,
 	Texture2DEnd = Texture2DBegin + 4999,
@@ -83,6 +91,34 @@ enum class BindlessDescriptorRange : uint32_t
 	AccelerationStructureBegin,
 	AccelerationStructureEnd = AccelerationStructureBegin + 4999,
 	TotalCount
+};
+
+enum SurfaceType : uint32_t
+{
+	RenderTarget	= (1 << 0),
+	DepthStencil	= (1 << 1),
+	SwapChain		= (1 << 2),
+	UAV				= (1 << 3)
+};
+
+enum class BufferType
+{
+	Raw,
+	AccelerationStructure
+};
+
+enum class TextureType
+{
+	Tex2D,
+	Tex2DArray,
+	TexCube
+};
+
+enum class ResourceAccessMode
+{
+	GpuReadOnly,
+	GpuReadWrite,
+	GpuWriteOnly,	// Used for acceleration structure scratch buffers
 };
 
 struct FFenceMarker
@@ -121,6 +157,15 @@ struct FCommandList
 	FFenceMarker GetFence() const;
 };
 
+// Saves the capture to a file named PIXGpuCapture.wpix in the binaries directory
+struct FScopedGpuCapture
+{
+	FScopedGpuCapture() = delete;
+	FScopedGpuCapture(FCommandList* cl);
+	~FScopedGpuCapture();
+	FFenceMarker m_waitFence;
+};
+
 struct FShaderDesc
 {
 	std::wstring m_relativepath;
@@ -134,6 +179,13 @@ struct FRootsigDesc
 	std::wstring m_relativepath;
 	std::wstring m_entrypoint;
 	std::wstring m_profile;
+};
+
+struct FRootSignature
+{
+	D3DRootSignature_t* m_rootsig;
+	FFenceMarker m_fenceMarker;
+	~FRootSignature();
 };
 
 struct FResource
@@ -168,13 +220,13 @@ struct FResource
 	size_t GetSizeBytes() const;
 };
 
-struct FBindlessShaderResource
+struct FTexture
 {
 	FResource* m_resource;
 	uint32_t m_srvIndex = ~0u;
 
-	~FBindlessShaderResource();
-	FBindlessShaderResource& operator==(FBindlessShaderResource&& other)
+	~FTexture();
+	FTexture& operator==(FTexture&& other)
 	{
 		// BindlessShaderResources are moved during async level load. 
 		// A custom move assingment is used here because we want to avoid 
@@ -186,33 +238,48 @@ struct FBindlessShaderResource
 	}
 };
 
-struct FBindlessUav
+struct FShaderSurface
 {
+	uint32_t m_type;
 	FResource* m_resource;
-	std::vector<uint32_t> m_uavIndices;					// one for each mip level
-	std::vector<uint32_t> m_nonShaderVisibleUavIndices; // one for each mip level
+	std::vector<uint32_t> m_renderTextureIndices;		// RTV or DSV indices. One for each mip level
+	std::vector<uint32_t> m_uavIndices;					// One for each mip level
+	std::vector<uint32_t> m_nonShaderVisibleUavIndices;	// One for each mip level
 	uint32_t m_srvIndex;
-
-	~FBindlessUav();
+	~FShaderSurface();
 };
 
-struct FTransientBuffer
+struct FShaderBuffer
+{
+	ResourceAccessMode m_accessMode;
+	ResourceAllocationType m_allocType;
+	FResource* m_resource;
+	uint32_t m_uavIndex;
+	uint32_t m_nonShaderVisibleUavIndex;
+	uint32_t m_srvIndex;
+	~FShaderBuffer();
+	FShaderBuffer& operator=(FShaderBuffer&& other)
+	{
+		// FShaderBuffer(s) are moved during async level load. 
+		// A custom move assingment is used here because we want to avoid 
+		// calling the desctructor which can release the resource.
+		m_accessMode = other.m_accessMode;
+		m_allocType = other.m_allocType;
+		m_resource = other.m_resource;
+		m_srvIndex = other.m_srvIndex;
+		m_uavIndex = other.m_uavIndex;
+		m_nonShaderVisibleUavIndex = other.m_nonShaderVisibleUavIndex;
+		other.m_resource = nullptr;
+		other.m_srvIndex = ~0u;
+		other.m_uavIndex = ~0u;
+	}
+};
+
+struct FUploadBuffer
 {
 	FResource* m_resource;
 	FFenceMarker m_fenceMarker;
-
-	~FTransientBuffer();
-};
-
-struct FRenderTexture
-{
-	FResource* m_resource;
-	std::vector<uint32_t> m_renderTextureIndices; // one for each mip level
-	uint32_t m_srvIndex;
-	bool m_isDepthStencil;
-	bool m_isSwapChainBuffer;
-
-	~FRenderTexture();
+	~FUploadBuffer();
 };
 
 class FResourceUploadContext
@@ -227,14 +294,14 @@ public:
 		const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 		std::function<void(FCommandList*)> transition);
 
-	FFenceMarker SubmitUploads(FCommandList* owningCL);
+	FFenceMarker SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent = nullptr);
 
 private:
 	FResource* m_uploadBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
-	size_t m_sizeInBytes;
 	size_t m_currentOffset;
+	size_t m_sizeInBytes;
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };
 
@@ -245,10 +312,22 @@ public:
 	explicit FResourceReadbackContext(const FResource* resource);
 	~FResourceReadbackContext();
 
-	FFenceMarker StageSubresources(FResource* sourceResource, const FFenceMarker sourceReadyMarker);
-	D3D12_SUBRESOURCE_DATA GetData(int subresourceIndex = 0);
+	FFenceMarker StageSubresources(const FFenceMarker sourceReadyMarker);
+	D3D12_SUBRESOURCE_DATA GetTextureData(int subresourceIndex = 0);
+
+	template<class T> 
+	T* GetBufferData()
+	{
+		if (!m_mappedPtr)
+		{
+			m_readbackBuffer->m_d3dResource->Map(0, nullptr, (void**)&m_mappedPtr);
+		}
+
+		return reinterpret_cast<T*>(m_mappedPtr);
+	}
 
 private:
+	const FResource* m_source;
 	FResource* m_readbackBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
@@ -297,13 +376,13 @@ namespace RenderBackend12
 	void FlushGPU();
 
 	// Command Lists
-	FCommandList* FetchCommandlist(const D3D12_COMMAND_LIST_TYPE type);
+	FCommandList* FetchCommandlist(const std::wstring& name, const D3D12_COMMAND_LIST_TYPE type);
 	FFenceMarker ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures
-	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(const FRootsigDesc& rootsig);
-	winrt::com_ptr<D3DRootSignature_t> FetchRootSignature(IDxcBlob* blob);
+	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& rootsig);
+	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, IDxcBlob* blob);
 
 	// Pipeline States
 	D3DPipelineState_t* FetchGraphicsPipelineState(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& desc);
@@ -311,7 +390,8 @@ namespace RenderBackend12
 	D3DStateObject_t* FetchRaytracePipelineState(const D3D12_STATE_OBJECT_DESC& desc);
 
 	// Swap chain and back buffers
-	FRenderTexture* GetBackBuffer();
+	FShaderSurface* GetBackBuffer();
+	void WaitForSwapChain();
 	void PresentDisplay();
 
 	// Shaders
@@ -325,38 +405,29 @@ namespace RenderBackend12
 	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex, bool bShaderVisible = true);
 	D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, uint32_t descriptorIndex);
 
+	// Command Signatures
+	D3DCommandSignature_t* CacheCommandSignature(const D3D12_COMMAND_SIGNATURE_DESC desc, D3DRootSignature_t* rootsig);
+
 	// Feature Support
 	uint32_t GetLaneCount();
 
 	// Resource Management
-	std::unique_ptr<FTransientBuffer> CreateTransientBuffer(
+	std::unique_ptr<FShaderSurface> CreateSurface(
 		const std::wstring& name,
-		const size_t size,
-		const FCommandList* dependentCL,
-		std::function<void(uint8_t*)> uploadFunc = nullptr);
-
-	std::unique_ptr<FRenderTexture> CreateRenderTexture(
-		const std::wstring& name,
+		const uint32_t surfaceType,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
-		const size_t mipLevels,
-		const size_t depth,
-		const size_t sampleCount,
-		const bool bCreateSRV = true);
+		const size_t mipLevels = 1,
+		const size_t depth = 1,
+		const size_t arraySize = 1,
+		const size_t sampleCount = 1,
+		const bool bCreateSRV = true,
+		const bool bCreateNonShaderVisibleDescriptors = false);
 
-	std::unique_ptr<FRenderTexture> CreateDepthStencilTexture(
-		const std::wstring& name,
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t mipLevels,
-		const size_t sampleCount,
-		const bool bCreateSRV = true);
-
-	std::unique_ptr<FBindlessShaderResource> CreateBindlessTexture(
+	std::unique_ptr<FTexture> CreateTexture(
 		const std::wstring& name, 
-		const BindlessResourceType type,
+		const TextureType type,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -366,38 +437,30 @@ namespace RenderBackend12
 		const DirectX::Image* images = nullptr,
 		FResourceUploadContext* uploadContext = nullptr);
 
-	std::unique_ptr<FBindlessShaderResource> CreateBindlessBuffer(
-		const std::wstring& name,
-		const BindlessResourceType type,
-		const size_t size,
-		D3D12_RESOURCE_STATES resourceState,
-		const uint8_t* pData = nullptr,
-		FResourceUploadContext* uploadContext = nullptr);
-
-	std::unique_ptr<FBindlessUav> CreateBindlessUavTexture(
-		const std::wstring& name,
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t mipLevels,
-		const size_t arraySize,
-		const bool bCreateSRV = true,
-		const bool bRequiresClear = false);
-
-	std::unique_ptr<FBindlessUav> CreateBindlessUavBuffer(
-		const std::wstring& name,
-		const size_t size,
-		const bool bCreateSRV = true);
-
-	uint32_t CreateBindlessSampler(
+	uint32_t CreateSampler(
 		const D3D12_FILTER filter,
 		const D3D12_TEXTURE_ADDRESS_MODE addressU,
-		const D3D12_TEXTURE_ADDRESS_MODE addressV, 
+		const D3D12_TEXTURE_ADDRESS_MODE addressV,
 		const D3D12_TEXTURE_ADDRESS_MODE addressW);
 
-	size_t GetResourceSize(const DirectX::ScratchImage& image);
+	std::unique_ptr<FShaderBuffer> CreateBuffer(
+		const std::wstring& name,
+		const BufferType type,
+		const ResourceAccessMode accessMode,
+		const ResourceAllocationType allocType,
+		const size_t size,
+		const bool bCreateNonShaderVisibleDescriptor = false,
+		const uint8_t* pData = nullptr,
+		FResourceUploadContext* uploadContext = nullptr,
+		const int fixedUavIndex = -1,								// Use provided UAV index instead of fetching one from bindless descriptor pool
+		const int fixedSrvIndex = -1								// Use provided SRV index instead of fetching one from bindless descriptor pool
+		);
 
-	// Programmatic Captures
-	void BeginCapture();
-	void EndCapture();
+	std::unique_ptr<FUploadBuffer> CreateUploadBuffer(
+		const std::wstring& name,
+		const size_t size,
+		const FCommandList* dependentCL,
+		std::function<void(uint8_t*)> uploadFunc = nullptr);
+
+	size_t GetResourceSize(const DirectX::ScratchImage& image);
 }

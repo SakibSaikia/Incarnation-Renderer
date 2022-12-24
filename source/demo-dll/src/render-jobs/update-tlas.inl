@@ -7,17 +7,15 @@ namespace RenderJob
 		return concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_tlas_update", PIX_COLOR_DEFAULT);
-
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(D3D12_COMMAND_LIST_TYPE_DIRECT);
-			cmdList->SetName(L"tlas_update_job");
+			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tlas_update_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "update_tlas", PIX_COLOR_DEFAULT);
 
 			std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
-			instanceDescs.reserve(scene->m_sceneMeshes.m_entityList.size());
+			instanceDescs.reserve(scene->m_sceneMeshes.GetCount());
 			int instanceIndex = 0;
 
-			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.m_entityList.size(); ++meshIndex)
+			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.GetCount(); ++meshIndex)
 			{
 				const FMesh& mesh = scene->m_sceneMeshes.m_entityList[meshIndex];
 				const std::string& meshName = scene->m_sceneMeshes.m_entityNames[meshIndex];
@@ -44,7 +42,7 @@ namespace RenderJob
 			}
 
 			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-			auto instanceDescBuffer = RenderBackend12::CreateTransientBuffer(
+			auto instanceDescBuffer = RenderBackend12::CreateUploadBuffer(
 				L"instance_descs_buffer",
 				instanceDescBufferSize,
 				cmdList,
@@ -64,10 +62,12 @@ namespace RenderJob
 			RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
 			// TLAS scratch buffer
-			auto tlasScratch = RenderBackend12::CreateBindlessUavBuffer(
+			auto tlasScratch = RenderBackend12::CreateBuffer(
 				L"tlas_scratch",
-				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes),
-				false);
+				BufferType::AccelerationStructure,
+				ResourceAccessMode::GpuWriteOnly,
+				ResourceAllocationType::Pooled,
+				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes));
 
 			// Build TLAS
 			scene->m_tlas->m_resource->UavBarrier(cmdList);
