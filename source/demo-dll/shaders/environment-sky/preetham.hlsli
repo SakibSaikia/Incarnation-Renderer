@@ -42,6 +42,12 @@ float3 Perez(float theta, float gamma, FPerezDistribution perezConstants)
 	#define E perezConstants.E.xyz
 
 	return (1.0 + A * exp(B / cos(theta))) * (1.0 + C * exp(D * gamma) + E * cos(gamma) * cos(gamma));
+
+	#undef A
+	#undef B
+	#undef C
+	#undef D
+	#undef E
 }
 
 float3 CalculateZenithLuminanceAndChromaticity(float t, float thetaS)

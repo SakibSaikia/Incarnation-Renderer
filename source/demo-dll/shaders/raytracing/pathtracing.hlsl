@@ -2,6 +2,7 @@
 #include "lighting/common.hlsli"
 #include "material/common.hlsli"
 #include "common/mesh-material.hlsli"
+#include "environment-sky/preetham.hlsli"
 
 #define MAX_RECURSION_DEPTH 4
 
@@ -73,6 +74,9 @@ struct GlobalCbLayout
     int globalLightPropertiesBufferIndex;
     int sceneLightIndicesBufferIndex;
     int sceneLightsTransformsBufferIndex;
+    FPerezDistribution perezConstants;
+    float turbidity;
+    float3 sunDir;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -108,7 +112,7 @@ void rgsMain()
     payload.sampleSetIndex = 0;
 
     // MultiplierForGeometryContributionToHitGroupIndex is explicitly set to 0 because we are using GeometryIndex() to directly index primitive data instead of using hit group records.
-    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
+    TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, ENV_SKY_MODE, ray, payload);
     destUav[DispatchRaysIndex().xy] = payload.color;
 }
 
@@ -210,7 +214,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         ray.Direction = R;
         ray.TMin = k_rayOffset;
         ray.TMax = 10000.0;
-        TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, ray, payload);
+        TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, ENV_SKY_MODE, ray, payload);
         return;
     }
 #endif
@@ -254,7 +258,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
         payload.attenuation *= outAttenuation;
         if (any(payload.attenuation) > 0.001)
         {
-            TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, 0, secondaryRay, payload);
+            TraceRay(g_sceneBvh, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 0, ENV_SKY_MODE, secondaryRay, payload);
         }
     }
 }
@@ -294,10 +298,20 @@ void ahsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 }
 
 [shader("miss")]
-void msMain(inout RayPayload payload)
+void msEnvmap(inout RayPayload payload)
 {
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
     payload.color.rgb += payload.attenuation * envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb;
+}
+
+[shader("miss")]
+void msDynamicSky(inout RayPayload payload)
+{
+    payload.color.rgb += payload.attenuation * 1000 * CalculateSkyRadianceRGB(
+        g_globalConstants.sunDir, 
+        WorldRayDirection(), 
+        g_globalConstants.turbidity, 
+        g_globalConstants.perezConstants);
 }
 
 [shader("anyhit")]

@@ -27,7 +27,8 @@ namespace RenderJob
 			std::wstringstream s;
 			s << L"PATH_TRACING=1" <<
 				L" VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
-				L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0");
+				L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0") <<
+				L" ENV_SKY_MODE=" << (int)passDesc.renderConfig.EnvSkyMode;
 
 			// Compile the lib
 			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", s.str() , L"lib_6_6"});
@@ -37,7 +38,8 @@ namespace RenderJob
 				{L"rgsMain", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"ahsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"chsMain",nullptr, D3D12_EXPORT_FLAG_NONE },
-				{L"msMain", nullptr, D3D12_EXPORT_FLAG_NONE },
+				{L"msEnvmap", nullptr, D3D12_EXPORT_FLAG_NONE },
+				{L"msDynamicSky", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"ahsShadow",nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"msShadow", nullptr, D3D12_EXPORT_FLAG_NONE },
 				{L"k_globalRootsig", nullptr, D3D12_EXPORT_FLAG_NONE},
@@ -86,12 +88,13 @@ namespace RenderJob
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FUploadBuffer> missShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"miss_sbt",
-				2 * missShaderRecordSize,
+				3 * missShaderRecordSize,
 				cmdList,
 				[&psoInfo](uint8_t* pDest)
 				{
-					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msMain"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msShadow"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msDynamicSky"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					memcpy(pDest + 2 * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msShadow"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 				});
 
 			// Hit shader table
@@ -118,6 +121,14 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> globalRootsig = RenderBackend12::FetchRootSignature(L"pathtrace_rootsig", cmdList, rtLib);
 			d3dCmdList->SetComputeRootSignature(globalRootsig->m_rootsig);
 
+			FPerezDistribution perezConstants;
+			const float t = passDesc.renderConfig.Turbidity;
+			perezConstants.A = Vector4(0.1787 * t - 1.4630, -0.0193 * t - 0.2592, -0.0167 * t - 0.2608, 0.f);
+			perezConstants.B = Vector4(-0.3554 * t + 0.4275, -0.0665 * t + 0.0008, -0.0950 * t + 0.0092, 0.f);
+			perezConstants.C = Vector4(-0.0227 * t + 5.3251, -0.0004 * t + 0.2125, -0.0079 * t + 0.2102, 0.f);
+			perezConstants.D = Vector4(0.1206 * t - 2.5771, -0.0641 * t - 0.8989, -0.0441 * t - 1.6537, 0.f);
+			perezConstants.E = Vector4(-0.0670 * t + 0.3703, -0.0033 * t + 0.0452, -0.0109 * t + 0.0529, 0.f);
+
 			// Root signature arguments
 			struct GlobalCbLayout
 			{
@@ -140,15 +151,29 @@ namespace RenderJob
 				int globalLightPropertiesBufferIndex;
 				int sceneLightIndicesBufferIndex;
 				int sceneLightsTransformsBufferIndex;
+				FPerezDistribution perez;
+				float turbidity;
+				Vector3 sunDir;
 			};
 
 			std::unique_ptr<FUploadBuffer> globalCb = RenderBackend12::CreateUploadBuffer(
 				L"global_cb",
 				sizeof(GlobalCbLayout),
 				cmdList,
-				[passDesc](uint8_t* pDest)
+				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
+
+					// Sun direction
+					Vector4 L = Vector4(1, 0.1, 1, 0);
+					int sun = passDesc.scene->GetDirectionalLight();
+					if (sun != -1)
+					{
+						Matrix sunTransform = passDesc.scene->m_sceneLights.m_transformList[sun];
+						sunTransform.Translation(Vector3::Zero);
+						L = Vector4::Transform(Vector4(0, 0, -1, 0), sunTransform);
+					}
+					L.Normalize();
 
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
 					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
@@ -170,6 +195,9 @@ namespace RenderJob
 					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
+					cbDest->perez = perezConstants;
+					cbDest->turbidity = passDesc.renderConfig.Turbidity;
+					cbDest->sunDir = Vector3(L);
 				});
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
