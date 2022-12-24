@@ -37,7 +37,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"dynamicsky_rootsig",
 				cmdList,
-				FRootsigDesc{ L"environment-sky/preetham.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootsigDesc{ L"environment-sky/dynamic-sky.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO
@@ -57,8 +57,8 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"environment-sky/preetham.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"environment-sky/preetham.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"environment-sky/dynamic-sky.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"environment-sky/dynamic-sky.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

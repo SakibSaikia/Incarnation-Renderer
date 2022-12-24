@@ -495,9 +495,11 @@ void Demo::UpdateUI(float deltaTime)
 			{
 				if (ImGui::BeginTabItem("Environment/Sky"))
 				{
+					int currentSkyMode = s_globalConfig.EnvSkyMode;
 					ImGui::RadioButton("Environment Map", &s_globalConfig.EnvSkyMode, (int)EnvSkyMode::Environmentmap);
 					ImGui::SameLine();
 					ImGui::RadioButton("Dynamic Sky", &s_globalConfig.EnvSkyMode, (int)EnvSkyMode::DynamicSky);
+					bResetPathtracelAccumulation |= (s_globalConfig.EnvSkyMode != currentSkyMode);
 
 
 					// ----------------------------------------------------------
@@ -536,7 +538,10 @@ void Demo::UpdateUI(float deltaTime)
 					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::DynamicSky)
 						ImGui::BeginDisabled();
 
-					ImGui::SliderFloat("Turbidity", &s_globalConfig.Turbidity, 2.f, 10.f);
+					if (ImGui::SliderFloat("Turbidity", &s_globalConfig.Turbidity, 2.f, 10.f))
+					{
+						bResetPathtracelAccumulation = true;
+					}
 
 					if (s_globalConfig.EnvSkyMode != (int)EnvSkyMode::DynamicSky)
 						ImGui::EndDisabled();
