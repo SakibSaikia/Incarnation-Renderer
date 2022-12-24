@@ -390,6 +390,7 @@ void Demo::Teardown(HWND& windowHandle)
 	s_debugDraw.~FDebugDraw();
 
 	Demo::TeardownRenderer();
+	RenderBackend12::FlushGPU();
 
 	if (windowHandle)
 	{
