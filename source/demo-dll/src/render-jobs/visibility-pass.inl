@@ -6,14 +6,12 @@ namespace RenderJob
 		FShaderSurface* depthStencilTarget;
 		FShaderBuffer* indirectArgsBuffer;
 		FShaderBuffer* indirectCountsBuffer;
+		FUploadBuffer* sceneConstantBuffer;
+		FUploadBuffer* viewConstantBuffer;
 		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;
-		const FScene* scene;
-		const FView* view;
 		size_t scenePrimitiveCount;
-		Vector2 jitter;
-		FConfig renderConfig;
 	};
 
 	concurrency::task<void> VisibilityPass(RenderJob::Sync& jobSync, const VisibilityPassDesc& passDesc)
@@ -49,47 +47,8 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"visbuffer_rootsig", cmdList, FRootsigDesc{ L"geo-raster/visibility-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
-			// Frame constant buffer
-			struct FrameCbLayout
-			{
-				Matrix sceneRotation;
-				int sceneMeshAccessorsIndex;
-				int sceneMeshBufferViewsIndex;
-				int scenePrimitivesIndex;
-			};
-
-			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
-				L"frame_cb",
-				sizeof(FrameCbLayout),
-				cmdList,
-				[passDesc](uint8_t* pDest)
-				{
-					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
-					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
-					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
-					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
-					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
-				});
-
-			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
-
-			// View constant buffer
-			struct ViewCbLayout
-			{
-				Matrix viewProjTransform;
-			};
-
-			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
-				L"view_cb",
-				sizeof(ViewCbLayout),
-				cmdList,
-				[passDesc](uint8_t* pDest)
-				{
-					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
-				});
-
-			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };

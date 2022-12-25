@@ -120,6 +120,49 @@ struct FMaterial
 	bool m_doubleSided;
 };
 
+// Global scene constants
+struct FSceneConstants
+{
+	Matrix m_sceneRotation;
+	Vector3 m_sunDir;
+	uint32_t m_primitiveCount;
+	uint32_t m_sceneMeshAccessorsIndex;
+	uint32_t m_sceneMeshBufferViewsIndex;
+	uint32_t m_scenePrimitivesIndex;
+	uint32_t m_sceneMaterialBufferIndex;
+	uint32_t m_lightCount;
+	uint32_t m_packedLightIndicesBufferIndex;
+	uint32_t m_packedLightTransformsBufferIndex;
+	uint32_t m_packedGlobalLightPropertiesBufferIndex;
+	uint32_t m_sceneBvhIndex;
+	uint32_t m_envmapTextureIndex;
+	uint32_t m_skylightProbeIndex;
+	uint32_t m_envBrdfTextureIndex;
+	uint32_t m_sunIndex;
+};
+
+// Global view constants
+struct FViewConstants
+{
+	Matrix m_viewTransform;
+	Matrix m_projTransform;
+	Matrix m_viewProjTransform;
+	Matrix m_invViewProjTransform;
+	Matrix m_invViewProjTransform_ParallaxCorrected;
+	Matrix m_prevViewProjTransform;
+	Matrix m_invProjTransform;
+	Vector3 m_eyePos;
+	float m_exposure;
+	float m_aperture;
+	float m_focalLength;
+	float m_nearPlane;
+	uint32_t m_resX;
+	uint32_t m_resY;
+	uint32_t m_mouseX;
+	uint32_t m_mouseY;
+	uint32_t m_viewmode;
+};
+
 namespace Light
 {
 	enum Type : int

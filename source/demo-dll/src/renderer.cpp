@@ -769,7 +769,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
 	// Create a immutable copy of the render state for render jobs to use
 	const FRenderState renderState = Demo::GetRenderState();
-	const FConfig& c = renderState.m_config;
+	const FConfig& config = renderState.m_config;
+	const FConfig& c = config;
 
 	if (renderState.m_suspendRendering)
 		return;
@@ -805,7 +806,82 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true);
 	std::unique_ptr<FShaderBuffer> lightGridBuffer = RenderBackend12::CreateBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)); // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
-	Vector2 pixelJitter = c.EnableTAA && c.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_constants", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	std::unique_ptr<FUploadBuffer> cbSceneConstants = RenderBackend12::CreateUploadBuffer(
+		L"scene_constants_cb",
+		sizeof(FSceneConstants),
+		cmdList,
+		[scene = renderState.m_scene, totalPrimitives](uint8_t* pDest)
+		{
+			const size_t lightCount = scene->m_sceneLights.GetCount();
+
+			// Sun direction
+			Vector4 L = Vector4(1, 0.1, 1, 0);
+			int sun = scene->GetDirectionalLight();
+			if (sun != -1)
+			{
+				Matrix sunTransform = scene->m_sceneLights.m_transformList[sun];
+				sunTransform.Translation(Vector3::Zero);
+				L = Vector4::Transform(Vector4(0, 0, -1, 0), sunTransform);
+			}
+			L.Normalize();
+
+			auto cb = reinterpret_cast<FSceneConstants*>(pDest);
+			cb->m_sceneRotation = scene->m_rootTransform;
+			cb->m_sunDir = (Vector3)L;
+			cb->m_primitiveCount = totalPrimitives;
+			cb->m_sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
+			cb->m_sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
+			cb->m_scenePrimitivesIndex = scene->m_packedPrimitives->m_srvIndex;
+			cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_srvIndex;
+			cb->m_lightCount = scene->m_sceneLights.GetCount();
+			cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_srvIndex : -1;
+			cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? scene->m_packedLightTransforms->m_srvIndex : -1;
+			cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? scene->m_packedGlobalLightProperties->m_srvIndex : -1;
+			cb->m_sceneBvhIndex = scene->m_tlas->m_srvIndex;
+			cb->m_envmapTextureIndex = scene->m_environmentSky.m_envmapTextureIndex;
+			cb->m_skylightProbeIndex = scene->m_environmentSky.m_shTextureIndex;
+			cb->m_envBrdfTextureIndex = s_envBRDF->m_srvIndex;
+			cb->m_sunIndex = scene->GetDirectionalLight();
+		});
+
+	std::unique_ptr<FUploadBuffer> cbViewConstants = RenderBackend12::CreateUploadBuffer(
+		L"view_constants_cb",
+		sizeof(FViewConstants),
+		cmdList,
+		[&renderState, resX, resY, pixelJitter, config](uint8_t* pDest)
+		{
+			const FView& view = renderState.m_view;
+			Matrix jitterMatrix = Matrix::CreateTranslation(pixelJitter.x, pixelJitter.y, 0.f);
+			Matrix jitteredProjMatrix = view.m_projectionTransform * jitterMatrix;
+			Matrix jitteredViewProjMatrix = view.m_viewTransform * jitteredProjMatrix;
+
+			Matrix viewMatrix_ParallaxCorrected = view.m_viewTransform;
+			viewMatrix_ParallaxCorrected.Translation(Vector3::Zero);
+
+			auto cb = reinterpret_cast<FViewConstants*>(pDest);
+			cb->m_viewTransform = view.m_viewTransform;
+			cb->m_projTransform = jitteredProjMatrix;
+			cb->m_viewProjTransform = jitteredViewProjMatrix;
+			cb->m_invViewProjTransform = jitteredViewProjMatrix.Invert();
+			cb->m_invViewProjTransform_ParallaxCorrected = (viewMatrix_ParallaxCorrected * jitteredProjMatrix).Invert();;
+			cb->m_prevViewProjTransform = s_prevViewProjectionTransform;
+			cb->m_invProjTransform = jitteredProjMatrix.Invert();
+			cb->m_eyePos = view.m_position;
+			cb->m_exposure = config.Exposure;
+			cb->m_aperture = config.Pathtracing_CameraAperture;
+			cb->m_focalLength = config.Pathtracing_CameraFocalLength;
+			cb->m_nearPlane = config.CameraNearPlane;
+			cb->m_resX = resX;
+			cb->m_resY = resY;
+			cb->m_mouseX = renderState.m_mouseX;
+			cb->m_mouseY = renderState.m_mouseY;
+			cb->m_viewmode = config.Viewmode;
+		});
+
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
@@ -870,14 +946,12 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		visDesc.depthStencilTarget = depthBuffer.get();
 		visDesc.indirectArgsBuffer = batchArgsBuffer.get();
 		visDesc.indirectCountsBuffer = batchCountsBuffer.get();
+		visDesc.sceneConstantBuffer = cbSceneConstants.get();
+		visDesc.viewConstantBuffer = cbViewConstants.get();
 		visDesc.visBufferFormat = visBufferFormat;
 		visDesc.resX = resX;
 		visDesc.resY = resY;
-		visDesc.scene = renderState.m_scene;
-		visDesc.view = &renderState.m_view;
 		visDesc.scenePrimitiveCount = totalPrimitives;
-		visDesc.jitter = pixelJitter;
-		visDesc.renderConfig = c;
 		sceneRenderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
 
 		// GBuffer Pass + Emissive
