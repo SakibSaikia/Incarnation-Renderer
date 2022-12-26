@@ -1,30 +1,16 @@
 #include "common/mesh-material.hlsli"
 #include "material/common.hlsli"
+#include "gpu-shared-types.h"
 #include "encoding.hlsli"
 
 #define rootsig \
 	"RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED )," \
     "RootConstants(b0, num32BitConstants=22, visibility = SHADER_VISIBILITY_ALL)," \
-    "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
-    "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
+    "CBV(b1, visibility = SHADER_VISIBILITY_ALL)," \
+    "CBV(b2, visibility = SHADER_VISIBILITY_ALL)," \
 	"StaticSampler(s0, filter = FILTER_ANISOTROPIC, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
-struct FrameCbLayout
-{
-	float4x4 sceneRotation;
-	int sceneMeshAccessorsIndex;
-	int sceneMeshBufferViewsIndex;
-	int sceneMaterialBufferIndex;
-};
-
-struct ViewCbLayout
-{
-	float4x4 viewTransform;
-	float4x4 projectionTransform;
-	float3 eyePos;
-};
-
-struct PrimitiveCbLayout
+struct FPrimitiveConstants
 {
 	float4x4 localToWorld;
 	int indexAccessor;
@@ -35,9 +21,9 @@ struct PrimitiveCbLayout
 	int materialIndex;
 };
 
-ConstantBuffer<PrimitiveCbLayout> g_primitiveConstants : register(b0);
-ConstantBuffer<ViewCbLayout> g_viewConstants : register(b1);
-ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
+ConstantBuffer<FPrimitiveConstants> g_primCb : register(b0);
+ConstantBuffer<FViewConstants> g_viewCb : register(b1);
+ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 SamplerState g_anisoSampler : register(s0);
 
 struct vs_to_ps
@@ -60,26 +46,25 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 {
 	vs_to_ps o;
 
-	float4x4 localToWorld = mul(g_primitiveConstants.localToWorld, g_frameConstants.sceneRotation);
-	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
+	float4x4 localToWorld = mul(g_primCb.localToWorld, g_sceneCb.m_sceneRotation);
 
 	// index
-	uint vertIndex = MeshMaterial::GetUint(index, g_primitiveConstants.indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	uint vertIndex = MeshMaterial::GetUint(index, g_primCb.indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 
 	// position
-	float3 position = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float3 position = MeshMaterial::GetFloat3(vertIndex, g_primCb.positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
-	o.pos = mul(worldPos, viewProjTransform);
+	o.pos = mul(worldPos, g_viewCb.m_viewProjTransform);
 
 	// uv
-	o.uv = MeshMaterial::GetFloat2(vertIndex, g_primitiveConstants.uvAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	o.uv = MeshMaterial::GetFloat2(vertIndex, g_primCb.uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 
 	// normal
-	float3 normal = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.normalAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float3 normal = MeshMaterial::GetFloat3(vertIndex, g_primCb.normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	o.normal = mul(float4(normal, 0.f), localToWorld);
 
 	// tangent
-	float4 packedTangent = MeshMaterial::GetFloat4(vertIndex, g_primitiveConstants.tangentAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float4 packedTangent = MeshMaterial::GetFloat4(vertIndex, g_primCb.tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float3 tangent = packedTangent.xyz;
 	o.tangent = mul(float4(tangent, 0.f), localToWorld);
 
@@ -92,7 +77,7 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 
 gbuffer ps_main(vs_to_ps input)
 {
-	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
+	FMaterial material = MeshMaterial::GetMaterial(g_primCb.materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
 	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisoSampler);
 
 	// Tangent space transform
