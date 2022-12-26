@@ -2008,7 +2008,7 @@ void FScene::LoadLights(const tinygltf::Model& model)
 	{
 		const tinygltf::Light& light = model.lights[i];
 		m_globalLightList[i].m_color = Vector3(light.color[0], light.color[1], light.color[2]);
-		m_globalLightList[i].m_intensity = light.intensity;
+		m_globalLightList[i].m_intensity = light.intensity > 0.f ? light.intensity : 150;
 		m_globalLightList[i].m_range = light.range;
 		m_globalLightList[i].m_spotAngles = Vector2(light.spot.innerConeAngle, light.spot.outerConeAngle);
 
