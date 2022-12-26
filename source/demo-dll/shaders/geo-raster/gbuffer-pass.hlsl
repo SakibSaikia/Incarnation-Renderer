@@ -14,7 +14,7 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "CBV(b0)," \
+    "RootConstants(b0, num32BitConstants=5)," \
     "CBV(b1)," \
     "CBV(b2)," \
     "StaticSampler(s0, filter = FILTER_ANISOTROPIC, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"

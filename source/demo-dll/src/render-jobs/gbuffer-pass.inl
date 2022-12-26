@@ -65,7 +65,7 @@ namespace RenderJob
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			struct GBufferConstants
+			struct FPassConstants
 			{
 				uint32_t gbuffer0UavIndex;
 				uint32_t gbuffer1UavIndex;
@@ -74,21 +74,14 @@ namespace RenderJob
 				uint32_t colorTargetUavIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
-				L"gbuffer_cb",
-				sizeof(GBufferConstants),
-				cmdList,
-				[passDesc](uint8_t* pDest)
-				{
-					auto cb = reinterpret_cast<GBufferConstants*>(pDest);
-					cb->gbuffer0UavIndex = passDesc.gbufferTargets[0]->m_uavIndices[0];
-					cb->gbuffer1UavIndex = passDesc.gbufferTargets[1]->m_uavIndices[0];
-					cb->gbuffer2UavIndex = passDesc.gbufferTargets[2]->m_uavIndices[0];
-					cb->visBufferSrvIndex = passDesc.sourceVisBuffer->m_srvIndex;
-					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
-				});
+			FPassConstants cb = {};
+			cb.gbuffer0UavIndex = passDesc.gbufferTargets[0]->m_uavIndices[0];
+			cb.gbuffer1UavIndex = passDesc.gbufferTargets[1]->m_uavIndices[0];
+			cb.gbuffer2UavIndex = passDesc.gbufferTargets[2]->m_uavIndices[0];
+			cb.visBufferSrvIndex = passDesc.sourceVisBuffer->m_srvIndex;
+			cb.colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
 
-			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FPassConstants) / 4, &cb, 0);
 			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->SetComputeRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
