@@ -74,7 +74,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
 				L"taa_cb",
 				sizeof(TaaConstants),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<TaaConstants*>(pDest);

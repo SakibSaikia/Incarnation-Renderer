@@ -426,7 +426,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
 				L"debug_drawcall_gen_cb",
 				sizeof(Constants),
-				cmdList,
+				cmdList->GetFence(),
 				[&](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
@@ -476,7 +476,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -497,7 +497,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -621,7 +621,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -639,7 +639,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -812,11 +812,10 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_constants", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	std::unique_ptr<FUploadBuffer> cbSceneConstants = RenderBackend12::CreateUploadBuffer(
 		L"scene_constants_cb",
 		sizeof(FSceneConstants),
-		cmdList,
+		RenderBackend12::GetCurrentFrameFence(),
 		[scene = renderState.m_scene, totalPrimitives](uint8_t* pDest)
 		{
 			const size_t lightCount = scene->m_sceneLights.GetCount();
@@ -854,7 +853,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FUploadBuffer> cbViewConstants = RenderBackend12::CreateUploadBuffer(
 		L"view_constants_cb",
 		sizeof(FViewConstants),
-		cmdList,
+		RenderBackend12::GetCurrentFrameFence(),
 		[&renderState, resX, resY, pixelJitter, config](uint8_t* pDest)
 		{
 			const FView& view = renderState.m_view;
@@ -884,8 +883,6 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_mouseY = renderState.m_mouseY;
 			cb->m_viewmode = config.Viewmode;
 		});
-
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));

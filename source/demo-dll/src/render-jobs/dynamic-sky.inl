@@ -135,7 +135,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
 				L"dynamic_sky_cb",
 				sizeof(Constants),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;

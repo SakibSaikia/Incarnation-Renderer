@@ -57,7 +57,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -80,7 +80,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);

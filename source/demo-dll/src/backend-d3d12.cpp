@@ -2297,6 +2297,11 @@ void RenderBackend12::WaitForSwapChain()
 	WaitForSingleObject(swapEvent, INFINITE);
 }
 
+FFenceMarker RenderBackend12::GetCurrentFrameFence()
+{
+	return FFenceMarker{ s_frameFence.get(), s_frameFenceValues[s_currentBufferIndex] };
+}
+
 void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
@@ -2372,7 +2377,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
-	const FCommandList* dependentCL,
+	const FFenceMarker retireFence,
 	std::function<void(uint8_t*)> uploadFunc)
 {
 	SCOPED_CPU_EVENT("create_upload_buffer", PIX_COLOR_DEFAULT);
@@ -2395,7 +2400,7 @@ std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 
 	auto tempBuffer = std::make_unique<FUploadBuffer>();
 	tempBuffer->m_resource = buffer;
-	tempBuffer->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
+	tempBuffer->m_fenceMarker = retireFence;
 
 	return std::move(tempBuffer);
 }
