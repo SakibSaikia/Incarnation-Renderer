@@ -14,9 +14,7 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "RootConstants(b0, num32BitConstants=5)," \
-    "CBV(b1)," \
-    "CBV(b2)," \
+    "CBV(b0)," \
     "StaticSampler(s0, filter = FILTER_ANISOTROPIC, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
 // See: http://filmicworlds.com/blog/visibility-buffer-rendering-with-material-graphs/
@@ -79,18 +77,24 @@ struct FTriangleData
     FVertexData m_vertices[3];
 };
 
-struct FPassConstants
+cbuffer cb : register(b0)
 {
-    uint m_gbuffer0UavIndex;
-    uint m_gbuffer1UavIndex;
-    uint m_gbuffer2UavIndex;
-    uint m_visBufferSrvIndex;
-    uint m_colorTargetUavIndex;
+    uint gbuffer0UavIndex;
+    uint gbuffer1UavIndex;
+    uint gbuffer2UavIndex;
+    uint visBufferSrvIndex;
+    int sceneMeshAccessorsIndex;
+    int sceneMeshBufferViewsIndex;
+    int sceneMaterialBufferIndex;
+    int scenePrimitivesIndex;
+    uint resX;
+    uint resY;
+    uint g_colorTargetUavIndex;
+    float __pad;
+    float4x4 viewProjTransform;
+    float4x4 sceneRotation;
 };
 
-ConstantBuffer<FPassConstants> g_passCb : register(b0);
-ConstantBuffer<FViewConstants> g_viewCb : register(b1);
-ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 SamplerState g_anisoSampler : register(s0);
 
 FTriangleData GetTriangleData(int triIndex, FGpuPrimitive primitive)
@@ -99,23 +103,23 @@ FTriangleData GetTriangleData(int triIndex, FGpuPrimitive primitive)
 
     // Use triangle id to retrieve the vertex indices of the triangle
     uint baseTriIndex = triIndex * 3;
-    const uint3 vertIndices = MeshMaterial::GetUint3(baseTriIndex, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    const uint3 vertIndices = MeshMaterial::GetUint3(baseTriIndex, primitive.m_indexAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
-    o.m_vertices[0].m_position = MeshMaterial::GetFloat3(vertIndices.x, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[1].m_position = MeshMaterial::GetFloat3(vertIndices.y, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[2].m_position = MeshMaterial::GetFloat3(vertIndices.z, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[0].m_position = MeshMaterial::GetFloat3(vertIndices.x, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_position = MeshMaterial::GetFloat3(vertIndices.y, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_position = MeshMaterial::GetFloat3(vertIndices.z, primitive.m_positionAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
-    o.m_vertices[0].m_uv = MeshMaterial::GetFloat2(vertIndices.x, primitive.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[1].m_uv = MeshMaterial::GetFloat2(vertIndices.y, primitive.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[2].m_uv = MeshMaterial::GetFloat2(vertIndices.z, primitive.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[0].m_uv = MeshMaterial::GetFloat2(vertIndices.x, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_uv = MeshMaterial::GetFloat2(vertIndices.y, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_uv = MeshMaterial::GetFloat2(vertIndices.z, primitive.m_uvAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
-    o.m_vertices[0].m_normal = MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[1].m_normal = MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[2].m_normal = MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[0].m_normal = MeshMaterial::GetFloat3(vertIndices.x, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_normal = MeshMaterial::GetFloat3(vertIndices.y, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_normal = MeshMaterial::GetFloat3(vertIndices.z, primitive.m_normalAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
-    o.m_vertices[0].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.x, primitive.m_tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[1].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.y, primitive.m_tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.m_vertices[2].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.z, primitive.m_tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[0].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.x, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.y, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_tangentAndSign = MeshMaterial::GetFloat4(vertIndices.z, primitive.m_tangentAccessor, sceneMeshAccessorsIndex, sceneMeshBufferViewsIndex);
 
     return o;
 }
@@ -123,13 +127,13 @@ FTriangleData GetTriangleData(int triIndex, FGpuPrimitive primitive)
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    if (dispatchThreadId.x < g_viewCb.m_resX && dispatchThreadId.y < g_viewCb.m_resY)
+    if (dispatchThreadId.x < resX && dispatchThreadId.y < resY)
     {
-        Texture2D<uint> visBufferTex = ResourceDescriptorHeap[g_passCb.m_visBufferSrvIndex];
-        RWTexture2D<float4> gbufferBaseColor = ResourceDescriptorHeap[g_passCb.m_gbuffer0UavIndex];
-        RWTexture2D<float2> gbufferNormals = ResourceDescriptorHeap[g_passCb.m_gbuffer1UavIndex];
-        RWTexture2D<float4> gbufferMetallicRoughnessAo = ResourceDescriptorHeap[g_passCb.m_gbuffer2UavIndex];
-        RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_passCb.m_colorTargetUavIndex];
+        Texture2D<uint> visBufferTex = ResourceDescriptorHeap[visBufferSrvIndex];
+        RWTexture2D<float4> gbufferBaseColor = ResourceDescriptorHeap[gbuffer0UavIndex];
+        RWTexture2D<float2> gbufferNormals = ResourceDescriptorHeap[gbuffer1UavIndex];
+        RWTexture2D<float4> gbufferMetallicRoughnessAo = ResourceDescriptorHeap[gbuffer2UavIndex];
+        RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_colorTargetUavIndex];
 
         int visBufferValue = visBufferTex[dispatchThreadId.xy];
         if (visBufferValue != 0xFFFE0000)
@@ -139,15 +143,15 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             DecodeVisibilityBuffer(visBufferValue, objectId, triangleId);
 
             // Use object id to retrieve the primitive info
-            ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
+            ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[scenePrimitivesIndex];
             const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
 
             // Fill the vertex data for the triangle
             FTriangleData tri = GetTriangleData(triangleId, primitive);
 
             // Transform the triangle verts to ndc space
-            float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
-            float4x4 localToClip = mul(localToWorld, g_viewCb.m_viewProjTransform);
+            float4x4 localToWorld = mul(primitive.m_localToWorld, sceneRotation);
+            float4x4 localToClip = mul(localToWorld, viewProjTransform);
             float4 p[3] = {
                 mul(float4(tri.m_vertices[0].m_position, 1.f), localToClip),
                 mul(float4(tri.m_vertices[1].m_position, 1.f), localToClip),
@@ -155,7 +159,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             };
 
             // Calculate screen space barycentrics based on pixel NDC
-            float2 screenRes = float2(g_viewCb.m_resX, g_viewCb.m_resY);
+            float2 screenRes = float2(resX, resY);
             float2 pixelNdc = (dispatchThreadId.xy + 0.5.xx) / screenRes;
             pixelNdc.x = 2.f * pixelNdc.x - 1.f;
             pixelNdc.y = -2.f * pixelNdc.y + 1;
@@ -174,7 +178,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             float2 UV = BarycentricInterp(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, lambda);
 
             // Evaluate Material
-            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
+            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, sceneMaterialBufferIndex);
             FMaterialProperties matInfo = EvaluateMaterialProperties(material, UV, g_anisoSampler);
 
             N = normalize(mul(matInfo.normalmap, tangentToWorld));

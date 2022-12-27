@@ -6,11 +6,12 @@ namespace RenderJob
 		FShaderSurface* colorTarget;
 		FShaderSurface* gbufferTargets[3];
 		FShaderSurface* depthStencilTarget;
-		FUploadBuffer* sceneConstantBuffer;
-		FUploadBuffer* viewConstantBuffer;
 		uint32_t resX;
 		uint32_t resY;
 		const FScene* scene;
+		const FView* view;
+		Vector2 jitter;
+		FConfig renderConfig;
 	};
 
 	concurrency::task<void> GBufferComputePass(RenderJob::Sync& jobSync, const GBufferPassDesc& passDesc)
@@ -65,25 +66,47 @@ namespace RenderJob
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			struct FPassConstants
+			struct GBufferConstants
 			{
 				uint32_t gbuffer0UavIndex;
 				uint32_t gbuffer1UavIndex;
 				uint32_t gbuffer2UavIndex;
 				uint32_t visBufferSrvIndex;
+				int sceneMeshAccessorsIndex;
+				int sceneMeshBufferViewsIndex;
+				int sceneMaterialBufferIndex;
+				int scenePrimitivesIndex;
+				uint32_t resX;
+				uint32_t resY;
 				uint32_t colorTargetUavIndex;
+				float __pad;
+				Matrix viewProjTransform;
+				Matrix sceneRotation;
 			};
 
-			FPassConstants cb = {};
-			cb.gbuffer0UavIndex = passDesc.gbufferTargets[0]->m_uavIndices[0];
-			cb.gbuffer1UavIndex = passDesc.gbufferTargets[1]->m_uavIndices[0];
-			cb.gbuffer2UavIndex = passDesc.gbufferTargets[2]->m_uavIndices[0];
-			cb.visBufferSrvIndex = passDesc.sourceVisBuffer->m_srvIndex;
-			cb.colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
+			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+				L"gbuffer_cb",
+				sizeof(GBufferConstants),
+				cmdList,
+				[passDesc](uint8_t* pDest)
+				{
+					auto cb = reinterpret_cast<GBufferConstants*>(pDest);
+					cb->gbuffer0UavIndex = passDesc.gbufferTargets[0]->m_uavIndices[0];
+					cb->gbuffer1UavIndex = passDesc.gbufferTargets[1]->m_uavIndices[0];
+					cb->gbuffer2UavIndex = passDesc.gbufferTargets[2]->m_uavIndices[0];
+					cb->visBufferSrvIndex = passDesc.sourceVisBuffer->m_srvIndex;
+					cb->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
+					cb->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
+					cb->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
+					cb->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
+					cb->resX = passDesc.resX;
+					cb->resY = passDesc.resY;
+					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
+					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
+					cb->sceneRotation = passDesc.scene->m_rootTransform;
+				});
 
-			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FPassConstants) / 4, &cb, 0);
-			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
-			d3dCmdList->SetComputeRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Clear the color target
 			const uint32_t clearValue[] = { 0, 0, 0, 0 };
@@ -142,8 +165,53 @@ namespace RenderJob
 				FRootsigDesc{ L"geo-raster/gbuffer-geo.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
-			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
-			d3dCmdList->SetGraphicsRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			// Frame constant buffer
+			struct FrameCbLayout
+			{
+				Matrix sceneRotation;
+				int sceneMeshAccessorsIndex;
+				int sceneMeshBufferViewsIndex;
+				int sceneMaterialBufferIndex;
+			};
+
+			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+				L"frame_cb",
+				sizeof(FrameCbLayout),
+				cmdList,
+				[passDesc](uint8_t* pDest)
+				{
+					const int lightCount = passDesc.scene->m_globalLightList.size();
+
+					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
+					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
+					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
+					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
+					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+
+			// View constant buffer
+			struct ViewCbLayout
+			{
+				Matrix viewTransform;
+				Matrix projectionTransform;
+				Vector3 eyePos;
+			};
+
+			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+				L"view_cb",
+				sizeof(ViewCbLayout),
+				cmdList,
+				[passDesc](uint8_t* pDest)
+				{
+					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
+					cbDest->viewTransform = passDesc.view->m_viewTransform;
+					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+					cbDest->eyePos = passDesc.view->m_position;
+				});
+
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };

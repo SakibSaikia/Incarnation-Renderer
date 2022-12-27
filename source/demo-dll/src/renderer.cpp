@@ -966,11 +966,12 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		gbufferDesc.gbufferTargets[1] = gbuffer_normals.get();
 		gbufferDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
 		gbufferDesc.depthStencilTarget = depthBuffer.get();
-		gbufferDesc.sceneConstantBuffer = cbSceneConstants.get();
-		gbufferDesc.viewConstantBuffer = cbViewConstants.get();
 		gbufferDesc.resX = resX;
 		gbufferDesc.resY = resY;
 		gbufferDesc.scene = renderState.m_scene;
+		gbufferDesc.view = &renderState.m_view;
+		gbufferDesc.jitter = pixelJitter;
+		gbufferDesc.renderConfig = c;
 		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
 		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
 
