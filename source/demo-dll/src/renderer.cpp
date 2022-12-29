@@ -998,10 +998,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			directLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
 			directLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
 			directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-			directLightingDesc.renderConfig = c;
-			directLightingDesc.scene = renderState.m_scene;
-			directLightingDesc.view = &renderState.m_view;
-			directLightingDesc.jitter = pixelJitter;
+			directLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
+			directLightingDesc.viewConstantBuffer = cbViewConstants.get();
 			directLightingDesc.resX = resX;
 			directLightingDesc.resY = resY;
 			sceneRenderJobs.push_back(RenderJob::DirectLighting(jobSync, directLightingDesc));
