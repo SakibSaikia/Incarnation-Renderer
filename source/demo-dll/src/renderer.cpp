@@ -1019,10 +1019,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			clusteredLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
 			clusteredLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
 			clusteredLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+			clusteredLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
+			clusteredLightingDesc.viewConstantBuffer = cbViewConstants.get();
 			clusteredLightingDesc.renderConfig = c;
-			clusteredLightingDesc.scene = renderState.m_scene;
-			clusteredLightingDesc.view = &renderState.m_view;
-			clusteredLightingDesc.jitter = pixelJitter;
 			clusteredLightingDesc.resX = resX;
 			clusteredLightingDesc.resY = resY;
 			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(jobSync, clusteredLightingDesc, bRequiresClear));

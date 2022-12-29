@@ -12,41 +12,38 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "CBV(b0)"
+    "RootConstants(b0, num32BitConstants=12)," \
+    "CBV(b1)," \
+    "CBV(b2)"
 
-cbuffer cb : register(b0)
+struct FPassConstants
 {
-    uint g_lightListsBufferSrvIndex;
-    uint g_lightGridBufferSrvIndex;
-    uint g_colorTargetUavIndex;
-    uint g_depthTargetSrvIndex;
-    uint g_gbufferBaseColorSrvIndex;
-    uint g_gbufferNormalsSrvIndex;
-    uint g_gbufferMetallicRoughnessAoSrvIndex;
-    uint g_packedLightTransformsBufferIndex;
-    uint g_packedGlobalLightPropertiesBufferIndex;
-    uint g_resX;
-    uint g_resY;
-    uint g_sceneBvhIndex;
-    float3 g_eyePos;
-    uint g_clusterGridSizeZ;
-    float2 g_clusterSliceScaleAndBias;
-    uint2 g_clusterGridSizeXY;
-    float4x4 g_invViewProjTransform;
-    float4x4 g_invProjTransform;
+    uint3 m_clusterGridSize;
+    uint m_lightListsBufferSrvIndex;
+    uint m_lightGridBufferSrvIndex;
+    uint m_colorTargetUavIndex;
+    uint m_depthTargetSrvIndex;
+    uint m_gbufferBaseColorSrvIndex;
+    uint m_gbufferNormalsSrvIndex;
+    uint m_gbufferMetallicRoughnessAoSrvIndex;
+    float2 m_clusterSliceScaleAndBias;
 };
+
+ConstantBuffer<FPassConstants> g_passCb : register(b0);
+ConstantBuffer<FViewConstants> g_viewCb : register(b1);
+ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
-    if (dispatchThreadId.x < g_resX && dispatchThreadId.y < g_resY)
+    if (dispatchThreadId.x < g_viewCb.m_resX && dispatchThreadId.y < g_viewCb.m_resY)
     {
         // Read in G-Buffer 
         Texture2D gbuffer[3] = {
-            ResourceDescriptorHeap[g_gbufferBaseColorSrvIndex],
-            ResourceDescriptorHeap[g_gbufferNormalsSrvIndex],
-            ResourceDescriptorHeap[g_gbufferMetallicRoughnessAoSrvIndex]
+            ResourceDescriptorHeap[g_passCb.m_gbufferBaseColorSrvIndex],
+            ResourceDescriptorHeap[g_passCb.m_gbufferNormalsSrvIndex],
+            ResourceDescriptorHeap[g_passCb.m_gbufferMetallicRoughnessAoSrvIndex]
         };
 
         const float3 basecolor = gbuffer[0][dispatchThreadId.xy].rgb;
@@ -60,37 +57,37 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 
         // Calculate pixel world & view position
-        float2 screenPos = dispatchThreadId.xy / float2(g_resX, g_resY);
+        float2 screenPos = dispatchThreadId.xy / float2(g_viewCb.m_resX, g_viewCb.m_resY);
         screenPos = 2.f * screenPos - 1.f;
         screenPos.y = -screenPos.y;
 
-        Texture2D<float> depthTex = ResourceDescriptorHeap[g_depthTargetSrvIndex];
+        Texture2D<float> depthTex = ResourceDescriptorHeap[g_passCb.m_depthTargetSrvIndex];
         float depth = depthTex[dispatchThreadId.xy];
 
-        float4 pixelWorldPos = mul(float4(screenPos.xy, depth, 1.f), g_invViewProjTransform);
+        float4 pixelWorldPos = mul(float4(screenPos.xy, depth, 1.f), g_viewCb.m_invViewProjTransform);
         pixelWorldPos /= pixelWorldPos.w;
 
-        float4 pixelViewPos = mul(float4(screenPos.xy, depth, 1.f), g_invProjTransform);
+        float4 pixelViewPos = mul(float4(screenPos.xy, depth, 1.f), g_viewCb.m_invProjTransform);
         pixelViewPos /= pixelViewPos.w;
 
         // Retrieve the active cluster for this pixel
         float2 clusterGridRes;
-        clusterGridRes.x = g_resX / (float)g_clusterGridSizeXY.x;
-        clusterGridRes.y = g_resY / (float)g_clusterGridSizeXY.y;
-        uint3 pixelCluster = GetPixelCluster(dispatchThreadId.xy, pixelViewPos.z, clusterGridRes, g_clusterSliceScaleAndBias);
-        uint clusterId = GetClusterId(pixelCluster, float3(g_clusterGridSizeXY.x, g_clusterGridSizeXY.y, g_clusterGridSizeZ));
+        clusterGridRes.x = g_viewCb.m_resX / (float)g_passCb.m_clusterGridSize.x;
+        clusterGridRes.y = g_viewCb.m_resY / (float)g_passCb.m_clusterGridSize.y;
+        uint3 pixelCluster = GetPixelCluster(dispatchThreadId.xy, pixelViewPos.z, clusterGridRes, g_passCb.m_clusterSliceScaleAndBias);
+        uint clusterId = GetClusterId(pixelCluster, (float3)g_passCb.m_clusterGridSize);
 
 
         // Calculate view vector
-        float3 V = normalize(g_eyePos - pixelWorldPos.xyz);
+        float3 V = normalize(g_viewCb.m_eyePos - pixelWorldPos.xyz);
 
 
         // Calculate radiance
-        ByteAddressBuffer lightListsBuffer = ResourceDescriptorHeap[g_lightListsBufferSrvIndex];
-        ByteAddressBuffer lightGridBuffer = ResourceDescriptorHeap[g_lightGridBufferSrvIndex];
-        ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_packedGlobalLightPropertiesBufferIndex];
-        ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_packedLightTransformsBufferIndex];
-        RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_sceneBvhIndex];
+        ByteAddressBuffer lightListsBuffer = ResourceDescriptorHeap[g_passCb.m_lightListsBufferSrvIndex];
+        ByteAddressBuffer lightGridBuffer = ResourceDescriptorHeap[g_passCb.m_lightGridBufferSrvIndex];
+        ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedGlobalLightPropertiesBufferIndex];
+        ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedLightTransformsBufferIndex];
+        RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_sceneCb.m_sceneBvhIndex];
 
         float3 radiance = 0.f;
         FLightGridData clusterInfo = lightGridBuffer.Load<FLightGridData>(clusterId * sizeof(FLightGridData));
@@ -112,7 +109,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 
         // Output radiance
-        RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_colorTargetUavIndex];
+        RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_passCb.m_colorTargetUavIndex];
         colorTarget[dispatchThreadId.xy] += radiance;
     }
 }
