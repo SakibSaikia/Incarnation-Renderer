@@ -1084,8 +1084,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 				desc.resX = resX;
 				desc.resY = resY;
-				desc.scene = renderState.m_scene;
-				desc.view = &renderState.m_view;
+				desc.sceneConstantBuffer = cbSceneConstants.get();
+				desc.viewConstantBuffer = cbViewConstants.get();
 				desc.renderConfig = c;
 				sceneRenderJobs.push_back(RenderJob::HighlightPass(jobSync, desc));
 			}
