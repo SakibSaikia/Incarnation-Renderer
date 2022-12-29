@@ -151,6 +151,7 @@ struct FViewConstants
 	Matrix m_invViewProjTransform_ParallaxCorrected;
 	Matrix m_prevViewProjTransform;
 	Matrix m_invProjTransform;
+	Matrix m_cullViewProjTransform;
 	Vector3 m_eyePos;
 	float m_exposure;
 	float m_aperture;

@@ -872,6 +872,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_invViewProjTransform_ParallaxCorrected = (viewMatrix_ParallaxCorrected * jitteredProjMatrix).Invert();;
 			cb->m_prevViewProjTransform = s_prevViewProjectionTransform;
 			cb->m_invProjTransform = jitteredProjMatrix.Invert();
+			cb->m_cullViewProjTransform = renderState.m_cullingView.m_viewTransform * jitteredProjMatrix;
 			cb->m_eyePos = view.m_position;
 			cb->m_exposure = config.Exposure;
 			cb->m_aperture = config.Pathtracing_CameraAperture;
@@ -919,10 +920,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		RenderJob::BatchCullingDesc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
 		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
-		batchCullDesc.scene = renderState.m_scene;
-		batchCullDesc.view = &renderState.m_cullingView;
+		batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
+		batchCullDesc.viewConstantBuffer = cbViewConstants.get();
 		batchCullDesc.primitiveCount = totalPrimitives;
-		batchCullDesc.jitter = pixelJitter;
 		sceneRenderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
 
 		// Light Culling
