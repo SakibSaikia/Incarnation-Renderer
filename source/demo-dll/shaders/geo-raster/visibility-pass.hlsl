@@ -8,27 +8,14 @@
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)"
 
-struct FrameCbLayout
+struct FPassConstants
 {
-	float4x4 sceneRotation;
-	int sceneMeshAccessorsIndex;
-	int sceneMeshBufferViewsIndex;
-	int primitivesBufferIndex;
+	uint primId;
 };
 
-struct ViewCbLayout
-{
-	float4x4 viewProjTransform;
-};
-
-struct PrimitiveCbLayout
-{
-	uint id;
-};
-
-ConstantBuffer<PrimitiveCbLayout> g_primitiveConstants : register(b0);
-ConstantBuffer<ViewCbLayout> g_viewConstants : register(b1);
-ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
+ConstantBuffer<FPassConstants> g_passCb : register(b0);
+ConstantBuffer<FViewConstants> g_viewCb : register(b1);
+ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 struct vs_to_ps
 {
@@ -41,16 +28,16 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 	vs_to_ps o;
 
 	// Load the primitive from the packed primitives buffer using the primitive id
-	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_frameConstants.primitivesBufferIndex];
-	FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_primitiveConstants.id * sizeof(FGpuPrimitive));
+	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
+	FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_passCb.primId * sizeof(FGpuPrimitive));
 
-	float4x4 localToWorld = mul(primitive.m_localToWorld, g_frameConstants.sceneRotation);
+	float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
 
-	uint vertIndex = MeshMaterial::GetUint(index, primitive.m_indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
-	float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	uint vertIndex = MeshMaterial::GetUint(index, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+	float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
-	o.pos = mul(worldPos, g_viewConstants.viewProjTransform);
-	o.objectId = g_primitiveConstants.id;
+	o.pos = mul(worldPos, g_viewCb.m_viewProjTransform);
+	o.objectId = g_passCb.primId;
 
 	return o;
 }

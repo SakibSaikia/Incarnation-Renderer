@@ -62,11 +62,8 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				std::wstringstream s;
-				s << L"VIEWMODE=" << (int)passDesc.renderConfig.Viewmode;
-
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"ps_main", s.str() , L"ps_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"ps_main", PrintString(L"VIEWMODE=%d", passDesc.renderConfig.Viewmode), L"ps_6_6"});
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

@@ -87,9 +87,7 @@ namespace
 		DXGI_ADAPTER_DESC desc;
 		bestAdapter->GetDesc(&desc);
 
-		std::wstringstream out;
-		out << L"*** Adapter : " << desc.Description << std::endl;
-		OutputDebugString(out.str().c_str());
+		Print(L"*** Adapter : %s", desc.Description);
 
 		return bestAdapter;
 	}
@@ -1287,6 +1285,8 @@ public:
 
 	void Retire(const FShaderSurface* surface)
 	{
+		// FIXME: This wait is not sufficient if the resource goes out of scope before the CL using it is submitted.
+		// Use a RetireFence similar to the FUploadBuffer API.
 		auto waitForFenceTask = concurrency::create_task([this]() mutable
 		{
 			GetGraphicsQueue()->Signal(m_fence.get(), ++m_fenceValue);
@@ -1881,9 +1881,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		backBuffer->m_type = SurfaceType::SwapChain;
 		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&backBuffer->m_resource->m_d3dResource)));
 
-		std::wstringstream s;
-		s << L"back_buffer_" << bufferIdx;
-		backBuffer->m_resource->SetName(s.str().c_str());
+		backBuffer->m_resource->SetName(PrintString(L"back_buffer_%d", bufferIdx));
 		backBuffer->m_resource->m_subresourceStates.push_back(D3D12_RESOURCE_STATE_PRESENT);
 
 		uint32_t rtvIndex;
@@ -2297,6 +2295,11 @@ void RenderBackend12::WaitForSwapChain()
 	WaitForSingleObject(swapEvent, INFINITE);
 }
 
+FFenceMarker RenderBackend12::GetCurrentFrameFence()
+{
+	return FFenceMarker{ s_frameFence.get(), s_frameFenceValues[s_currentBufferIndex] };
+}
+
 void RenderBackend12::PresentDisplay()
 {
 	SCOPED_CPU_EVENT("present_display", PIX_COLOR_DEFAULT);
@@ -2372,7 +2375,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
-	const FCommandList* dependentCL,
+	const FFenceMarker retireFence,
 	std::function<void(uint8_t*)> uploadFunc)
 {
 	SCOPED_CPU_EVENT("create_upload_buffer", PIX_COLOR_DEFAULT);
@@ -2395,7 +2398,7 @@ std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 
 	auto tempBuffer = std::make_unique<FUploadBuffer>();
 	tempBuffer->m_resource = buffer;
-	tempBuffer->m_fenceMarker = FFenceMarker{ dependentCL->m_fence.get(), dependentCL->m_fenceValue };
+	tempBuffer->m_fenceMarker = retireFence;
 
 	return std::move(tempBuffer);
 }

@@ -4,10 +4,9 @@ namespace RenderJob
 	{
 		FShaderBuffer* batchArgsBuffer;
 		FShaderBuffer* batchCountsBuffer;
-		const FScene* scene;
-		const FView* view;
+		FUploadBuffer* sceneConstantBuffer;
+		FUploadBuffer* viewConstantBuffer;
 		size_t primitiveCount;
-		Vector2 jitter;
 	};
 
 	concurrency::task<void> BatchCulling(RenderJob::Sync& jobSync, const BatchCullingDesc& passDesc)
@@ -55,31 +54,19 @@ namespace RenderJob
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Root Constants
-			struct Constants
+			struct FPassConstants
 			{
-				uint32_t batchArgsBufferUavIndex;
-				uint32_t batchCountsBufferUavIndex;
-				uint32_t scenePrimitivesIndex;
-				uint32_t primitiveCount;
-				Matrix viewProjTransform;
+				uint32_t m_argsBufferIndex;
+				uint32_t m_countsBufferIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
-				L"batch_cull_cb",
-				sizeof(Constants),
-				cmdList,
-				[passDesc](uint8_t* pDest)
-				{
-					auto cb = reinterpret_cast<Constants*>(pDest);
-					cb->batchArgsBufferUavIndex = passDesc.batchArgsBuffer->m_uavIndex;
-					cb->batchCountsBufferUavIndex = passDesc.batchCountsBuffer->m_uavIndex;
-					cb->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
-					cb->primitiveCount = (uint32_t)passDesc.primitiveCount;
-					cb->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
-				});
+			FPassConstants cb = {};
+			cb.m_argsBufferIndex = passDesc.batchArgsBuffer->m_uavIndex;
+			cb.m_countsBufferIndex = passDesc.batchCountsBuffer->m_uavIndex;
 
-			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRoot32BitConstants(0, std::max<uint32_t>(1, sizeof(FPassConstants) / 4), &cb, 0);
+			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Initialize counts buffer to 0
 			const uint32_t clearValue[] = { 0, 0, 0, 0 };

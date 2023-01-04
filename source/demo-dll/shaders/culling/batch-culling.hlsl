@@ -6,23 +6,26 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "CBV(b0)"
+    "RootConstants(b0, num32BitConstants=2)," \
+    "CBV(b1)," \
+    "CBV(b2)"
 
-cbuffer cb : register(b0)
+struct FPassConstants
 {
-    uint g_argsBufferIndex;
-    uint g_countsBufferIndex;
-    uint g_primitivesBufferIndex;
-    uint g_primitiveCount;
-    float4x4 g_viewProjTransform;
+    uint m_argsBufferIndex;
+    uint m_countsBufferIndex;
 };
+
+ConstantBuffer<FPassConstants> g_passCb : register(b0);
+ConstantBuffer<FViewConstants> g_viewCb : register(b1);
+ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 bool FrustumCull(FGpuPrimitive primitive)
 {
     // Gribb-Hartmann frustum plane extraction
     // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
-    float4x4 M = transpose(mul(primitive.m_localToWorld, g_viewProjTransform));
+    float4x4 M = transpose(mul(primitive.m_localToWorld, g_viewCb.m_cullViewProjTransform));
     float4 nPlane = M[3] - M[2];
     float4 lPlane = M[3] + M[0];
     float4 rPlane = M[3] - M[0];
@@ -53,9 +56,9 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
     GroupMemoryBarrierWithGroupSync();
 
     uint primId = dispatchThreadId.x;
-    if (primId < g_primitiveCount)
+    if (primId < g_sceneCb.m_primitiveCount)
     {
-        ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_primitivesBufferIndex];
+        ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
         const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(primId * sizeof(FGpuPrimitive));
 
         if (FrustumCull(primitive))
@@ -68,10 +71,10 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             cmd.m_drawArguments.m_startInstanceLocation = 0;
 
             uint currentIndex;
-            RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_countsBufferIndex];
+            RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
             countsBuffer.InterlockedAdd(0, 1, currentIndex);
 
-            RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_argsBufferIndex];
+            RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_argsBufferIndex];
             uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
             argsBuffer.Store(destAddress, cmd);
         }

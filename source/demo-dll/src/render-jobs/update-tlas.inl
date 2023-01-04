@@ -45,7 +45,7 @@ namespace RenderJob
 			auto instanceDescBuffer = RenderBackend12::CreateUploadBuffer(
 				L"instance_descs_buffer",
 				instanceDescBufferSize,
-				cmdList,
+				cmdList->GetFence(),
 				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 				{
 					memcpy(pDest, pData, instanceDescBufferSize);

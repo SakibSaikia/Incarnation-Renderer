@@ -56,14 +56,75 @@ struct FConfig
 	float Turbidity = 2.f;
 };
 
+template<class T>
+inline std::basic_string<T> GetFormattedString(const T* formatString, va_list params)
+{
+	std::basic_stringstream<T> output;
+	for (int i = 0; formatString[i] != '\0'; ++i)
+	{
+		if (formatString[i] == '%')
+		{
+			switch (formatString[++i])
+			{
+			case 'c':
+				output << va_arg(params, T);
+				break;
+			case 's':
+				output << va_arg(params, T*);
+				break;
+			case 'd':
+				output << va_arg(params, int);
+				break;
+			case 'u':
+				output << va_arg(params, uint32_t);
+				break;
+			case 'f':
+				output << va_arg(params, float);
+				break;
+			case 'x':
+				output << std::hex << va_arg(params, uint32_t);
+				break;
+			}
+		}
+		else
+		{
+			output << formatString[i];
+		}
+	}
+
+	return output.str();
+}
+
+template<class T>
+inline std::basic_string<T> PrintString(const T* formatString, ...)
+{
+	va_list params;
+	va_start(params, formatString);
+	return GetFormattedString(formatString, params);
+}
+
+// Logging utility that can work with both char* and wchar_t*
+template<class T>
+requires std::is_same<T, char>::value || std::is_same<T, wchar_t>::value
+inline void Print(const T* formatString, ...)
+{
+	va_list params;
+	va_start(params, formatString);
+	std::basic_string<T> output = GetFormattedString(formatString, params);
+	output += '\n';
+
+	if constexpr (std::is_same<T, wchar_t>::value)
+		OutputDebugStringW(output.c_str());
+	else 
+		OutputDebugStringA(output.c_str());
+}
+
 inline void AssertIfFailed(HRESULT hr)
 {
 #if defined _DEBUG
 	if (FAILED(hr))
 	{
-		std::stringstream message;
-		message << "ASSERTION FAILURE - " << std::system_category().message(hr) << std::endl;
-		OutputDebugStringA(message.str().c_str());
+		Print("ASSERTION FAILURE - %s", std::system_category().message(hr).c_str());
 		_CrtDbgBreak();
 	}
 #endif
@@ -76,9 +137,9 @@ inline void DebugAssert(bool success, const char* msg = nullptr)
 	{
 		if (msg)
 		{
-			OutputDebugStringA("\n*****\n");
-			OutputDebugStringA(msg);
-			OutputDebugStringA("\n*****\n");
+			Print("\n*****\n");
+			Print(msg);
+			Print("\n*****\n");
 		}
 
 		_CrtDbgBreak();

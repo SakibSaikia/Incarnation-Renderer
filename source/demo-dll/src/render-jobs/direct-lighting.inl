@@ -8,10 +8,8 @@ namespace RenderJob
 		FShaderSurface* gbufferBaseColorTex;
 		FShaderSurface* gbufferNormalsTex;
 		FShaderSurface* gbufferMetallicRoughnessAoTex;
-		FConfig renderConfig;
-		const FScene* scene;
-		const FView* view;
-		Vector2 jitter;
+		FUploadBuffer* sceneConstantBuffer;
+		FUploadBuffer* viewConstantBuffer;
 		uint32_t resX;
 		uint32_t resY;
 	};
@@ -66,49 +64,25 @@ namespace RenderJob
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Root Constants
-			struct Constants
+			struct FPassConstants
 			{
-				int directionalLightIndex;
-				uint32_t colorTargetUavIndex;
-				uint32_t depthTargetSrvIndex;
-				uint32_t gbufferBaseColorSrvIndex;
-				uint32_t gbufferNormalsSrvIndex;
-				uint32_t gbufferMetallicRoughnessAoSrvIndex;
-				uint32_t packedLightTransformsBufferIndex;
-				uint32_t packedGlobalLightPropertiesBufferIndex;
-				uint32_t sceneBvhIndex;
-				uint32_t resX;
-				uint32_t resY;
-				uint32_t __pad0;
-				Vector3 eyePos;
-				uint32_t __pad1;
-				Matrix invViewProjTransform;
+				uint32_t m_colorTargetUavIndex;
+				uint32_t m_depthTargetSrvIndex;
+				uint32_t m_gbufferBaseColorSrvIndex;
+				uint32_t m_gbufferNormalsSrvIndex;
+				uint32_t m_gbufferMetallicRoughnessAoSrvIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
-				L"direct_lighting_cb",
-				sizeof(Constants),
-				cmdList,
-				[passDesc](uint8_t* pDest)
-				{
-					auto cb = reinterpret_cast<Constants*>(pDest);
-					cb->directionalLightIndex = passDesc.directionalLightIndex;
-					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
-					cb->depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
-					cb->gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
-					cb->gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
-					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
-					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
-					cb->packedGlobalLightPropertiesBufferIndex = passDesc.scene->m_packedGlobalLightProperties->m_srvIndex;
-					cb->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-					cb->resX = passDesc.resX;
-					cb->resY = passDesc.resY;
-					cb->eyePos = passDesc.view->m_position;
-					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
-				});
+			FPassConstants cb = {};
+			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
+			cb.m_depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
+			cb.m_gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
+			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
+			cb.m_gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
 
-			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FPassConstants) / 4, &cb, 0);
+			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Dispatch
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.resX / 16), 1);

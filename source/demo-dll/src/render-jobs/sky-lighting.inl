@@ -49,15 +49,15 @@ namespace RenderJob
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
-			std::wstringstream s;
-			s << L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" <<
-				L" DIFFUSE_IBL=" << (passDesc.renderConfig.EnableDiffuseIBL ? L"1" : L"0") <<
-				L" SPECULAR_IBL=" << (passDesc.renderConfig.EnableSpecularIBL ? L"1" : L"0");
+			std::wstring shaderMacros = PrintString(
+				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 DIFFUSE_IBL=%d SPECULAR_IBL=%d",
+				passDesc.renderConfig.EnableDiffuseIBL ? 1 : 0,
+				passDesc.renderConfig.EnableSpecularIBL ? 1 : 0);
 
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 			L"lighting/sky-lighting.hlsl",
 			L"cs_main",
-			s.str(),
+			shaderMacros,
 			L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
@@ -90,7 +90,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
 				L"sky_lighting_cb",
 				sizeof(Constants),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);

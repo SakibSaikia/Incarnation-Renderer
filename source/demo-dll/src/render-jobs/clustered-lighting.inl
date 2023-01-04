@@ -9,10 +9,9 @@ namespace RenderJob
 		FShaderSurface* gbufferBaseColorTex;
 		FShaderSurface* gbufferNormalsTex;
 		FShaderSurface* gbufferMetallicRoughnessAoTex;
+		FUploadBuffer* sceneConstantBuffer;
+		FUploadBuffer* viewConstantBuffer;
 		FConfig renderConfig;
-		const FScene* scene;
-		const FView* view;
-		Vector2 jitter;
 		uint32_t resX;
 		uint32_t resY;
 	};
@@ -71,62 +70,38 @@ namespace RenderJob
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Root Constants
-			struct Constants
+			struct FPassConstants
 			{
-				uint32_t lightListsBufferSrvIndex;
-				uint32_t lightGridBufferSrvIndex;
-				uint32_t colorTargetUavIndex;
-				uint32_t depthTargetSrvIndex;
-				uint32_t gbufferBaseColorSrvIndex;
-				uint32_t gbufferNormalsSrvIndex;
-				uint32_t gbufferMetallicRoughnessAoSrvIndex;
-				uint32_t packedLightTransformsBufferIndex;
-				uint32_t packedGlobalLightPropertiesBufferIndex;
-				uint32_t resX;
-				uint32_t resY;
-				uint32_t sceneBvhIndex;
-				Vector3 eyePos;
-				uint32_t clusterGridSizeZ;
-				Vector2 clusterSliceScaleAndBias;
-				uint32_t clusterGridSizeXY[2];
-				Matrix invViewProjTransform;
-				Matrix invProjTransform;
+				uint32_t m_clusterGridSize[3];
+				uint32_t m_lightListsBufferSrvIndex;
+				uint32_t m_lightGridBufferSrvIndex;
+				uint32_t m_colorTargetUavIndex;
+				uint32_t m_depthTargetSrvIndex;
+				uint32_t m_gbufferBaseColorSrvIndex;
+				uint32_t m_gbufferNormalsSrvIndex;
+				uint32_t m_gbufferMetallicRoughnessAoSrvIndex;
+				Vector2 m_clusterSliceScaleAndBias;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
-				L"clustered_lighting_cb",
-				sizeof(Constants),
-				cmdList,
-				[passDesc](uint8_t* pDest)
-				{
-					const float scale = (float)passDesc.renderConfig.LightClusterDimZ / std::log(passDesc.renderConfig.ClusterDepthExtent / passDesc.renderConfig.CameraNearPlane);
-					Matrix jitterMatrix = Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
+			const float scale = (float)passDesc.renderConfig.LightClusterDimZ / std::log(passDesc.renderConfig.ClusterDepthExtent / passDesc.renderConfig.CameraNearPlane);
 
-					auto cb = reinterpret_cast<Constants*>(pDest);
-					cb->lightListsBufferSrvIndex = passDesc.lightListsBuffer->m_srvIndex;
-					cb->lightGridBufferSrvIndex = passDesc.lightGridBuffer->m_srvIndex;
-					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
-					cb->depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
-					cb->gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
-					cb->gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
-					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
-					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
-					cb->packedGlobalLightPropertiesBufferIndex = passDesc.scene->m_packedGlobalLightProperties->m_srvIndex;
-					cb->resX = passDesc.resX;
-					cb->resY = passDesc.resY;
-					cb->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-					cb->eyePos = passDesc.view->m_position;
-					cb->clusterGridSizeZ = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
-					cb->clusterSliceScaleAndBias.x = scale;
-					cb->clusterSliceScaleAndBias.y = -scale * std::log(passDesc.renderConfig.CameraNearPlane);
-					cb->clusterGridSizeXY[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
-					cb->clusterGridSizeXY[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
-					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * jitterMatrix).Invert();
-					cb->invProjTransform = (passDesc.view->m_projectionTransform * jitterMatrix).Invert();
-				});
+			FPassConstants cb = {};
+			cb.m_clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
+			cb.m_clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
+			cb.m_clusterGridSize[3] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
+			cb.m_lightListsBufferSrvIndex = passDesc.lightListsBuffer->m_srvIndex;
+			cb.m_lightGridBufferSrvIndex = passDesc.lightGridBuffer->m_srvIndex;
+			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
+			cb.m_depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
+			cb.m_gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
+			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
+			cb.m_gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
+			cb.m_clusterSliceScaleAndBias.x = scale;
+			cb.m_clusterSliceScaleAndBias.y = -scale * std::log(passDesc.renderConfig.CameraNearPlane);
 
-			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FPassConstants) / 4, &cb, 0);
+			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetComputeRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			if (bRequiresClear)
 			{

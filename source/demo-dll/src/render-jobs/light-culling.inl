@@ -43,18 +43,19 @@ namespace RenderJob
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			const uint32_t threadGroupSize[3] = { 4, 3, 12 };
-			std::wstringstream s;
-			s << "THREAD_GROUP_SIZE_X=" << threadGroupSize[0] <<
-				" THREAD_GROUP_SIZE_Y=" << threadGroupSize[1] <<
-				" THREAD_GROUP_SIZE_Z=" << threadGroupSize[2] <<
-				" MAX_LIGHTS_PER_CLUSTER=" << passDesc.renderConfig.MaxLightsPerCluster <<
-				" SHOW_LIGHT_BOUNDS=" << passDesc.renderConfig.ShowLightBounds ? 1 : 0;
+			std::wstring shaderMacros = PrintString(
+				L"THREAD_GROUP_SIZE_X=%u THREAD_GROUP_SIZE_Y=%u THREAD_GROUP_SIZE_Z=%u MAX_LIGHTS_PER_CLUSTER=%d SHOW_LIGHT_BOUNDS=%d",
+				threadGroupSize[0],
+				threadGroupSize[1],
+				threadGroupSize[2],
+				passDesc.renderConfig.MaxLightsPerCluster,
+				passDesc.renderConfig.ShowLightBounds ? 1 : 0);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"culling/light-culling.hlsl",
 				L"cs_main",
-				s.str(),
+				shaderMacros,
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
@@ -86,7 +87,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
 				L"light_cull_cb",
 				sizeof(Constants),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);

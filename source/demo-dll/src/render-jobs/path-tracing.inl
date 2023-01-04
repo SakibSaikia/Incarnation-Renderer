@@ -24,14 +24,14 @@ namespace RenderJob
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "path_tracing", PIX_COLOR_DEFAULT);
 
-			std::wstringstream s;
-			s << L"PATH_TRACING=1" <<
-				L" VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
-				L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0") <<
-				L" ENV_SKY_MODE=" << (int)passDesc.renderConfig.EnvSkyMode;
+			std::wstring shaderMacros = PrintString(
+				L"PATH_TRACING=1 VIEWMODE=%d DIRECT_LIGHTING=%d ENV_SKY_MODE=%d",
+				passDesc.renderConfig.Viewmode,
+				passDesc.renderConfig.EnableDirectLighting ? 1 : 0,
+				passDesc.renderConfig.EnvSkyMode);
 
 			// Compile the lib
-			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", s.str() , L"lib_6_6"});
+			IDxcBlob* rtLib = RenderBackend12::CacheShader({ L"raytracing/pathtracing.hlsl", L"", shaderMacros , L"lib_6_6"});
 
 			// Define lib exports
 			D3D12_EXPORT_DESC exports[] = {
@@ -78,7 +78,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> raygenShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"raygen_sbt",
 				1 * raygenShaderRecordSize,
-				cmdList,
+				cmdList->GetFence(),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -89,7 +89,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> missShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"miss_sbt",
 				3 * missShaderRecordSize,
-				cmdList,
+				cmdList->GetFence(),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -102,7 +102,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> hitGroupShaderTable = RenderBackend12::CreateUploadBuffer(
 				L"hit_sbt",
 				2 * hitGroupShaderRecordSize,
-				cmdList,
+				cmdList->GetFence(),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -159,7 +159,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> globalCb = RenderBackend12::CreateUploadBuffer(
 				L"global_cb",
 				sizeof(GlobalCbLayout),
-				cmdList,
+				cmdList->GetFence(),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
