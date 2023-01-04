@@ -87,9 +87,7 @@ namespace
 		DXGI_ADAPTER_DESC desc;
 		bestAdapter->GetDesc(&desc);
 
-		std::wstringstream out;
-		out << L"*** Adapter : " << desc.Description << std::endl;
-		OutputDebugString(out.str().c_str());
+		Print(L"*** Adapter : %s", desc.Description);
 
 		return bestAdapter;
 	}
@@ -1881,9 +1879,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		backBuffer->m_type = SurfaceType::SwapChain;
 		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&backBuffer->m_resource->m_d3dResource)));
 
-		std::wstringstream s;
-		s << L"back_buffer_" << bufferIdx;
-		backBuffer->m_resource->SetName(s.str().c_str());
+		backBuffer->m_resource->SetName(PrintString(L"back_buffer_%d", bufferIdx));
 		backBuffer->m_resource->m_subresourceStates.push_back(D3D12_RESOURCE_STATE_PRESENT);
 
 		uint32_t rtvIndex;
