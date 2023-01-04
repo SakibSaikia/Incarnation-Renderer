@@ -5,7 +5,8 @@
 	"RootFlags( CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED )," \
     "RootConstants(b0, num32BitConstants=32, visibility = SHADER_VISIBILITY_ALL)," \
     "CBV(b1, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
-    "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)"
+    "CBV(b2, space = 0, visibility = SHADER_VISIBILITY_ALL)," \
+	"StaticSampler(s0, filter = FILTER_ANISOTROPIC, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, borderColor = STATIC_BORDER_COLOR_OPAQUE_WHITE)"
 
 struct FrameCbLayout
 {
