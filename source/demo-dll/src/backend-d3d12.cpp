@@ -1285,6 +1285,8 @@ public:
 
 	void Retire(const FShaderSurface* surface)
 	{
+		// FIXME: This wait is not sufficient if the resource goes out of scope before the CL using it is submitted.
+		// Use a RetireFence similar to the FUploadBuffer API.
 		auto waitForFenceTask = concurrency::create_task([this]() mutable
 		{
 			GetGraphicsQueue()->Signal(m_fence.get(), ++m_fenceValue);

@@ -459,7 +459,7 @@ namespace RenderBackend12
 	std::unique_ptr<FUploadBuffer> CreateUploadBuffer(
 		const std::wstring& name,
 		const size_t size,
-		const FFenceMarker retireFence,
+		const FFenceMarker retireFence,								// Fence marker that decides whether the buffer is ready to be released. This is usually the fence for the associated command list that uses this buffer.
 		std::function<void(uint8_t*)> uploadFunc = nullptr);
 
 	size_t GetResourceSize(const DirectX::ScratchImage& image);
