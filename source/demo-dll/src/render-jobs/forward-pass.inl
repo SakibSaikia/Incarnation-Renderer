@@ -149,14 +149,15 @@ namespace RenderJob
 						D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 						D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-						std::wstringstream s;
-						s << L"VIEWMODE=" << (int)passDesc.renderConfig.Viewmode <<
-							L" DIRECT_LIGHTING=" << (passDesc.renderConfig.EnableDirectLighting ? L"1" : L"0") <<
-							L" DIFFUSE_IBL=" << (passDesc.renderConfig.EnableDiffuseIBL ? L"1" : L"0") <<
-							L" SPECULAR_IBL=" << (passDesc.renderConfig.EnableSpecularIBL ? L"1" : L"0");
+						std::wstring shaderMacros = PrintString(
+							L"VIEWMODE=%d  DIRECT_LIGHTING=%d DIFFUSE_IBL=%d SPECULAR_IBL=%d",
+							passDesc.renderConfig.Viewmode,
+							passDesc.renderConfig.EnableDirectLighting ? 1 : 0,
+							passDesc.renderConfig.EnableDiffuseIBL ? 1 : 0,
+							passDesc.renderConfig.EnableSpecularIBL ? 1 : 0);
 
 						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/forward-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
-						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/forward-pass.hlsl", L"ps_main", s.str() , L"ps_6_6" });
+						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/forward-pass.hlsl", L"ps_main", shaderMacros , L"ps_6_6" });
 
 						vs.pShaderBytecode = vsBlob->GetBufferPointer();
 						vs.BytecodeLength = vsBlob->GetBufferSize();

@@ -1075,11 +1075,8 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 	m_meshBuffers.resize(model.buffers.size());
 	for (int bufferIndex = 0; bufferIndex < model.buffers.size(); ++bufferIndex)
 	{
-		std::wstringstream s;
-		s << L"scene_mesh_buffer_" << bufferIndex;
-
 		m_meshBuffers[bufferIndex] = RenderBackend12::CreateBuffer(
-			s.str(),
+			PrintString(L"scene_mesh_buffer_%d", bufferIndex),
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
 			ResourceAllocationType::Committed,
@@ -1357,10 +1354,8 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 					ResourceAllocationType::Pooled,
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes));
 
-				std::wstringstream s;
-				s << s2ws(meshName) << L"_blas";
 				m_blasList[meshName] = RenderBackend12::CreateBuffer(
-					s.str(),
+					PrintString(L"%s_blas", s2ws(meshName)),
 					BufferType::AccelerationStructure,
 					ResourceAccessMode::GpuReadWrite,
 					ResourceAllocationType::Committed,
@@ -1977,19 +1972,13 @@ void FScene::LoadCamera(int cameraIndex, const tinygltf::Model& model, const Mat
 	
 	if (model.cameras[cameraIndex].type == "perspective")
 	{
-		std::stringstream s;
-		s << "perspective_cam_" << m_cameras.size();
-		newCamera.m_name = s.str();
-
+		newCamera.m_name = PrintString("perspective_cam_%d", m_cameras.size());
 		const tinygltf::PerspectiveCamera& cam = model.cameras[cameraIndex].perspective;
 		newCamera.m_projectionTransform = GetReverseZInfinitePerspectiveFovLH(cam.yfov, cam.aspectRatio, Demo::s_globalConfig.CameraNearPlane);
 	}
 	else
 	{
-		std::stringstream s;
-		s << "ortho_cam_" << m_cameras.size();
-		newCamera.m_name = s.str();
-
+		newCamera.m_name = PrintString("ortho_cam_%d", m_cameras.size());
 		const tinygltf::OrthographicCamera& cam = model.cameras[cameraIndex].orthographic;
 		newCamera.m_projectionTransform = Matrix::CreateOrthographic(cam.xmag, cam.ymag, cam.znear, cam.zfar);
 	}
@@ -2506,16 +2495,12 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			uint32_t threadGroupSizeX = 4 / (64 / laneCount);
 			uint32_t threadGroupSizeY = 16;
 			uint32_t threadGroupSizeZ = 4 * (64 / laneCount);
-			std::wstringstream s;
-			s << "THREAD_GROUP_SIZE_X=" << threadGroupSizeX <<
-				" THREAD_GROUP_SIZE_Y=" << threadGroupSizeY <<
-				" THREAD_GROUP_SIZE_Z=" << threadGroupSizeZ;
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
 				L"image-based-lighting/spherical-harmonics/integration.hlsl", 
 				L"cs_main", 
-				s.str() , 
+				PrintString(L"THREAD_GROUP_SIZE_X=%u THREAD_GROUP_SIZE_Y=%u THREAD_GROUP_SIZE_Z=%u", threadGroupSizeX, threadGroupSizeY, threadGroupSizeZ),
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
@@ -2573,15 +2558,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
-			std::wstringstream s;
-			s << "THREAD_GROUP_SIZE_X=" << width <<
-				" THREAD_GROUP_SIZE_Y=" << height;
-
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
 				L"image-based-lighting/spherical-harmonics/accumulation.hlsl", 
 				L"cs_main", 
-				s.str() , 
+				PrintString(L"THREAD_GROUP_SIZE_X=%u THREAD_GROUP_SIZE_Y=%u", width, height),
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};

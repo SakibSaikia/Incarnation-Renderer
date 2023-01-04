@@ -46,11 +46,10 @@ namespace RenderJob
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				std::wstringstream s;
-				s << L"VIEWMODE=" << (int)passDesc.renderConfig.Viewmode;
+				std::wstring shaderMacros = PrintString(L"VIEWMODE=%d", passDesc.renderConfig.Viewmode);
 
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"postprocess/tonemap.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/tonemap.hlsl", L"ps_main", s.str() , L"ps_6_6"});
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/tonemap.hlsl", L"ps_main", shaderMacros , L"ps_6_6"});
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

@@ -783,9 +783,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	static RenderJob::Sync jobSync;
 
 	static uint64_t frameIndex = 0;
-	std::stringstream s;
-	s << "frame_" << frameIndex;
-	SCOPED_COMMAND_QUEUE_EVENT(D3D12_COMMAND_LIST_TYPE_DIRECT, s.str().c_str(), 0);
+	SCOPED_COMMAND_QUEUE_EVENT(D3D12_COMMAND_LIST_TYPE_DIRECT, PrintString("frame_%d", frameIndex).c_str(), 0);
 
 	size_t totalPrimitives = 0;
 	for (const auto& mesh : renderState.m_scene->m_sceneMeshes.m_entityList)
