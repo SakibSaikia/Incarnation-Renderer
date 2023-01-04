@@ -583,22 +583,23 @@ void Demo::UpdateUI(float deltaTime)
 								if (ImGui::ColorEdit4("Color", (float*)&color, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha))
 								{
 									light.m_color = Vector3(color);
+									bResetPathtracelAccumulation = true;
 								}
 
 								if (light.m_type != Light::Directional)
 								{
-									ImGui::SliderFloat("Intensity (cd)", &light.m_intensity, 0.f, 10000.f);
-									ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
+									bResetPathtracelAccumulation |= ImGui::SliderFloat("Intensity (cd)", &light.m_intensity, 0.f, 10000.f);
+									bResetPathtracelAccumulation |= ImGui::SliderFloat("Range", &light.m_range, 0.f, 500.f);
 								}
 								else
 								{
-									ImGui::SliderFloat("Intensity (lux)", &light.m_intensity, 0.f, 10000.f);
+									bResetPathtracelAccumulation |= ImGui::SliderFloat("Intensity (lux)", &light.m_intensity, 0.f, 10000.f);
 								}
 
 								if (light.m_type == Light::Spot)
 								{
-									ImGui::SliderFloat("Inner Cone Angle (rad)", &light.m_spotAngles.x, 0.f, 3.14159f);
-									ImGui::SliderFloat("Outer Cone Angle (rad)", &light.m_spotAngles.y, 0.f, 3.14159f);
+									bResetPathtracelAccumulation|= ImGui::SliderFloat("Inner Cone Angle (rad)", &light.m_spotAngles.x, 0.f, 3.14159f);
+									bResetPathtracelAccumulation|= ImGui::SliderFloat("Outer Cone Angle (rad)", &light.m_spotAngles.y, 0.f, 3.14159f);
 								}
 							}
 
