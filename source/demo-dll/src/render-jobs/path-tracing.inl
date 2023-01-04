@@ -4,6 +4,7 @@ namespace RenderJob
 	{
 		FShaderSurface* targetBuffer;
 		FShaderSurface* historyBuffer;
+		FShaderBuffer* lightPropertiesBuffer;
 		uint32_t currentSampleIndex;
 		uint32_t resX;
 		uint32_t resY;
@@ -192,7 +193,7 @@ namespace RenderJob
 					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
 					cbDest->sqrtSampleCount = std::sqrt(passDesc.renderConfig.MaxSampleCount);
-					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
+					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.lightPropertiesBuffer->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
 					cbDest->perez = perezConstants;

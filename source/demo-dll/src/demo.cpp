@@ -579,8 +579,11 @@ void Demo::UpdateUI(float deltaTime)
 									break;
 								}
 
-								static float color[4] = { light.m_color.x, light.m_color.y, light.m_color.z, 1.f };
-								ImGui::ColorEdit4("Color", (float*)&color, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha);
+								float color[4] = { light.m_color.x, light.m_color.y, light.m_color.z, 1.f };
+								if (ImGui::ColorEdit4("Color", (float*)&color, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha))
+								{
+									light.m_color = Vector3(color);
+								}
 
 								if (light.m_type != Light::Directional)
 								{
@@ -2008,26 +2011,6 @@ void FScene::LoadLights(const tinygltf::Model& model)
 		else if (light.type == "spot")
 			m_globalLightList[i].m_type = Light::Spot;
 	});
-
-	if (!m_globalLightList.empty())
-	{
-		const size_t bufferSize = m_globalLightList.size() * sizeof(FLight);
-		FResourceUploadContext uploader{ bufferSize };
-
-		m_packedGlobalLightProperties = RenderBackend12::CreateBuffer(
-			L"global_light_properties",
-			BufferType::Raw,
-			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocationType::Committed,
-			bufferSize,
-			false,
-			(const uint8_t*)m_globalLightList.data(),
-			&uploader);
-
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
-		uploader.SubmitUploads(cmdList);
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-	}
 
 	FScene::s_loadProgress += FScene::s_lightsLoadTimeFrac;
 }

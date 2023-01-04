@@ -808,13 +808,34 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true);
 	std::unique_ptr<FShaderBuffer> lightGridBuffer = RenderBackend12::CreateBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)); // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
-	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+	// Light Properties
+	std::unique_ptr<FShaderBuffer> packedLightPropertiesBuffer;
+	if (!renderState.m_scene->m_globalLightList.empty())
+	{
+		const size_t bufferSize = renderState.m_scene->m_globalLightList.size() * sizeof(FLight);
+		FResourceUploadContext uploader{ bufferSize };
 
+		packedLightPropertiesBuffer = RenderBackend12::CreateBuffer(
+			L"light_properties_buffer",
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
+			bufferSize,
+			false,
+			(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
+			&uploader);
+
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	}
+
+	// Scene Constants
 	std::unique_ptr<FUploadBuffer> cbSceneConstants = RenderBackend12::CreateUploadBuffer(
 		L"scene_constants_cb",
 		sizeof(FSceneConstants),
 		RenderBackend12::GetCurrentFrameFence(),
-		[scene = renderState.m_scene, totalPrimitives](uint8_t* pDest)
+		[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get()](uint8_t* pDest)
 		{
 			const size_t lightCount = scene->m_sceneLights.GetCount();
 
@@ -840,7 +861,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_lightCount = scene->m_sceneLights.GetCount();
 			cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_srvIndex : -1;
 			cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? scene->m_packedLightTransforms->m_srvIndex : -1;
-			cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? scene->m_packedGlobalLightProperties->m_srvIndex : -1;
+			cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? lightPropsBuf->m_srvIndex : -1;
 			cb->m_sceneBvhIndex = scene->m_tlas->m_srvIndex;
 			cb->m_envmapTextureIndex = scene->m_environmentSky.m_envmapTextureIndex;
 			cb->m_skylightProbeIndex = scene->m_environmentSky.m_shTextureIndex;
@@ -848,6 +869,9 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_sunIndex = scene->GetDirectionalLight();
 		});
 
+	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+
+	// View Constants
 	std::unique_ptr<FUploadBuffer> cbViewConstants = RenderBackend12::CreateUploadBuffer(
 		L"view_constants_cb",
 		sizeof(FViewConstants),
@@ -883,6 +907,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_viewmode = config.Viewmode;
 		});
 
+
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
 	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
 
@@ -893,6 +918,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			RenderJob::PathTracingDesc pathtraceDesc = {};
 			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
 			pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
+			pathtraceDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
 			pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
 			pathtraceDesc.resX = resX;
 			pathtraceDesc.resY = resY;
@@ -931,6 +957,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
 			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
 			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
+			lightCullDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
 			lightCullDesc.renderConfig = c;
 			lightCullDesc.scene = renderState.m_scene;
 			lightCullDesc.view = &renderState.m_cullingView;

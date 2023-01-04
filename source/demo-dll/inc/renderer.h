@@ -111,7 +111,6 @@ struct FScene : public FModelLoader
 
 	// Lights
 	std::vector<FLight> m_globalLightList;
-	std::unique_ptr<FShaderBuffer> m_packedGlobalLightProperties;
 	FLightProbe m_environmentSky;
 
 	// Transform
