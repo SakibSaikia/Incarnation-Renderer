@@ -325,6 +325,7 @@ void Demo::Tick(float deltaTime)
 	{
 		SCOPED_PAUSE_RENDERING;
 		s_scene.ReloadEnvironment(s_globalConfig.EnvironmentFilename);
+		FScene::s_loadProgress = 1.f;
 	}
 
 	// Tick components
