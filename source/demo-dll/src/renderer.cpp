@@ -951,7 +951,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 		// Light Culling
 		const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
-		if (punctualLightCount > 0)
+		if (punctualLightCount > 0 && c.EnableDirectLighting)
 		{
 			RenderJob::LightCullingDesc lightCullDesc = {};
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
@@ -1014,7 +1014,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 		// Direct Lighting
 		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
-		if (directionalLightIndex != -1)
+		if (directionalLightIndex != -1 && c.EnableDirectLighting)
 		{
 			RenderJob::DirectLightingDesc directLightingDesc = {};
 			directLightingDesc.directionalLightIndex = directionalLightIndex;
@@ -1025,6 +1025,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
 			directLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
 			directLightingDesc.viewConstantBuffer = cbViewConstants.get();
+			directLightingDesc.renderConfig = c;
 			directLightingDesc.resX = resX;
 			directLightingDesc.resY = resY;
 			sceneRenderJobs.push_back(RenderJob::DirectLighting(jobSync, directLightingDesc));
@@ -1032,7 +1033,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 		// Clustered Lighting
 		const bool bRequiresClear = directionalLightIndex == -1;
-		if (punctualLightCount > 0)
+		if (punctualLightCount > 0 && c.EnableDirectLighting)
 		{
 			RenderJob::ClusteredLightingDesc clusteredLightingDesc = {};
 			clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
