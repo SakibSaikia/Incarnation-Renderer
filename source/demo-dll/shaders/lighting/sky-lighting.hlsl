@@ -88,7 +88,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             }
 
             float3 albedo = (1.f - metallic) * basecolor;
-            float3 shDiffuse = /*(1.f - F) * */albedo * Fd_Lambert() * ShIrradiance(N, shRadiance);
+            float3 shDiffuse = /*(1.f - F) **/ albedo * Fd_Lambert() * ShIrradiance(N, shRadiance) * 5.f;
             radiance += lerp(shDiffuse, ao * shDiffuse, aoBlend);
         }
 #endif
