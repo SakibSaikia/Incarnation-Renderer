@@ -1618,10 +1618,13 @@ FMaterial FScene::LoadMaterial(const tinygltf::Model& model, const int materialI
 
 int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat, const DXGI_FORMAT compressedFormat)
 {
+	SCOPED_CPU_EVENT("load_texture", PIX_COLOR_DEFAULT);
 	DebugAssert(!image.uri.empty(), "Embedded image data is not yet supported.");
 
 	if (image.image.empty())
 	{
+		SCOPED_CPU_EVENT("content_cache_hit", PIX_COLOR_DEFAULT);
+
 		// Compressed image was found in texture cache
 		const std::wstring cachedFilepath = s2ws(image.uri);
 		DebugAssert(std::filesystem::exists(cachedFilepath), "File not found in texture cache");
@@ -1629,7 +1632,10 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 		// Load from cache
 		DirectX::TexMetadata metadata;
 		DirectX::ScratchImage scratch;
-		AssertIfFailed(DirectX::LoadFromDDSFile(cachedFilepath.c_str(), DirectX::DDS_FLAGS_NONE, &metadata, scratch));
+		{
+			SCOPED_CPU_EVENT("load_dds", PIX_COLOR_DEFAULT);
+			AssertIfFailed(DirectX::LoadFromDDSFile(cachedFilepath.c_str(), DirectX::DDS_FLAGS_NONE, &metadata, scratch));
+		}
 
 		// Upload
 		std::wstring name = std::filesystem::path{ cachedFilepath }.filename().wstring();
@@ -1650,6 +1656,7 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 	}
 	else
 	{
+		SCOPED_CPU_EVENT("content_cache_miss", PIX_COLOR_DEFAULT);
 		DebugAssert(image.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE && image.component == 4, "Source Images are always 4 channel 8bpp");
 
 		// Source image
@@ -1674,15 +1681,28 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 
 		// Generate mips
 		DirectX::ScratchImage mipchain = {};
-		if (SUCCEEDED((DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain))))
+		HRESULT hr;
 		{
+			SCOPED_CPU_EVENT("generate_mips", PIX_COLOR_DEFAULT);
+			hr = DirectX::GenerateMipMaps(srcImage, DirectX::TEX_FILTER_LINEAR, numMips, mipchain);
+		}
+
+
+		if (SUCCEEDED((hr)))
+		{
+			SCOPED_CPU_EVENT("block_compression", PIX_COLOR_DEFAULT);
+
 			// Block compression
 			DirectX::ScratchImage compressedScratch;
-			AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+			{
+				SCOPED_CPU_EVENT("block_compression", PIX_COLOR_DEFAULT);
+				AssertIfFailed(DirectX::Compress(mipchain.GetImages(), numMips, mipchain.GetMetadata(), compressedFormat, DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, compressedScratch));
+			}
 
 			// Save to disk
 			if (Demo::s_globalConfig.UseContentCache)
 			{
+				SCOPED_CPU_EVENT("save_to_disk", PIX_COLOR_DEFAULT);
 				std::filesystem::path dirPath{ m_textureCachePath };
 				std::filesystem::path srcFilename{ image.uri };
 				std::filesystem::path destFilename = dirPath / srcFilename.stem();
@@ -1709,6 +1729,8 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 		}
 		else
 		{
+			SCOPED_CPU_EVENT("uncompressed", PIX_COLOR_DEFAULT);
+
 			// No mips and no compression. Don't save to cache and load directly
 			DirectX::ScratchImage scratch;
 			scratch.InitializeFromImage(srcImage);
@@ -1733,6 +1755,8 @@ int FScene::LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcForma
 
 std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Image& normalmap, const tinygltf::Image& metallicRoughnessmap)
 {
+	SCOPED_CPU_EVENT("vmf_filtering", PIX_COLOR_DEFAULT);
+
 	// Output compression format to use
 	const DXGI_FORMAT normalmapCompressionFormat = DXGI_FORMAT_BC5_SNORM;
 	const DXGI_FORMAT metalRoughnessCompressionFormat = DXGI_FORMAT_BC5_UNORM;
