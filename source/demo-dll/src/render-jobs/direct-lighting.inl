@@ -10,6 +10,7 @@ namespace RenderJob
 		FShaderSurface* gbufferMetallicRoughnessAoTex;
 		FUploadBuffer* sceneConstantBuffer;
 		FUploadBuffer* viewConstantBuffer;
+		FConfig renderConfig;
 		uint32_t resX;
 		uint32_t resY;
 	};
