@@ -451,6 +451,7 @@ void Demo::UpdateUI(float deltaTime)
 		ImGui::SameLine();
 		ImGui::Checkbox("Pathtracing", &s_globalConfig.PathTrace);
 
+		// --------------------------------------------------------------------------------------------------------------------------------------------
 		// Model
 		static int curModelIndex = std::find(s_modelList.begin(), s_modelList.end(), s_globalConfig.ModelFilename) - s_modelList.begin();
 		std::string comboLabel = ws2s(s_modelList[curModelIndex]);
@@ -475,6 +476,7 @@ void Demo::UpdateUI(float deltaTime)
 		}
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
+		// Pathtracing Options
 
 		if (!s_globalConfig.PathTrace)
 			ImGui::BeginDisabled();
@@ -631,7 +633,24 @@ void Demo::UpdateUI(float deltaTime)
 			{
 				s_view.Reset(&Demo::s_scene);
 			}
-		}		
+		}	
+
+		// --------------------------------------------------------------------------------------------------------------------------------------------
+
+		if (ImGui::CollapsingHeader("Time of Day"))
+		{
+			bool bDirty = false;
+			bDirty |= ImGui::Checkbox("Enable", &s_globalConfig.ToD_Enable);
+			bDirty |= ImGui::SliderFloat("Time (decimal hours)", &s_globalConfig.ToD_DecimalHours, 0.f, 24.f);
+			bDirty |= ImGui::SliderInt("Julian Date", &s_globalConfig.ToD_JulianDate, 1, 365);
+			bDirty |= ImGui::SliderFloat("Latitude", &s_globalConfig.ToD_Latitude, -90.f, 90.f);
+
+			if (bDirty)
+			{
+				bResetPathtracelAccumulation = true;
+				s_scene.UpdateSunDirection();
+			}
+		}
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2066,6 +2085,71 @@ int FScene::GetDirectionalLight() const
 		});
 
 	return search != m_sceneLights.m_entityList.cend() ? *search : -1;
+}
+
+// See A.6 in https://courses.cs.duke.edu/cps124/fall02/resources/p91-preetham.pdf
+void FScene::UpdateSunDirection()
+{
+	using namespace Demo;
+	using namespace DirectX;
+
+	int directionalLightIndex = GetDirectionalLight();
+
+	if (s_globalConfig.ToD_Enable)
+	{
+		// latitude
+		const float l = XMConvertToRadians(s_globalConfig.ToD_Latitude);
+
+		// Solar declination
+		const float delta = 0.4093f * std::sin(XM_2PI * (s_globalConfig.ToD_JulianDate - 81.f) / 368.f);
+
+		const float sin_l = std::sin(l);
+		const float cos_l = std::cos(l);
+		const float sin_delta = std::sin(delta);
+		const float cos_delta = std::cos(delta);
+		const float t = XM_PI * s_globalConfig.ToD_DecimalHours / 12.f;
+		const float sin_t = std::sin(t);
+		const float cos_t = std::cos(t);
+
+		// Elevation
+		float theta = 0.5f * XM_PI - std::asin(sin_l * sin_delta - cos_l * cos_delta * cos_t);
+
+		// Azimuth
+		float phi = std::atan(-cos_delta * sin_t / (cos_l * sin_delta - sin_l * cos_delta * cos_t));
+
+		const float sin_theta = std::sin(theta);
+		const float cos_theta = std::cos(theta);
+		const float sin_phi = std::sin(phi);
+		const float cos_phi = std::cos(phi);
+
+		// Sun dir based on Time of Day
+		m_sunDir.x = sin_theta * cos_phi;
+		m_sunDir.z = sin_theta * sin_phi;
+		m_sunDir.y = cos_theta;
+		m_sunDir.w = 0.f;
+		m_sunDir.Normalize();
+
+		// If a directional light is present, update its transform to match the time of day
+		if (directionalLightIndex != -1)
+		{
+			Matrix& sunTransform = m_sceneLights.m_transformList[directionalLightIndex];
+		}
+	}
+	else if (directionalLightIndex != -1)
+	{
+		// If time of day is disabled, use the directional light in the scene to 
+		// reconstruct the sun direction
+		Matrix sunTransform = m_sceneLights.m_transformList[directionalLightIndex];
+		sunTransform.Translation(Vector3::Zero);
+		m_sunDir = Vector4::Transform(Vector4(0, 0, -1, 0), sunTransform);
+		m_sunDir.Normalize();
+	}
+	else
+	{
+		// Otherwise, use a default direction for the sun (used by sky model even if a directional light is not active)
+		m_sunDir = Vector4(1, 0.1, 1, 0);
+		m_sunDir.Normalize();
+	}
 }
 
 size_t FScene::GetPunctualLightCount() const

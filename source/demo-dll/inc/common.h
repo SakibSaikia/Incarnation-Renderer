@@ -54,6 +54,10 @@ struct FConfig
 	float Pathtracing_CameraAperture = 0.01f;
 	float Pathtracing_CameraFocalLength = 7.f;
 	float Turbidity = 2.f;
+	bool ToD_Enable = true;
+	float ToD_DecimalHours = 11.f;
+	int ToD_JulianDate = 200;
+	float ToD_Latitude = 42.5;
 };
 
 template<class T>

@@ -142,14 +142,7 @@ namespace RenderJob
 					parallaxViewMatrix.Translation(Vector3::Zero);
 
 					// Sun direction
-					Vector4 L = Vector4(1,0.1,1,0);
-					int sun = passDesc.scene->GetDirectionalLight();
-					if (sun != -1)
-					{
-						Matrix sunTransform = passDesc.scene->m_sceneLights.m_transformList[sun];
-						sunTransform.Translation(Vector3::Zero);
-						L = Vector4::Transform( Vector4(0, 0, -1, 0), sunTransform);
-					}
+					Vector4 L = passDesc.scene->m_sunDir;
 					L.Normalize();
 
 					auto cb = reinterpret_cast<Constants*>(pDest);
