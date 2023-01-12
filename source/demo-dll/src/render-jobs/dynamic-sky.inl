@@ -142,14 +142,14 @@ namespace RenderJob
 					parallaxViewMatrix.Translation(Vector3::Zero);
 
 					// Sun direction
-					Vector4 L = passDesc.scene->m_sunDir;
+					Vector3 L = passDesc.scene->m_sunDir;
 					L.Normalize();
 
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
 					cb->perez = perezConstants;
 					cb->turbidity = passDesc.renderConfig.Turbidity;
-					cb->sunDir = Vector3(L);
+					cb->sunDir = L;
 					
 				});
 

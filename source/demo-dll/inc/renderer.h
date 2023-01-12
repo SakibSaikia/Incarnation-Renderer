@@ -114,7 +114,8 @@ struct FScene : public FModelLoader
 	FLightProbe m_environmentSky;
 
 	// Sun Dir
-	Vector4 m_sunDir = { 1, 0.1, 1, 0 };
+	Vector3 m_sunDir = { 1, 0.1, 1};
+	Matrix m_originalSunTransform;
 
 	// Transform
 	Matrix m_rootTransform;

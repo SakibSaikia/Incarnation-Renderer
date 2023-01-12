@@ -923,6 +923,16 @@ void FScene::ReloadModel(const std::wstring& filename)
 		m_primitiveCount += mesh.m_primitives.size();
 	}
 
+	// Cache the sun transform in the model
+	int sunIndex = GetDirectionalLight();
+	if (sunIndex != -1)
+	{
+		m_originalSunTransform = m_sceneLights.m_transformList[sunIndex];
+	}
+
+	// Update the sun transform based on Time of Day
+	UpdateSunDirection();
+
 	CreateAccelerationStructures(model);
 	CreateGpuPrimitiveBuffers();
 	CreateGpuLightBuffers();
@@ -2115,29 +2125,27 @@ void FScene::UpdateSunDirection()
 		m_sunDir.x = sin_theta * cos_phi;
 		m_sunDir.z = sin_theta * sin_phi;
 		m_sunDir.y = cos_theta;
-		m_sunDir.w = 0.f;
 		m_sunDir.Normalize();
 
 		// If a directional light is present, update its transform to match the time of day
 		if (directionalLightIndex != -1)
 		{
 			Matrix& sunTransform = m_sceneLights.m_transformList[directionalLightIndex];
-			sunTransform = Matrix::CreateWorld(Vector3::Zero, Vector3(m_sunDir), Vector3::Up);
+			sunTransform = Matrix::CreateWorld(Vector3::Zero, m_sunDir, Vector3::Up);
 		}
 	}
 	else if (directionalLightIndex != -1)
 	{
 		// If time of day is disabled, use the directional light in the scene to 
 		// reconstruct the sun direction
-		Matrix sunTransform = m_sceneLights.m_transformList[directionalLightIndex];
-		sunTransform.Translation(Vector3::Zero);
-		m_sunDir = Vector4::Transform(Vector4(0, 0, -1, 0), sunTransform);
-		m_sunDir.Normalize();
+		Matrix& sunTransform = m_sceneLights.m_transformList[directionalLightIndex];
+		sunTransform = m_originalSunTransform;
+		m_sunDir = sunTransform.Forward();
 	}
 	else
 	{
 		// Otherwise, use a default direction for the sun (used by sky model even if a directional light is not active)
-		m_sunDir = Vector4(1, 0.1, 1, 0);
+		m_sunDir = Vector3(1, 0.1, 1);
 		m_sunDir.Normalize();
 	}
 }

@@ -865,19 +865,12 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			const size_t lightCount = scene->m_sceneLights.GetCount();
 
 			// Sun direction
-			Vector4 L = Vector4(1, 0.1, 1, 0);
-			int sun = scene->GetDirectionalLight();
-			if (sun != -1)
-			{
-				Matrix sunTransform = scene->m_sceneLights.m_transformList[sun];
-				sunTransform.Translation(Vector3::Zero);
-				L = Vector4::Transform(Vector4(0, 0, -1, 0), sunTransform);
-			}
+			Vector3 L = scene->m_sunDir;
 			L.Normalize();
 
 			auto cb = reinterpret_cast<FSceneConstants*>(pDest);
 			cb->m_sceneRotation = scene->m_rootTransform;
-			cb->m_sunDir = (Vector3)L;
+			cb->m_sunDir = L;
 			cb->m_primitiveCount = totalPrimitives;
 			cb->m_sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_srvIndex;
 			cb->m_sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_srvIndex;
