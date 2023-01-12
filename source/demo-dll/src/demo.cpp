@@ -413,6 +413,9 @@ void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 
 void Demo::UpdateUI(float deltaTime)
 {
+	if (IsRenderingSuspended())
+		return;
+
 	SCOPED_CPU_EVENT("ui_update", PIX_COLOR_DEFAULT);
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui", D3D12_COMMAND_LIST_TYPE_DIRECT);
