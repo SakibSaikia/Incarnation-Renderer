@@ -5,6 +5,7 @@ namespace RenderJob
 		FShaderSurface* targetBuffer;
 		FShaderSurface* historyBuffer;
 		FShaderBuffer* lightPropertiesBuffer;
+		FShaderBuffer* lightTransformsBuffer;
 		uint32_t currentSampleIndex;
 		uint32_t resX;
 		uint32_t resY;
@@ -195,7 +196,7 @@ namespace RenderJob
 					cbDest->sqrtSampleCount = std::sqrt(passDesc.renderConfig.MaxSampleCount);
 					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.lightPropertiesBuffer->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
-					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
+					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.lightTransformsBuffer->m_srvIndex : -1;
 					cbDest->perez = perezConstants;
 					cbDest->turbidity = passDesc.renderConfig.Turbidity;
 					cbDest->sunDir = Vector3(L);

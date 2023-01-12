@@ -97,7 +97,6 @@ struct FScene : public FModelLoader
 	FSceneMeshEntities m_sceneMeshDecals;
 	FSceneLightEntities m_sceneLights;
 	std::unique_ptr<FShaderBuffer> m_packedLightIndices; // Index into global light list
-	std::unique_ptr<FShaderBuffer> m_packedLightTransforms;
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo

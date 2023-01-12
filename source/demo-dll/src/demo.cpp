@@ -1263,8 +1263,7 @@ void FScene::CreateGpuLightBuffers()
 	if (numLights > 0)
 	{
 		const size_t indexBufferSize = numLights * sizeof(int);
-		const size_t transformsBufferSize = numLights * sizeof(Matrix);
-		FResourceUploadContext uploader{ indexBufferSize + transformsBufferSize };
+		FResourceUploadContext uploader{ indexBufferSize };
 
 		m_packedLightIndices = RenderBackend12::CreateBuffer(
 			L"scene_light_indices",
@@ -1274,16 +1273,6 @@ void FScene::CreateGpuLightBuffers()
 			indexBufferSize,
 			false,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
-			&uploader);
-
-		m_packedLightTransforms = RenderBackend12::CreateBuffer(
-			L"scene_light_transforms",
-			BufferType::Raw,
-			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocationType::Committed,
-			transformsBufferSize,
-			false,
-			(const uint8_t*)m_sceneLights.m_transformList.data(),
 			&uploader);
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -2133,6 +2122,7 @@ void FScene::UpdateSunDirection()
 		if (directionalLightIndex != -1)
 		{
 			Matrix& sunTransform = m_sceneLights.m_transformList[directionalLightIndex];
+			sunTransform = Matrix::CreateWorld(Vector3::Zero, Vector3(m_sunDir), Vector3::Up);
 		}
 	}
 	else if (directionalLightIndex != -1)

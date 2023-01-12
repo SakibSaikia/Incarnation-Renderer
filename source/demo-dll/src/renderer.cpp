@@ -808,6 +808,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true);
 	std::unique_ptr<FShaderBuffer> lightGridBuffer = RenderBackend12::CreateBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)); // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
+
 	// Light Properties
 	std::unique_ptr<FShaderBuffer> packedLightPropertiesBuffer;
 	if (!renderState.m_scene->m_globalLightList.empty())
@@ -825,17 +827,40 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
 			&uploader);
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		
 		uploader.SubmitUploads(cmdList);
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
+
+	// Light Tranforms
+	std::unique_ptr<FShaderBuffer> packedLightTransformsBuffer;
+	const size_t sceneLightCount = renderState.m_scene->m_sceneLights.GetCount();
+	if (sceneLightCount > 0)
+	{
+		const size_t bufferSize = sceneLightCount * sizeof(Matrix);
+		FResourceUploadContext uploader{ bufferSize };
+
+		packedLightTransformsBuffer = RenderBackend12::CreateBuffer(
+			L"scene_light_transforms",
+			BufferType::Raw,
+			ResourceAccessMode::GpuReadOnly,
+			ResourceAllocationType::Committed,
+			bufferSize,
+			false,
+			(const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),
+			&uploader);
+
+		uploader.SubmitUploads(cmdList);
+	}
+
+	// Submit uploads
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	// Scene Constants
 	std::unique_ptr<FUploadBuffer> cbSceneConstants = RenderBackend12::CreateUploadBuffer(
 		L"scene_constants_cb",
 		sizeof(FSceneConstants),
 		RenderBackend12::GetCurrentFrameFence(),
-		[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get()](uint8_t* pDest)
+		[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
 		{
 			const size_t lightCount = scene->m_sceneLights.GetCount();
 
@@ -860,7 +885,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_srvIndex;
 			cb->m_lightCount = scene->m_sceneLights.GetCount();
 			cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_srvIndex : -1;
-			cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? scene->m_packedLightTransforms->m_srvIndex : -1;
+			cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? lightTransformsBuf->m_srvIndex : -1;
 			cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? lightPropsBuf->m_srvIndex : -1;
 			cb->m_sceneBvhIndex = scene->m_tlas->m_srvIndex;
 			cb->m_envmapTextureIndex = scene->m_environmentSky.m_envmapTextureIndex;
@@ -919,6 +944,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
 			pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
 			pathtraceDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
+			pathtraceDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
 			pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
 			pathtraceDesc.resX = resX;
 			pathtraceDesc.resY = resY;
@@ -958,6 +984,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
 			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
 			lightCullDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
+			lightCullDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
 			lightCullDesc.renderConfig = c;
 			lightCullDesc.scene = renderState.m_scene;
 			lightCullDesc.view = &renderState.m_cullingView;

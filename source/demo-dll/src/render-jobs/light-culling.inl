@@ -6,6 +6,7 @@ namespace RenderJob
 		FShaderBuffer* culledLightListsBuffer;
 		FShaderBuffer* lightGridBuffer;
 		FShaderBuffer* lightPropertiesBuffer;
+		FShaderBuffer* lightTransformsBuffer;
 		FConfig renderConfig;
 		const FScene* scene;
 		const FView* view;
@@ -96,7 +97,7 @@ namespace RenderJob
 					cb->culledLightListsBufferUavIndex = passDesc.culledLightListsBuffer->m_uavIndex;
 					cb->lightGridBufferUavIndex = passDesc.lightGridBuffer->m_uavIndex;
 					cb->packedLightIndicesBufferIndex = passDesc.scene->m_packedLightIndices->m_srvIndex;
-					cb->packedLightTransformsBufferIndex = passDesc.scene->m_packedLightTransforms->m_srvIndex;
+					cb->packedLightTransformsBufferIndex = passDesc.lightTransformsBuffer->m_srvIndex;
 					cb->packedGlobalLightPropertiesBufferIndex = passDesc.lightPropertiesBuffer->m_srvIndex;
 					cb->lightCount = (uint32_t)passDesc.scene->m_sceneLights.GetCount();
 					cb->clusterDepthExtent = passDesc.renderConfig.ClusterDepthExtent;
