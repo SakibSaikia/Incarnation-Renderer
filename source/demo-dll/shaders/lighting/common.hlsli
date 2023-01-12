@@ -15,7 +15,7 @@ float3 GetDirectRadiance(FLight light, float4x4 lightTransform, float3 worldPos,
 	{
 		float3x3 lightRotation = float3x3(lightTransform[0].xyz, lightTransform[1].xyz, lightTransform[2].xyz);
 		L = normalize(mul(float3(0, 0, -1), lightRotation));
-		radianceIn = 10000 * light.m_intensity * light.m_color;
+		radianceIn = 100 * light.m_intensity * light.m_color;
 	}
 	else if (light.m_type == Light::Point)
 	{
