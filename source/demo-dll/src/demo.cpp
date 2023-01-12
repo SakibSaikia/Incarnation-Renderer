@@ -644,7 +644,7 @@ void Demo::UpdateUI(float deltaTime)
 		{
 			bool bDirty = false;
 			bDirty |= ImGui::Checkbox("Enable", &s_globalConfig.ToD_Enable);
-			bDirty |= ImGui::SliderFloat("Time (decimal hours)", &s_globalConfig.ToD_DecimalHours, 0.f, 24.f);
+			bDirty |= ImGui::SliderFloat("Time (hours)", &s_globalConfig.ToD_DecimalHours, 0.f, 24.f);
 			bDirty |= ImGui::SliderInt("Julian Date", &s_globalConfig.ToD_JulianDate, 1, 365);
 			bDirty |= ImGui::SliderFloat("Latitude", &s_globalConfig.ToD_Latitude, -90.f, 90.f);
 
