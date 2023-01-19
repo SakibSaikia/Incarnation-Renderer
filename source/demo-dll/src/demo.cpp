@@ -652,6 +652,7 @@ void Demo::UpdateUI(float deltaTime)
 			{
 				bResetPathtracelAccumulation = true;
 				s_scene.UpdateSunDirection();
+				s_scene.UpdateDynamicSky();
 			}
 		}
 
@@ -936,6 +937,11 @@ void FScene::ReloadModel(const std::wstring& filename)
 	// Update the sun transform based on Time of Day
 	UpdateSunDirection();
 
+	if (Demo::s_globalConfig.EnvSkyMode == (int)EnvSkyMode::DynamicSky)
+	{
+		UpdateDynamicSky();
+	}
+
 	CreateAccelerationStructures(model);
 	CreateGpuPrimitiveBuffers();
 	CreateGpuLightBuffers();
@@ -948,7 +954,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
-	m_environmentSky = Demo::s_textureCache.CacheHDRI(filename);
+	m_skylight = Demo::s_textureCache.CacheHDRI(filename);
 	m_environmentFilename = filename;
 	FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
 }
@@ -2151,6 +2157,93 @@ void FScene::UpdateSunDirection()
 		m_sunDir = Vector3(1, 0.1, 1);
 		m_sunDir.Normalize();
 	}
+}
+
+void FScene::UpdateDynamicSky()
+{
+	const int numSHCoefficients = 9;
+	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
+	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, true);
+	m_dynamicSkyEnvmap = RenderBackend12::CreateSurface(L"dynamic_sky_envmap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6);
+	m_dynamicSkySH = RenderBackend12::CreateSurface(L"dynamic_sky_SH", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1);
+
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", D3D12_COMMAND_LIST_TYPE_COMPUTE);
+	FScopedGpuCapture capture(cmdList);
+	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "update_dynamic_sky", 0);
+
+	// Render dynamic sky to 2D surface using spherical/equirectangular projection
+	const int resX = 2 * cubemapRes, resY = cubemapRes;
+	std::unique_ptr<FShaderSurface> dynamicSkySurface = RenderBackend12::CreateSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips);
+	GenerateDynamicSkyTexture(cmdList, resX, resY, dynamicSkySurface.get());
+
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
+}
+
+void FScene::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, FShaderSurface* outSurface)
+{
+	SCOPED_COMMAND_LIST_EVENT(cmdList, "gen_dynamic_sky_tex", 0);
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+	// Descriptor Heaps
+	D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+	d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+	// Root Signature
+	std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+		L"gen_dynamic_sky_rootsig",
+		cmdList,
+		FRootsigDesc{ L"environment-sky/dynamic-sky-spherical-projection.hlsl", L"rootsig", L"rootsig_1_1" });
+
+	d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+	// PSO
+	IDxcBlob* csBlob = RenderBackend12::CacheShader({
+		L"environment-sky/dynamic-sky-spherical-projection.hlsl",
+		L"cs_main",
+		L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+		L"cs_6_6" });
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.pRootSignature = rootsig->m_rootsig;
+	psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+	psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+	psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+	D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+	d3dCmdList->SetPipelineState(pso);
+
+	FPerezDistribution perezConstants;
+	const float t = Demo::s_globalConfig.Turbidity;
+	perezConstants.A = Vector4(0.1787 * t - 1.4630, -0.0193 * t - 0.2592, -0.0167 * t - 0.2608, 0.f);
+	perezConstants.B = Vector4(-0.3554 * t + 0.4275, -0.0665 * t + 0.0008, -0.0950 * t + 0.0092, 0.f);
+	perezConstants.C = Vector4(-0.0227 * t + 5.3251, -0.0004 * t + 0.2125, -0.0079 * t + 0.2102, 0.f);
+	perezConstants.D = Vector4(0.1206 * t - 2.5771, -0.0641 * t - 0.8989, -0.0441 * t - 1.6537, 0.f);
+	perezConstants.E = Vector4(-0.0670 * t + 0.3703, -0.0033 * t + 0.0452, -0.0109 * t + 0.0529, 0.f);
+
+	Vector3 L = m_sunDir;
+	L.Normalize();
+
+	struct FConstants
+	{
+		FPerezDistribution m_perezConstants;
+		float m_turbidity;
+		Vector3 m_sunDir;
+		uint32_t m_texSize[2];
+		uint32_t m_uavIndex;
+	};
+
+	FConstants cb{};
+	cb.m_perezConstants = perezConstants;
+	cb.m_turbidity = t;
+	cb.m_sunDir = L;
+	cb.m_texSize[0] = resX;
+	cb.m_texSize[1] = resY;
+	cb.m_uavIndex = outSurface->m_uavIndices[0];
+	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
+
+	size_t threadGroupCountX = std::max<size_t>(std::ceil(resX / 16), 1);
+	size_t threadGroupCountY = std::max<size_t>(std::ceil(resY / 16), 1);
+	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 }
 
 size_t FScene::GetPunctualLightCount() const

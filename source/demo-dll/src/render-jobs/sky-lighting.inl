@@ -94,8 +94,8 @@ namespace RenderJob
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
-					cb->skylightProbeIndex = passDesc.scene->m_environmentSky.m_shTextureIndex;
-					cb->envmapIndex = passDesc.scene->m_environmentSky.m_envmapTextureIndex;
+					cb->skylightProbeIndex = passDesc.scene->m_skylight.m_shTextureIndex;
+					cb->envmapIndex = passDesc.scene->m_skylight.m_envmapTextureIndex;
 					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
 					cb->depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
 					cb->gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;

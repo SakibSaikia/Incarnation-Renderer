@@ -75,7 +75,7 @@ namespace RenderJob
 					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
 					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
 					cbDest->envBrdfTextureIndex = Demo::s_envBRDF->m_srvIndex;
-					cbDest->sceneProbeData = passDesc.scene->m_environmentSky;
+					cbDest->sceneProbeData = passDesc.scene->m_skylight;
 					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
 					cbDest->lightCount = lightCount;
 					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;

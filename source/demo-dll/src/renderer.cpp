@@ -881,8 +881,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? lightTransformsBuf->m_srvIndex : -1;
 			cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? lightPropsBuf->m_srvIndex : -1;
 			cb->m_sceneBvhIndex = scene->m_tlas->m_srvIndex;
-			cb->m_envmapTextureIndex = scene->m_environmentSky.m_envmapTextureIndex;
-			cb->m_skylightProbeIndex = scene->m_environmentSky.m_shTextureIndex;
+			cb->m_envmapTextureIndex = scene->m_skylight.m_envmapTextureIndex;
+			cb->m_skylightProbeIndex = scene->m_skylight.m_shTextureIndex;
 			cb->m_envBrdfTextureIndex = s_envBRDF->m_srvIndex;
 			cb->m_sunIndex = scene->GetDirectionalLight();
 		});

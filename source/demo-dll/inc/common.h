@@ -37,7 +37,7 @@ struct FConfig
 	float CameraSpeed = 5.f;
 	float CameraNearPlane = 1.f;
 	int Viewmode = 0;
-	int EnvSkyMode = 0;
+	int EnvSkyMode = 1;
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = false;
@@ -58,6 +58,7 @@ struct FConfig
 	float ToD_DecimalHours = 11.f;
 	int ToD_JulianDate = 200;
 	float ToD_Latitude = 42.5;
+	int EnvmapResolution = 256;
 };
 
 template<class T>

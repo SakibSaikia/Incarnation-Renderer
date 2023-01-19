@@ -82,6 +82,7 @@ struct FScene : public FModelLoader
 	void Clear();
 	int GetDirectionalLight() const;
 	void UpdateSunDirection();
+	void UpdateDynamicSky();
 	size_t GetPunctualLightCount() const;
 
 	// Scene files
@@ -111,7 +112,11 @@ struct FScene : public FModelLoader
 
 	// Lights
 	std::vector<FLight> m_globalLightList;
-	FLightProbe m_environmentSky;
+
+	// Sky
+	FLightProbe m_skylight;
+	std::unique_ptr<FShaderSurface> m_dynamicSkySH;
+	std::unique_ptr<FShaderSurface> m_dynamicSkyEnvmap;
 
 	// Sun Dir
 	Vector3 m_sunDir = { 1, 0.1, 1};
@@ -143,6 +148,8 @@ private:
 	int LoadTexture(const tinygltf::Image& image, const DXGI_FORMAT srcFormat = DXGI_FORMAT_UNKNOWN, const DXGI_FORMAT compressedFormat = DXGI_FORMAT_UNKNOWN);
 	std::pair<int, int> PrefilterNormalRoughnessTextures(const tinygltf::Image& normalmap, const tinygltf::Image& metallicRoughnessmap);
 	void ProcessReadbackTexture(FResourceReadbackContext* context, const std::string& filename, const int width, const int height, const size_t mipCount, const DXGI_FORMAT fmt, const int bpp);
+
+	void GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, FShaderSurface* outSurface);
 
 private:
 	std::vector<concurrency::task<void>> m_loadingJobs;
