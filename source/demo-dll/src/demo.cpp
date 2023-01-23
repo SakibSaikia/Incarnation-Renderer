@@ -2200,6 +2200,13 @@ void FScene::UpdateDynamicSky()
 	auto texCubeUav = RenderBackend12::CreateSurface(L"src_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6);
 	Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
 
+	// Prefilter the cubemap
+	const size_t filteredCubemapSize = cubemapSize >> 1;
+	const int filteredMipCount = numMips - 1;
+	auto texFilteredEnvmapUav = RenderBackend12::CreateSurface(L"filtered_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, filteredCubemapSize, filteredCubemapSize, filteredMipCount, 1, 6);
+	texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredCubemapSize, filteredMipCount);
+
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
 }
 
