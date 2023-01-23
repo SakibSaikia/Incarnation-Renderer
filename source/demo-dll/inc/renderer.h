@@ -16,6 +16,7 @@ namespace tinygltf
 
 struct FController;
 
+//--------------------------------------------------------------------
 // Corresponds to GLTF Primitive
 struct FMeshPrimitive
 {
@@ -30,12 +31,14 @@ struct FMeshPrimitive
 	DirectX::BoundingSphere m_boundingSphere;
 };
 
+//--------------------------------------------------------------------
 // Corresponds to GLTF Mesh
 struct FMesh
 {
 	std::vector<FMeshPrimitive> m_primitives;
 };
 
+//--------------------------------------------------------------------
 // SOA struct for scene entities
 template<class T>
 struct TSceneEntities
@@ -47,6 +50,7 @@ struct TSceneEntities
 	size_t GetCount() const { return m_entityList.size(); }
 };
 
+//--------------------------------------------------------------------
 struct FCamera
 {
 	std::string m_name;
@@ -54,12 +58,14 @@ struct FCamera
 	Matrix m_projectionTransform;
 };
 
+//--------------------------------------------------------------------
 struct FLightProbe
 {
 	int m_envmapTextureIndex;
 	int m_shTextureIndex;
 };
 
+//--------------------------------------------------------------------
 struct FModelLoader
 {
 	std::vector<std::unique_ptr<FShaderBuffer>> m_meshBuffers;
@@ -72,6 +78,7 @@ protected:
 	void LoadMeshAccessors(const tinygltf::Model& model);
 };
 
+//--------------------------------------------------------------------
 struct FScene : public FModelLoader
 {
 	void ReloadModel(const std::wstring& gltfFilename);
@@ -149,13 +156,12 @@ private:
 	std::pair<int, int> PrefilterNormalRoughnessTextures(const tinygltf::Image& normalmap, const tinygltf::Image& metallicRoughnessmap);
 	void ProcessReadbackTexture(FResourceReadbackContext* context, const std::string& filename, const int width, const int height, const size_t mipCount, const DXGI_FORMAT fmt, const int bpp);
 
-	void GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, FShaderSurface* outSurface);
-	void DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY);
-
 private:
 	std::vector<concurrency::task<void>> m_loadingJobs;
 };
 
+
+//--------------------------------------------------------------------
 struct FView
 {
 	void Tick(const float deltaTime, const FController* controller);
@@ -174,6 +180,7 @@ private:
 	void UpdateViewTransform();
 };
 
+//--------------------------------------------------------------------
 struct FRenderState
 {
 	FConfig m_config;
@@ -181,9 +188,11 @@ struct FRenderState
 	FScene* m_scene;
 	FView m_view;
 	FView m_cullingView;
+	uint32_t m_resX, m_resY;
 	uint32_t m_mouseX, m_mouseY;
 };
 
+//--------------------------------------------------------------------
 struct FDebugDraw : public FModelLoader
 {
 	static const size_t MaxCommands = 256;
@@ -217,13 +226,17 @@ private:
 	std::unique_ptr<FShaderBuffer> m_indirectLineCountsBuffer;
 };
 
-namespace Demo
+//--------------------------------------------------------------------
+namespace Renderer
 {
-	FRenderState GetRenderState();
-	FRenderStatsBuffer GetRenderStats();
-	FDebugDraw* GetDebugRenderer();
+	void Initialize(const uint32_t resX, const uint32_t resY);
+	void Teardown();
+	void Render(const FRenderState& renderState);
+
+	FRenderStats GetRenderStats();
 	void ResetPathtraceAccumulation();
-	void InitializeRenderer(const uint32_t resX, const uint32_t resY);
-	void LoadDebugModels();
-	void TeardownRenderer();
+	std::unique_ptr<FTexture> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height);
+	std::unique_ptr<FTexture> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth);
+	void GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, Vector3 sunDir, FShaderSurface* outSurface);
+	void DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY);
 }

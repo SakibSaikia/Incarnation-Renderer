@@ -177,14 +177,13 @@ namespace Demo
 	FController s_controller;
 	FTextureCache s_textureCache;
 	FSamplerCache s_samplerCache;
-	FDebugDraw s_debugDraw;
 	float s_aspectRatio;
 	bool s_suspendRendering = true;
 
 	std::vector<std::wstring> s_modelList;
 	std::vector<std::wstring> s_hdriList;
 
-	FRenderState GetRenderState()
+	FRenderState CreateRenderState(const uint32_t resX, const uint32_t resY)
 	{
 		FRenderState s;
 		s.m_config = s_globalConfig;
@@ -192,6 +191,8 @@ namespace Demo
 		s.m_scene = &s_scene;
 		s.m_view = s_view;
 		s.m_cullingView = s_cullingView;
+		s.m_resX = resX;
+		s.m_resY = resY;
 		s.m_mouseX = s_controller.m_mouseCurrentPosition.x;
 		s.m_mouseY = s_controller.m_mouseCurrentPosition.y;
 		return s;
@@ -210,11 +211,6 @@ namespace Demo
 	const FView* GetView()
 	{
 		return &s_view;
-	}
-
-	FDebugDraw* GetDebugRenderer()
-	{
-		return &s_debugDraw;
 	}
 
 	void UpdateUI(float deltaTime);
@@ -245,8 +241,7 @@ bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint3
 	bool ok = RenderBackend12::Initialize(windowHandle, resX, resY, s_globalConfig);
 	ok = ok && ShaderCompiler::Initialize();
 
-	InitializeRenderer(resX, resY);
-	s_debugDraw.Initialize();
+	Renderer::Initialize(resX, resY);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -345,7 +340,7 @@ void Demo::Tick(float deltaTime)
 		float newRotY = s_controller.RotateSceneY();
 		if (newRotX != 0.f || newRotY != 0.f)
 		{
-			Demo::ResetPathtraceAccumulation();
+			Renderer::ResetPathtraceAccumulation();
 		}
 
 		rotX -= newRotX;
@@ -373,7 +368,7 @@ void Demo::HeartbeatThread()
 	{
 		if (!s_suspendRendering)
 		{
-			RenderBackend12::RecompileModifiedShaders(&Demo::ResetPathtraceAccumulation);
+			RenderBackend12::RecompileModifiedShaders(&Renderer::ResetPathtraceAccumulation);
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -388,9 +383,8 @@ void Demo::Teardown(HWND& windowHandle)
 	s_scene.Clear();
 	s_textureCache.Clear();
 	s_samplerCache.Clear();
-	s_debugDraw.~FDebugDraw();
 
-	Demo::TeardownRenderer();
+	Renderer::Teardown();
 	RenderBackend12::FlushGPU();
 
 	if (windowHandle)
@@ -409,6 +403,13 @@ void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 	{
 		s_controller.MouseMove(buttonState, POINT{ x, y });
 	}
+}
+
+void Demo::Render(const uint32_t resX, const uint32_t resY)
+{
+	// Create a immutable copy of the demo state for the renderer to use
+	const FRenderState renderState = CreateRenderState(resX, resY);
+	Renderer::Render(renderState);
 }
 
 void Demo::UpdateUI(float deltaTime)
@@ -703,7 +704,7 @@ void Demo::UpdateUI(float deltaTime)
 	{
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
-		FRenderStatsBuffer stats = Demo::GetRenderStats();
+		FRenderStats stats = Renderer::GetRenderStats();
 		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float) GetScene()->m_primitiveCount);
 
 		const size_t numLights = GetScene()->m_sceneLights.GetCount();
@@ -735,7 +736,7 @@ void Demo::UpdateUI(float deltaTime)
 
 	if (bResetPathtracelAccumulation)
 	{
-		Demo::ResetPathtraceAccumulation();
+		Renderer::ResetPathtraceAccumulation();
 	}
 }
 
@@ -2081,6 +2082,8 @@ void FScene::Clear()
 	m_packedMeshAccessors.reset(nullptr);
 	m_packedMaterials.reset(nullptr);
 	m_tlas.reset(nullptr);
+	m_dynamicSkyEnvmap.reset(nullptr);
+	m_dynamicSkySH.reset(nullptr);
 }
 
 int FScene::GetDirectionalLight() const
@@ -2174,7 +2177,7 @@ void FScene::UpdateDynamicSky()
 	// Render dynamic sky to 2D surface using spherical/equirectangular projection
 	const int resX = 2 * cubemapRes, resY = cubemapRes;
 	std::unique_ptr<FShaderSurface> dynamicSkySurface = RenderBackend12::CreateSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips);
-	GenerateDynamicSkyTexture(cmdList, resX, resY, dynamicSkySurface.get());
+	Renderer::GenerateDynamicSkyTexture(cmdList, resX, resY, m_sunDir, dynamicSkySurface.get());
 
 	// Downsample to generate mips
 	{
@@ -2183,7 +2186,7 @@ void FScene::UpdateDynamicSky()
 		int srcMip = 0;
 		while (mipResY >= 1)
 		{
-			DownsampleUav(cmdList, dynamicSkySurface->m_uavIndices[srcMip], dynamicSkySurface->m_uavIndices[srcMip + 1], mipResX, mipResY);
+			Renderer::DownsampleUav(cmdList, dynamicSkySurface->m_uavIndices[srcMip], dynamicSkySurface->m_uavIndices[srcMip + 1], mipResX, mipResY);
 			dynamicSkySurface->m_resource->UavBarrier(cmdList);
 
 			mipResX = mipResX >> 1;
@@ -2195,7 +2198,7 @@ void FScene::UpdateDynamicSky()
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
 }
 
-void FScene::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, FShaderSurface* outSurface)
+void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, Vector3 sunDir, FShaderSurface* outSurface)
 {
 	SCOPED_COMMAND_LIST_EVENT(cmdList, "gen_dynamic_sky_tex", 0);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
@@ -2236,7 +2239,7 @@ void FScene::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, co
 	perezConstants.D = Vector4(0.1206 * t - 2.5771, -0.0641 * t - 0.8989, -0.0441 * t - 1.6537, 0.f);
 	perezConstants.E = Vector4(-0.0670 * t + 0.3703, -0.0033 * t + 0.0452, -0.0109 * t + 0.0529, 0.f);
 
-	Vector3 L = m_sunDir;
+	Vector3 L = sunDir;
 	L.Normalize();
 
 	struct FConstants
@@ -2262,7 +2265,7 @@ void FScene::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, co
 	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 }
 
-void FScene::DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY)
+void Renderer::DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY)
 { 
 	SCOPED_COMMAND_LIST_EVENT(cmdList, "downsample", 0);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
@@ -2452,7 +2455,7 @@ void FView::UpdateViewTransform()
 	m_viewTransform(2, 3) = 0.0f;
 	m_viewTransform(3, 3) = 1.0f;
 
-	Demo::ResetPathtraceAccumulation();
+	Renderer::ResetPathtraceAccumulation();
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------

@@ -220,7 +220,7 @@ struct FIndirectDrawWithRootConstants
 #endif
 };
 
-struct FRenderStatsBuffer
+struct FRenderStats
 {
 	int m_culledPrimitives;
 	int m_culledLights;

@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <tiny_gltf.h>
 
-namespace Demo
+namespace Renderer
 {
 	std::unique_ptr<FTexture> s_envBRDF;
 	std::unique_ptr<FShaderSurface> s_taaAccumulationBuffer;
@@ -19,7 +19,8 @@ namespace Demo
 	std::vector<Vector2> s_pixelJitterValues;
 	Matrix s_prevViewProjectionTransform;
 	uint32_t s_pathtraceCurrentSampleIndex = 1;
-	FRenderStatsBuffer s_renderStats;
+	FRenderStats s_renderStats;
+	FDebugDraw s_debugDrawing;
 }
 
 // Render Jobs
@@ -58,118 +59,20 @@ namespace
 
 		return result;
 	}
-
-	std::unique_ptr<FTexture> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
-	{
-		auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);
-
-		// Compute CL
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
-		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-
-		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
-
-			// Descriptor Heaps
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
-			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"brdf_integration_rootsig",
-				cmdList,
-				FRootsigDesc{ L"image-based-lighting/split-sum-approx/brdf-integration.hlsl", L"rootsig", L"rootsig_1_1" });
-
-			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
-
-			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({
-				L"image-based-lighting/split-sum-approx/brdf-integration.hlsl",
-				L"cs_main",
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
-				L"cs_6_6" });
-
-			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig->m_rootsig;
-			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
-			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
-			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
-			d3dCmdList->SetPipelineState(pso);
-
-			struct
-			{
-				uint32_t uavWidth;
-				uint32_t uavHeight;
-				uint32_t uavIndex;
-				uint32_t numSamples;
-			} rootConstants = { width, height, brdfUav->m_uavIndices[0], 1024 };
-
-			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-
-			// Dispatch
-			size_t threadGroupCount = std::max<size_t>(std::ceil(width / 16), 1);
-			d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
-		}
-
-		// Copy from UAV to destination texture
-		brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		auto brdfTex = RenderBackend12::CreateTexture(L"env_brdf_tex", TextureType::Tex2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
-		d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
-		brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-		return std::move(brdfTex);
-	}
-
-	std::unique_ptr<FTexture> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
-	{
-		const uint32_t numSamples = width * height * depth;
-		std::vector<uint8_t> noiseSamples(numSamples);
-		std::default_random_engine generator;
-		std::uniform_int_distribution<uint32_t> distribution(0, 255);
-		for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
-		{
-			noiseSamples[sampleIndex] = (uint8_t)distribution(generator);
-		}
-
-		std::vector<DirectX::Image> noiseImages(depth);
-		for (int arrayIndex = 0, sampleOffset = 0; arrayIndex < depth; ++arrayIndex)
-		{
-			DirectX::Image& img = noiseImages[arrayIndex];
-			img.width = width;
-			img.height = height;
-			img.format = DXGI_FORMAT_R8_UNORM;
-			img.rowPitch = 1 * img.width;
-			img.slicePitch = img.rowPitch * img.height;
-			img.pixels = (uint8_t*)noiseSamples.data() + sampleOffset;
-			sampleOffset += img.slicePitch;
-		}
-
-		FResourceUploadContext uploader{ numSamples };
-		auto noiseTexArray = RenderBackend12::CreateTexture(L"white_noise_array", TextureType::Tex2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_noise_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
-		uploader.SubmitUploads(cmdList);
-		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-		return std::move(noiseTexArray);
-	}
 }
 
-FRenderStatsBuffer Demo::GetRenderStats()
+FRenderStats Renderer::GetRenderStats()
 {
-	return Demo::s_renderStats;
+	return s_renderStats;
 }
 
-void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
+void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 {
-	s_envBRDF = GenerateEnvBrdfTexture(512, 512);
+	s_envBRDF = Renderer::GenerateEnvBrdfTexture(512, 512);
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
 	s_taaAccumulationBuffer = RenderBackend12::CreateSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
-	s_renderStatsBuffer = RenderBackend12::CreateBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStatsBuffer), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex);
+	s_renderStatsBuffer = RenderBackend12::CreateBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStats), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex);
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -178,6 +81,105 @@ void Demo::InitializeRenderer(const uint32_t resX, const uint32_t resY)
 		pixelJitter = 2.f * (pixelJitter - Vector2(0.5, 0.5)) / Vector2(resX, resY);
 		s_pixelJitterValues.push_back(pixelJitter);
 	}
+
+	s_debugDrawing.Initialize();
+}
+std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
+{
+	auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);
+
+	// Compute CL
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+	{
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
+
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		// Root Signature
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+			L"brdf_integration_rootsig",
+			cmdList,
+			FRootsigDesc{ L"image-based-lighting/split-sum-approx/brdf-integration.hlsl", L"rootsig", L"rootsig_1_1" });
+
+		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({
+			L"image-based-lighting/split-sum-approx/brdf-integration.hlsl",
+			L"cs_main",
+			L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+			L"cs_6_6" });
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig->m_rootsig;
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		struct
+		{
+			uint32_t uavWidth;
+			uint32_t uavHeight;
+			uint32_t uavIndex;
+			uint32_t numSamples;
+		} rootConstants = { width, height, brdfUav->m_uavIndices[0], 1024 };
+
+		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+
+		// Dispatch
+		size_t threadGroupCount = std::max<size_t>(std::ceil(width / 16), 1);
+		d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+	}
+
+	// Copy from UAV to destination texture
+	brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	auto brdfTex = RenderBackend12::CreateTexture(L"env_brdf_tex", TextureType::Tex2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
+	brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	return std::move(brdfTex);
+}
+
+std::unique_ptr<FTexture> Renderer::GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth)
+{
+	const uint32_t numSamples = width * height * depth;
+	std::vector<uint8_t> noiseSamples(numSamples);
+	std::default_random_engine generator;
+	std::uniform_int_distribution<uint32_t> distribution(0, 255);
+	for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+	{
+		noiseSamples[sampleIndex] = (uint8_t)distribution(generator);
+	}
+
+	std::vector<DirectX::Image> noiseImages(depth);
+	for (int arrayIndex = 0, sampleOffset = 0; arrayIndex < depth; ++arrayIndex)
+	{
+		DirectX::Image& img = noiseImages[arrayIndex];
+		img.width = width;
+		img.height = height;
+		img.format = DXGI_FORMAT_R8_UNORM;
+		img.rowPitch = 1 * img.width;
+		img.slicePitch = img.rowPitch * img.height;
+		img.pixels = (uint8_t*)noiseSamples.data() + sampleOffset;
+		sampleOffset += img.slicePitch;
+	}
+
+	FResourceUploadContext uploader{ numSamples };
+	auto noiseTexArray = RenderBackend12::CreateTexture(L"white_noise_array", TextureType::Tex2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_noise_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	uploader.SubmitUploads(cmdList);
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+	return std::move(noiseTexArray);
 }
 
 void FDebugDraw::Initialize()
@@ -757,18 +759,19 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 	flushCompleteFence = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 }
 
-void Demo::TeardownRenderer()
+void Renderer::Teardown()
 {
 	s_envBRDF.reset(nullptr);
 	s_pathtraceHistoryBuffer.reset(nullptr);
 	s_taaAccumulationBuffer.reset(nullptr);
 	s_renderStatsBuffer.reset(nullptr);
+	s_debugDrawing.~FDebugDraw();
 }
 
-void Demo::Render(const uint32_t resX, const uint32_t resY)
+void Renderer::Render(const FRenderState& renderState)
 {
-	// Create a immutable copy of the render state for render jobs to use
-	const FRenderState renderState = Demo::GetRenderState();
+	const uint32_t resX = renderState.m_resX;
+	const uint32_t resY = renderState.m_resY;
 	const FConfig& config = renderState.m_config;
 	const FConfig& c = config;
 
@@ -894,7 +897,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		L"view_constants_cb",
 		sizeof(FViewConstants),
 		RenderBackend12::GetCurrentFrameFence(),
-		[&renderState, resX, resY, pixelJitter, config](uint8_t* pDest)
+		[&renderState, pixelJitter, config](uint8_t* pDest)
 		{
 			const FView& view = renderState.m_view;
 			Matrix jitterMatrix = Matrix::CreateTranslation(pixelJitter.x, pixelJitter.y, 0.f);
@@ -918,8 +921,8 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			cb->m_aperture = config.Pathtracing_CameraAperture;
 			cb->m_focalLength = config.Pathtracing_CameraFocalLength;
 			cb->m_nearPlane = config.CameraNearPlane;
-			cb->m_resX = resX;
-			cb->m_resY = resY;
+			cb->m_resX = renderState.m_resX;
+			cb->m_resY = renderState.m_resY;
 			cb->m_mouseX = renderState.m_mouseX;
 			cb->m_mouseY = renderState.m_mouseY;
 			cb->m_viewmode = config.Viewmode;
@@ -935,7 +938,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		{
 			RenderJob::PathTracingDesc pathtraceDesc = {};
 			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
-			pathtraceDesc.historyBuffer = Demo::s_pathtraceHistoryBuffer.get();
+			pathtraceDesc.historyBuffer = s_pathtraceHistoryBuffer.get();
 			pathtraceDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
 			pathtraceDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
 			pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
@@ -951,7 +954,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 		}
 
 		RenderJob::TonemapDesc tonemapDesc = {};
-		tonemapDesc.source = Demo::s_pathtraceHistoryBuffer.get();
+		tonemapDesc.source = s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.renderConfig = c;
 		sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
@@ -1146,7 +1149,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 				// TAA Resolve
 				RenderJob::TAAResolveDesc resolveDesc = {};
 				resolveDesc.source = hdrRasterSceneColor.get();
-				resolveDesc.target = Demo::s_taaAccumulationBuffer.get();
+				resolveDesc.target = s_taaAccumulationBuffer.get();
 				resolveDesc.resX = resX;
 				resolveDesc.resY = resY;
 				resolveDesc.historyIndex = (uint32_t)frameIndex;
@@ -1158,7 +1161,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 
 				// Tonemap
 				RenderJob::TonemapDesc tonemapDesc = {};
-				tonemapDesc.source = Demo::s_taaAccumulationBuffer.get();
+				tonemapDesc.source = s_taaAccumulationBuffer.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
 				sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
@@ -1191,7 +1194,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	debugDesc.scene = renderState.m_scene;
 	debugDesc.view = &renderState.m_view;
 	debugDesc.renderConfig = c;
-	GetDebugRenderer()->Flush(debugDesc);
+	s_debugDrawing.Flush(debugDesc);
 
 	// Render UI
 	std::vector<concurrency::task<void>> uiRenderJobs;
@@ -1211,7 +1214,7 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 	RenderBackend12::PresentDisplay();
 
 	// Read back render stats from the GPU
-	auto renderStatsReadbackContext = std::make_shared<FResourceReadbackContext>(Demo::s_renderStatsBuffer->m_resource);
+	auto renderStatsReadbackContext = std::make_shared<FResourceReadbackContext>(s_renderStatsBuffer->m_resource);
 	FFenceMarker frameCompleteMarker{ jobSync.m_fence.get(), jobSync.m_fenceValue};
 	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(frameCompleteMarker);
 	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
@@ -1219,11 +1222,11 @@ void Demo::Render(const uint32_t resX, const uint32_t resY)
 			readbackCompleteCompleteMarker.BlockingWait();
 	}).then([renderStatsReadbackContext]()
 		{
-			Demo::s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStatsBuffer>();
+			s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStats>();
 		});
 }
 
-void Demo::ResetPathtraceAccumulation()
+void Renderer::ResetPathtraceAccumulation()
 {
 	s_pathtraceCurrentSampleIndex = 1;
 }
