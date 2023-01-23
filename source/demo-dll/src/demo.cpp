@@ -2555,64 +2555,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		const int filteredEnvmapMips = numMips - 1;
 		auto texFilteredEnvmapUav = RenderBackend12::CreateSurface(L"filtered_envmap", SurfaceType::UAV, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6);
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
-
-			// Descriptor Heaps
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
-			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"split_sum_rootsig",
-				cmdList,
-				FRootsigDesc{ L"image-based-lighting/split-sum-approx/prefilter.hlsl", L"rootsig", L"rootsig_1_1" });
-
-			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
-
-			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
-				L"image-based-lighting/split-sum-approx/prefilter.hlsl",
-				L"cs_main", 
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" , 
-				L"cs_6_6" });
-
-			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig->m_rootsig;
-			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
-			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
-			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
-			d3dCmdList->SetPipelineState(pso);
-
-			for (uint32_t mipIndex = 0; mipIndex < filteredEnvmapMips; ++mipIndex)
-			{
-				uint32_t mipSize = filteredEnvmapSize >> mipIndex;
-
-				for (uint32_t faceIndex = 0; faceIndex < 6; ++faceIndex)
-				{
-
-					struct
-					{
-						uint32_t mipSize;
-						uint32_t cubemapSize;
-						uint32_t faceIndex;
-						uint32_t envmapSrvIndex;
-						uint32_t uavIndex;
-						uint32_t sampleCount;
-						float roughness;
-					} rootConstants = { mipSize, (uint32_t)cubemapSize, faceIndex, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices[mipIndex], 1024, mipIndex / (float)numMips };
-
-					d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-
-					// Dispatch
-					size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
-					d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
-				}
-			}
-		}
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredEnvmapSize, filteredEnvmapMips);
 
 
 		// Copy from UAV to destination cubemap texture

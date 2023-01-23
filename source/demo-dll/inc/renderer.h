@@ -244,6 +244,9 @@ namespace Renderer
 	// Convert a lat-long (spherical projection) texture into a cubemap
 	void ConvertLatlong2Cubemap(FCommandList* cmdList, const uint32_t srcSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t numMips);
 
+	// Prefilter a source cubemap using GGX importance sampling 
+	void PrefilterCubemap(FCommandList* cmdList, const uint32_t srcCubemapSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t numMips);
+
 	// Downsample an UAV to half resolution
 	void DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY);
 }
