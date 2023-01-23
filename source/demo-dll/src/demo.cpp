@@ -2163,7 +2163,7 @@ void FScene::UpdateDynamicSky()
 {
 	const int numSHCoefficients = 9;
 	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
-	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, true);
+	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
 	m_dynamicSkyEnvmap = RenderBackend12::CreateSurface(L"dynamic_sky_envmap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6);
 	m_dynamicSkySH = RenderBackend12::CreateSurface(L"dynamic_sky_SH", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1);
 
@@ -2175,6 +2175,22 @@ void FScene::UpdateDynamicSky()
 	const int resX = 2 * cubemapRes, resY = cubemapRes;
 	std::unique_ptr<FShaderSurface> dynamicSkySurface = RenderBackend12::CreateSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips);
 	GenerateDynamicSkyTexture(cmdList, resX, resY, dynamicSkySurface.get());
+
+	// Downsample to generate mips
+	{
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "mip_generation", 0);
+		int mipResX = resX >> 1, mipResY = resY >> 1;
+		int srcMip = 0;
+		while (mipResY >= 1)
+		{
+			DownsampleUav(cmdList, dynamicSkySurface->m_uavIndices[srcMip], dynamicSkySurface->m_uavIndices[srcMip + 1], mipResX, mipResY);
+			dynamicSkySurface->m_resource->UavBarrier(cmdList);
+
+			mipResX = mipResX >> 1;
+			mipResY = mipResY >> 1;
+			srcMip++;
+		}
+	}
 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
 }
@@ -2243,6 +2259,59 @@ void FScene::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, co
 
 	size_t threadGroupCountX = std::max<size_t>(std::ceil(resX / 16), 1);
 	size_t threadGroupCountY = std::max<size_t>(std::ceil(resY / 16), 1);
+	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+}
+
+void FScene::DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY)
+{ 
+	SCOPED_COMMAND_LIST_EVENT(cmdList, "downsample", 0);
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+	// Descriptor Heaps
+	D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+	d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+	// Root Signature
+	std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+		L"downsample_rootsig",
+		cmdList,
+		FRootsigDesc{ L"postprocess/downsample.hlsl", L"rootsig", L"rootsig_1_1" });
+
+	d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+	// PSO
+	IDxcBlob* csBlob = RenderBackend12::CacheShader({
+		L"postprocess/downsample.hlsl",
+		L"cs_main",
+		L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+		L"cs_6_6" });
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.pRootSignature = rootsig->m_rootsig;
+	psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+	psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+	psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+	D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+	d3dCmdList->SetPipelineState(pso);
+
+	struct FConstants
+	{
+		uint32_t m_resX;
+		uint32_t m_resY;
+		uint32_t m_srcUavIndex;
+		uint32_t m_dstUavIndex;
+	};
+
+	FConstants cb{};
+	cb.m_resX = dstResX;
+	cb.m_resY = dstResY;
+	cb.m_srcUavIndex = srvUavIndex;
+	cb.m_dstUavIndex = dstUavIndex;
+	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
+
+	size_t threadGroupCountX = std::max<size_t>(std::ceil(dstResX / 16), 1);
+	size_t threadGroupCountY = std::max<size_t>(std::ceil(dstResY / 16), 1);
 	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 }
 

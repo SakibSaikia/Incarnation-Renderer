@@ -150,6 +150,7 @@ private:
 	void ProcessReadbackTexture(FResourceReadbackContext* context, const std::string& filename, const int width, const int height, const size_t mipCount, const DXGI_FORMAT fmt, const int bpp);
 
 	void GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, FShaderSurface* outSurface);
+	void DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY);
 
 private:
 	std::vector<concurrency::task<void>> m_loadingJobs;
