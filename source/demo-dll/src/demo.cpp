@@ -2195,6 +2195,11 @@ void FScene::UpdateDynamicSky()
 		}
 	}
 
+	// Convert to cubemap
+	const size_t cubemapSize = cubemapRes;
+	auto texCubeUav = RenderBackend12::CreateSurface(L"src_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6);
+	Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
+
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
 }
 
