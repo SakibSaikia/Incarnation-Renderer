@@ -2177,7 +2177,7 @@ void FScene::UpdateDynamicSky()
 	// Render dynamic sky to 2D surface using spherical/equirectangular projection
 	const int resX = 2 * cubemapRes, resY = cubemapRes;
 	std::unique_ptr<FShaderSurface> dynamicSkySurface = RenderBackend12::CreateSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips);
-	Renderer::GenerateDynamicSkyTexture(cmdList, resX, resY, m_sunDir, dynamicSkySurface.get());
+	Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_uavIndices[0], resX, resY, m_sunDir);
 
 	// Downsample to generate mips
 	{
@@ -2198,7 +2198,8 @@ void FScene::UpdateDynamicSky()
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
 }
 
-void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, Vector3 sunDir, FShaderSurface* outSurface)
+// Generate a lat-long sky texutre (spherical projection) using Preetham sky model
+void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const uint32_t outputUavIndex, const int resX, const int resY, Vector3 sunDir)
 {
 	SCOPED_COMMAND_LIST_EVENT(cmdList, "gen_dynamic_sky_tex", 0);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
@@ -2257,7 +2258,7 @@ void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, 
 	cb.m_sunDir = L;
 	cb.m_texSize[0] = resX;
 	cb.m_texSize[1] = resY;
-	cb.m_uavIndex = outSurface->m_uavIndices[0];
+	cb.m_uavIndex = outputUavIndex;
 	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
 	size_t threadGroupCountX = std::max<size_t>(std::ceil(resX / 16), 1);
@@ -2265,6 +2266,7 @@ void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, 
 	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 }
 
+// Downsample an UAV to half resolution
 void Renderer::DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY)
 { 
 	SCOPED_COMMAND_LIST_EVENT(cmdList, "downsample", 0);
@@ -2544,59 +2546,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t cubemapSize = metadata.height;
 		auto texCubeUav = RenderBackend12::CreateSurface(L"src_cubemap", SurfaceType::UAV, metadata.format, cubemapSize, cubemapSize, numMips, 1, 6);
-
-		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "cubemap_gen", 0);
-
-			// Descriptor Heaps
-			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
-			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
-
-			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"cubemapgen_rootsig",
-				cmdList,
-				FRootsigDesc{L"content-pipeline/cubemapgen.hlsl", L"rootsig", L"rootsig_1_1" });
-
-			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
-
-			// PSO
-			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
-				L"content-pipeline/cubemapgen.hlsl",
-				L"cs_main", 
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16", 
-				L"cs_6_6" });
-
-			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
-			psoDesc.pRootSignature = rootsig->m_rootsig;
-			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
-			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
-			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
-			d3dCmdList->SetPipelineState(pso);
-
-			// Convert from sperical map to cube map
-			for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
-			{
-				uint32_t mipSize = cubemapSize >> mipIndex;
-
-				struct
-				{
-					uint32_t mipIndex;
-					uint32_t hdrTextureIndex;
-					uint32_t cubemapUavIndex;
-					uint32_t mipSize;
-					float radianceScale;
-				} rootConstants = { mipIndex, srcHdrTex->m_srvIndex, texCubeUav->m_uavIndices[mipIndex], (uint32_t)mipSize, 25000.f };
-
-				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-
-				// Dispatch
-				size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
-				d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
-			}
-		}
+		Renderer::ConvertLatlong2Cubemap(cmdList, srcHdrTex->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Prefilter Environment map

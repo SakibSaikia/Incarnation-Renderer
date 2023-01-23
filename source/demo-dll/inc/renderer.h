@@ -237,6 +237,13 @@ namespace Renderer
 	void ResetPathtraceAccumulation();
 	std::unique_ptr<FTexture> GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height);
 	std::unique_ptr<FTexture> GenerateWhiteNoiseTextures(const uint32_t width, const uint32_t height, const uint32_t depth);
-	void GenerateDynamicSkyTexture(FCommandList* cmdList, const int resX, const int resY, Vector3 sunDir, FShaderSurface* outSurface);
+
+	// Generate a lat-long sky texutre (spherical projection) using Preetham sky model
+	void GenerateDynamicSkyTexture(FCommandList* cmdList, const uint32_t outputUavIndex, const int resX, const int resY, Vector3 sunDir);
+
+	// Convert a lat-long (spherical projection) texture into a cubemap
+	void ConvertLatlong2Cubemap(FCommandList* cmdList, const uint32_t srcSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t numMips);
+
+	// Downsample an UAV to half resolution
 	void DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY);
 }

@@ -182,6 +182,60 @@ std::unique_ptr<FTexture> Renderer::GenerateWhiteNoiseTextures(const uint32_t wi
 	return std::move(noiseTexArray);
 }
 
+void Renderer::ConvertLatlong2Cubemap(FCommandList* cmdList, const uint32_t srcSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t numMips)
+{
+	SCOPED_COMMAND_LIST_EVENT(cmdList, "cubemap_gen", 0);
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+	// Descriptor Heaps
+	D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+	d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+	// Root Signature
+	std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+		L"cubemapgen_rootsig",
+		cmdList,
+		FRootsigDesc{ L"content-pipeline/cubemapgen.hlsl", L"rootsig", L"rootsig_1_1" });
+
+	d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+	// PSO
+	IDxcBlob* csBlob = RenderBackend12::CacheShader({
+		L"content-pipeline/cubemapgen.hlsl",
+		L"cs_main",
+		L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16",
+		L"cs_6_6" });
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.pRootSignature = rootsig->m_rootsig;
+	psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+	psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+	psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+	D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+	d3dCmdList->SetPipelineState(pso);
+
+	// Convert from sperical map to cube map
+	for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
+	{
+		uint32_t mipSize = cubemapRes >> mipIndex;
+
+		struct
+		{
+			uint32_t mipIndex;
+			uint32_t hdrTextureIndex;
+			uint32_t cubemapUavIndex;
+			uint32_t mipSize;
+		} rootConstants = { mipIndex, srcSrvIndex, outputUavIndices[mipIndex], (uint32_t)mipSize };
+
+		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+
+		// Dispatch
+		size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
+		d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
+	}
+}
+
 void FDebugDraw::Initialize()
 {
 	std::unordered_map<std::string, DebugShape::Type> primitiveNameMapping =
