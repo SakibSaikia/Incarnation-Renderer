@@ -1,6 +1,15 @@
 #ifndef __MATH_HLSLI_
 #define __MATH_HLSLI_
 
+/*              
+
+    Conventions:
+
+    * Left-handed coordinate system
+    * World Coordinates: X = right, Y = up, Z = far
+    * Polar Coordinates: theta = elevation, phi = azimuth
+*/
+
 // From https://www.pbr-book.org/3ed-2018/Utilities/Main_Include_File
 static const float k_Pi = 3.14159265358979323846;
 static const float k_InvPi = 0.31830988618379067154;
@@ -20,13 +29,31 @@ float Degrees(float rad)
     return (180 / k_Pi) * rad;
 }
 
-// Conversion from spherical coordinates to cartesian coordinates
-float3 SphericalDirection(float sinTheta, float cosTheta, float phi)
+// Conversion from polar angles to rectangular coordinates. 
+// World space coordinates are swizzled to make y-up
+float3 Polar2Rect(float sint, float cost, float phi, bool bWorldSpace)
 {
-    return float3(
-        sinTheta * cos(phi),
-        sinTheta * sin(phi),
-        cosTheta);
+    float3 p;
+    p.x = sint * cos(phi);
+    p.y = sint * sin(phi);
+    p.z = cost;
+    return bWorldSpace ? p.xzy : p;
+}
+
+// Conversion from polar angles to rectangular coordinates. 
+// World space coordinates are swizzled to make y-up
+float3 Polar2Rect(float theta, float phi, bool bWorldSpace)
+{
+    float sint = sin(theta);
+    float cost = cos(theta);
+    float sinp = sin(phi);
+    float cosp = cos(phi);
+
+    float3 p;
+    p.x = sint * cosp;
+    p.y = sint * sinp;
+    p.z = cost;
+    return bWorldSpace ? p.xzy : p;
 }
 
 // Returns tangent basis around world normal direction N

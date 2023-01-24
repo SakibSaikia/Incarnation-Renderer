@@ -40,10 +40,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		float phi = ndc.x * k_Pi;
 
 		// Get direction from polar angles
-		float3 dir;
-		dir.x = sin(theta) * cos(phi);
-		dir.z = sin(theta) * sin(phi);
-		dir.y = cos(theta);
+		float3 dir = Polar2Rect(theta, phi, true);
 
 		RWTexture2D<float4> dest = ResourceDescriptorHeap[g_uavIndex];
 		dest[dispatchThreadId.xy].rgb = 1000 * CalculateSkyRadianceRGB(g_sunDir, normalize(dir), g_turbidity, g_perezConstants);

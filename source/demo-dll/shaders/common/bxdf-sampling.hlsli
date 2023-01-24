@@ -36,7 +36,7 @@ float3 SampleGGX(float2 u, float roughness)
     float SinTheta = sqrt(1.f - CosTheta * CosTheta);
 
     // Map sampled GGX angles to tangent space normal direction
-    float3 H = SphericalDirection(SinTheta, CosTheta, Phi);
+    float3 H = Polar2Rect(SinTheta, CosTheta, Phi, false);
 
     return H;
 }
@@ -64,7 +64,7 @@ float3 SampleBeckmann(float2 u, float roughness)
     // Map sampled Beckmann angles to tangent space normal direction
     float cosTheta = 1.f / sqrt(1.f + tan2Theta);
     float sinTheta = sqrt(max(0.f, 1.f - cosTheta * cosTheta));
-    float3 H = SphericalDirection(sinTheta, cosTheta, phi);
+    float3 H = Polar2Rect(sinTheta, cosTheta, phi, false);
 
     return H;
 }

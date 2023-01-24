@@ -1,7 +1,15 @@
 #ifndef __SH_COMMON_HLSLI_
 #define __SH_COMMON_HLSLI_
 
-// Adapted from https://www.gamedev.net/forums/topic/671562-spherical-harmonics-cubemap/
+/*
+*	Adapted from https://www.gamedev.net/forums/topic/671562-spherical-harmonics-cubemap/
+* 
+*	To compute irradiance, you need to take your incoming radiance and integrate it with a cosine lobe oriented about the surface normal.
+*	With spherical harmonics you typically have your incoming radiance represented as a set of SH coefficients(this is what you're computing 
+*	when you integrate your cubemap onto the SH basis functions), which means that it makes sense to also represent the cosine lobe with SH. 
+*	If you do this, then computing the integral can be done using an SH convolution, which is essentially just a dot product of two sets of 
+*	SH coefficients. 
+*/
 
 #define SH_BANDS 3
 #define SH_COEFFICIENTS 9
