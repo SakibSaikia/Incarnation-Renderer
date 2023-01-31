@@ -13,9 +13,9 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> TAAResolve(RenderJob::Sync& jobSync, const TAAResolveDesc& passDesc)
+	concurrency::task<void> TAAResolve(RenderJob::Sync* jobSync, const TAAResolveDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t colorSourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();
 		size_t uavTransitionToken = passDesc.target->m_resource->GetTransitionToken();
 
@@ -99,9 +99,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

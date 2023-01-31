@@ -13,9 +13,9 @@ namespace RenderJob
 		Vector2 jitter;
 	};
 
-	concurrency::task<void> LightCulling(RenderJob::Sync& jobSync, const LightCullingDesc& passDesc)
+	concurrency::task<void> LightCulling(RenderJob::Sync* jobSync, const LightCullingDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t culledLightCountBufferTransitionToken = passDesc.culledLightCountBuffer->m_resource->GetTransitionToken();
 		size_t culledLightListsBufferTransitionToken = passDesc.culledLightListsBuffer->m_resource->GetTransitionToken();
 		size_t lightGridBufferTransitionToken = passDesc.lightGridBuffer->m_resource->GetTransitionToken();
@@ -133,9 +133,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

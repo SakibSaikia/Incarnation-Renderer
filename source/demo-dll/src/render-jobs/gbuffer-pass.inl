@@ -13,9 +13,9 @@ namespace RenderJob
 		const FScene* scene;
 	};
 
-	concurrency::task<void> GBufferComputePass(RenderJob::Sync& jobSync, const GBufferPassDesc& passDesc)
+	concurrency::task<void> GBufferComputePass(RenderJob::Sync* jobSync, const GBufferPassDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t sourceTransitionToken = passDesc.sourceVisBuffer->m_resource->GetTransitionToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t gbufferTransitionTokens[3] = {
@@ -100,15 +100,15 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 
-	concurrency::task<void> GBufferDecalPass(RenderJob::Sync& jobSync, const GBufferPassDesc& passDesc)
+	concurrency::task<void> GBufferDecalPass(RenderJob::Sync* jobSync, const GBufferPassDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t gbufferTransitionTokens[3] = {
 			passDesc.gbufferTargets[0]->m_resource->GetTransitionToken(),
 			passDesc.gbufferTargets[1]->m_resource->GetTransitionToken(),
@@ -314,9 +314,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

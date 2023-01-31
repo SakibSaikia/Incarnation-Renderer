@@ -16,9 +16,9 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	concurrency::task<void> ClusteredLighting(RenderJob::Sync& jobSync, const ClusteredLightingDesc& passDesc, const bool bRequiresClear)
+	concurrency::task<void> ClusteredLighting(RenderJob::Sync* jobSync, const ClusteredLightingDesc& passDesc, const bool bRequiresClear)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t lightListsBufferTransitionToken = passDesc.lightListsBuffer->m_resource->GetTransitionToken();
 		size_t lightGridBufferTransitionToken = passDesc.lightGridBuffer->m_resource->GetTransitionToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
@@ -121,9 +121,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 			{
-				jobSync.Execute(renderToken, recordedCl);
+				jobSync->Execute(renderToken, recordedCl);
 			});
 	}
 }

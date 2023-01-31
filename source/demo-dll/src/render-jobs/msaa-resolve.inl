@@ -9,9 +9,9 @@ namespace RenderJob
 		DXGI_FORMAT format;
 	};
 
-	concurrency::task<void> MSAAResolve(RenderJob::Sync& jobSync, const MSAAResolveDesc& passDesc)
+	concurrency::task<void> MSAAResolve(RenderJob::Sync* jobSync, const MSAAResolveDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t colorSourceTransitionToken = passDesc.colorSource->m_resource->GetTransitionToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 
@@ -34,9 +34,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

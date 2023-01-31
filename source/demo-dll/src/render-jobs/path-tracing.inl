@@ -14,9 +14,9 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> PathTrace(RenderJob::Sync& jobSync, const PathTracingDesc& passDesc)
+	concurrency::task<void> PathTrace(RenderJob::Sync* jobSync, const PathTracingDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t uavTransitionToken = passDesc.targetBuffer->m_resource->GetTransitionToken();
 
 		return concurrency::create_task([=]
@@ -276,9 +276,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

@@ -13,9 +13,9 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> DynamicSkyPass(RenderJob::Sync& jobSync, const DynamicSkyPassDesc& passDesc)
+	concurrency::task<void> DynamicSkyPass(RenderJob::Sync* jobSync, const DynamicSkyPassDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
 
@@ -158,9 +158,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 			{
-				jobSync.Execute(renderToken, recordedCl);
+				jobSync->Execute(renderToken, recordedCl);
 			});
 	}
 }

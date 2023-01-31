@@ -16,9 +16,9 @@ namespace RenderJob
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	concurrency::task<void> DebugViz(RenderJob::Sync& jobSync, const DebugVizDesc& passDesc)
+	concurrency::task<void> DebugViz(RenderJob::Sync* jobSync, const DebugVizDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t visBufferTransitionToken = passDesc.visBuffer->m_resource->GetTransitionToken();
 		size_t targetTransitionToken = passDesc.target->m_resource->GetTransitionToken();
 		size_t gbuffer0TransitionToken = passDesc.gbuffers[0]->m_resource->GetTransitionToken();
@@ -174,9 +174,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

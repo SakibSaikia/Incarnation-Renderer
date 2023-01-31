@@ -15,9 +15,9 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	concurrency::task<void> DirectLighting(RenderJob::Sync& jobSync, const DirectLightingDesc& passDesc)
+	concurrency::task<void> DirectLighting(RenderJob::Sync* jobSync, const DirectLightingDesc& passDesc)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t depthTexTransitionToken = passDesc.depthStencilTex->m_resource->GetTransitionToken();
 		size_t gbufferBaseColorTransitionToken = passDesc.gbufferBaseColorTex->m_resource->GetTransitionToken();
@@ -92,9 +92,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }

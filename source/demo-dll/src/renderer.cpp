@@ -9,9 +9,11 @@
 #include <random>
 #include <algorithm>
 #include <tiny_gltf.h>
+#include "render-jobs/job-sync.h"
 
 namespace Renderer
 {
+	std::unique_ptr<RenderJob::Sync> s_jobSync;
 	std::unique_ptr<FTexture> s_envBRDF;
 	std::unique_ptr<FShaderSurface> s_taaAccumulationBuffer;
 	std::unique_ptr<FShaderSurface> s_pathtraceHistoryBuffer;
@@ -24,7 +26,6 @@ namespace Renderer
 }
 
 // Render Jobs
-#include "render-jobs/job-sync.h"
 #include "render-jobs/environmentmap.inl"
 #include "render-jobs/msaa-resolve.inl"
 #include "render-jobs/taa-resolve.inl"
@@ -68,6 +69,7 @@ FRenderStats Renderer::GetRenderStats()
 
 void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 {
+	s_jobSync = std::make_unique<RenderJob::Sync>();
 	s_envBRDF = Renderer::GenerateEnvBrdfTexture(512, 512);
 
 	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
@@ -882,6 +884,7 @@ void Renderer::Teardown()
 	s_taaAccumulationBuffer.reset(nullptr);
 	s_renderStatsBuffer.reset(nullptr);
 	s_debugDrawing.~FDebugDraw();
+	s_jobSync.reset(nullptr);
 }
 
 void Renderer::Render(const FRenderState& renderState)
@@ -899,7 +902,6 @@ void Renderer::Render(const FRenderState& renderState)
 	SCOPED_CPU_EVENT("render", PIX_COLOR_DEFAULT);
 
 	std::vector<concurrency::task<void>> sceneRenderJobs;
-	static RenderJob::Sync jobSync;
 
 	static uint64_t frameIndex = 0;
 	SCOPED_COMMAND_QUEUE_EVENT(D3D12_COMMAND_LIST_TYPE_DIRECT, PrintString("frame_%d", frameIndex).c_str(), 0);
@@ -1046,7 +1048,7 @@ void Renderer::Render(const FRenderState& renderState)
 
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
-	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(jobSync, renderState.m_scene));
+	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(s_jobSync.get(), renderState.m_scene));
 
 	if (c.PathTrace)
 	{
@@ -1063,7 +1065,7 @@ void Renderer::Render(const FRenderState& renderState)
 			pathtraceDesc.scene = renderState.m_scene;
 			pathtraceDesc.view = &renderState.m_view;
 			pathtraceDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::PathTrace(jobSync, pathtraceDesc));
+			sceneRenderJobs.push_back(RenderJob::PathTrace(s_jobSync.get(), pathtraceDesc));
 
 			// Accumulate samples
 			s_pathtraceCurrentSampleIndex++;
@@ -1073,7 +1075,7 @@ void Renderer::Render(const FRenderState& renderState)
 		tonemapDesc.source = s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.renderConfig = c;
-		sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+		sceneRenderJobs.push_back(RenderJob::Tonemap(s_jobSync.get(), tonemapDesc));
 
 	}
 	else
@@ -1085,7 +1087,7 @@ void Renderer::Render(const FRenderState& renderState)
 		batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
 		batchCullDesc.viewConstantBuffer = cbViewConstants.get();
 		batchCullDesc.primitiveCount = totalPrimitives;
-		sceneRenderJobs.push_back(RenderJob::BatchCulling(jobSync, batchCullDesc));
+		sceneRenderJobs.push_back(RenderJob::BatchCulling(s_jobSync.get(), batchCullDesc));
 
 		// Light Culling
 		const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
@@ -1102,7 +1104,7 @@ void Renderer::Render(const FRenderState& renderState)
 			lightCullDesc.view = &renderState.m_cullingView;
 			lightCullDesc.jitter = pixelJitter;
 			lightCullDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::LightCulling(jobSync, lightCullDesc));
+			sceneRenderJobs.push_back(RenderJob::LightCulling(s_jobSync.get(), lightCullDesc));
 		}
 
 		// Visibility Pass
@@ -1117,7 +1119,7 @@ void Renderer::Render(const FRenderState& renderState)
 		visDesc.resX = resX;
 		visDesc.resY = resY;
 		visDesc.scenePrimitiveCount = totalPrimitives;
-		sceneRenderJobs.push_back(RenderJob::VisibilityPass(jobSync, visDesc));
+		sceneRenderJobs.push_back(RenderJob::VisibilityPass(s_jobSync.get(), visDesc));
 
 		// GBuffer Pass + Emissive
 		RenderJob::GBufferPassDesc gbufferDesc = {};
@@ -1132,8 +1134,8 @@ void Renderer::Render(const FRenderState& renderState)
 		gbufferDesc.resX = resX;
 		gbufferDesc.resY = resY;
 		gbufferDesc.scene = renderState.m_scene;
-		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(jobSync, gbufferDesc));
-		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(jobSync, gbufferDesc));
+		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(s_jobSync.get(), gbufferDesc));
+		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(s_jobSync.get(), gbufferDesc));
 
 		// Sky Lighting
 		RenderJob::SkyLightingDesc skyLightingDesc = {};
@@ -1149,7 +1151,7 @@ void Renderer::Render(const FRenderState& renderState)
 		skyLightingDesc.resX = resX;
 		skyLightingDesc.resY = resY;
 		skyLightingDesc.envBRDFTex = s_envBRDF.get();
-		sceneRenderJobs.push_back(RenderJob::SkyLighting(jobSync, skyLightingDesc));
+		sceneRenderJobs.push_back(RenderJob::SkyLighting(s_jobSync.get(), skyLightingDesc));
 
 		// Direct Lighting
 		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
@@ -1167,7 +1169,7 @@ void Renderer::Render(const FRenderState& renderState)
 			directLightingDesc.renderConfig = c;
 			directLightingDesc.resX = resX;
 			directLightingDesc.resY = resY;
-			sceneRenderJobs.push_back(RenderJob::DirectLighting(jobSync, directLightingDesc));
+			sceneRenderJobs.push_back(RenderJob::DirectLighting(s_jobSync.get(), directLightingDesc));
 		}
 
 		// Clustered Lighting
@@ -1187,7 +1189,7 @@ void Renderer::Render(const FRenderState& renderState)
 			clusteredLightingDesc.renderConfig = c;
 			clusteredLightingDesc.resX = resX;
 			clusteredLightingDesc.resY = resY;
-			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(jobSync, clusteredLightingDesc, bRequiresClear));
+			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(s_jobSync.get(), clusteredLightingDesc, bRequiresClear));
 		}
 
 		if (c.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
@@ -1203,7 +1205,7 @@ void Renderer::Render(const FRenderState& renderState)
 			envmapDesc.view = &renderState.m_view;
 			envmapDesc.jitter = pixelJitter;
 			envmapDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(jobSync, envmapDesc));
+			sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(s_jobSync.get(), envmapDesc));
 		}
 		else
 		{
@@ -1217,7 +1219,7 @@ void Renderer::Render(const FRenderState& renderState)
 			skyDesc.view = &renderState.m_view;
 			skyDesc.jitter = pixelJitter;
 			skyDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::DynamicSkyPass(jobSync, skyDesc));
+			sceneRenderJobs.push_back(RenderJob::DynamicSkyPass(s_jobSync.get(), skyDesc));
 		}
 
 		if (c.Viewmode != (int)Viewmode::Normal)
@@ -1239,7 +1241,7 @@ void Renderer::Render(const FRenderState& renderState)
 			desc.mouseY = renderState.m_mouseY;
 			desc.scene = renderState.m_scene;
 			desc.view = &renderState.m_view;
-			sceneRenderJobs.push_back(RenderJob::DebugViz(jobSync, desc));
+			sceneRenderJobs.push_back(RenderJob::DebugViz(s_jobSync.get(), desc));
 
 			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
 			{
@@ -1252,7 +1254,7 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.sceneConstantBuffer = cbSceneConstants.get();
 				desc.viewConstantBuffer = cbViewConstants.get();
 				desc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::HighlightPass(jobSync, desc));
+				sceneRenderJobs.push_back(RenderJob::HighlightPass(s_jobSync.get(), desc));
 			}
 		}
 		else
@@ -1273,14 +1275,14 @@ void Renderer::Render(const FRenderState& renderState)
 				resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
 				resolveDesc.depthTextureIndex = depthBuffer->m_srvIndex;
 				resolveDesc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::TAAResolve(jobSync, resolveDesc));
+				sceneRenderJobs.push_back(RenderJob::TAAResolve(s_jobSync.get(), resolveDesc));
 
 				// Tonemap
 				RenderJob::TonemapDesc tonemapDesc = {};
 				tonemapDesc.source = s_taaAccumulationBuffer.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+				sceneRenderJobs.push_back(RenderJob::Tonemap(s_jobSync.get(), tonemapDesc));
 
 				// Save view projection transform for next frame's reprojection
 				s_prevViewProjectionTransform = viewProjectionTransform;
@@ -1292,7 +1294,7 @@ void Renderer::Render(const FRenderState& renderState)
 				tonemapDesc.source = hdrRasterSceneColor.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::Tonemap(jobSync, tonemapDesc));
+				sceneRenderJobs.push_back(RenderJob::Tonemap(s_jobSync.get(), tonemapDesc));
 			}
 		}
 	}
@@ -1318,7 +1320,7 @@ void Renderer::Render(const FRenderState& renderState)
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
-		uiRenderJobs.push_back(RenderJob::UI(jobSync, uiDesc));
+		uiRenderJobs.push_back(RenderJob::UI(s_jobSync.get(), uiDesc));
 	}
 
 	// Wait for all UI render jobs to finish
@@ -1331,8 +1333,7 @@ void Renderer::Render(const FRenderState& renderState)
 
 	// Read back render stats from the GPU
 	auto renderStatsReadbackContext = std::make_shared<FResourceReadbackContext>(s_renderStatsBuffer->m_resource);
-	FFenceMarker frameCompleteMarker{ jobSync.m_fence.get(), jobSync.m_fenceValue};
-	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(frameCompleteMarker);
+	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(s_jobSync->GetCpuFence());
 	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
 	{
 			readbackCompleteCompleteMarker.BlockingWait();

@@ -1,8 +1,8 @@
 namespace RenderJob
 {
-	concurrency::task<void> UpdateTLAS(RenderJob::Sync& jobSync, const FScene* scene)
+	concurrency::task<void> UpdateTLAS(RenderJob::Sync* jobSync, const FScene* scene)
 	{
-		size_t renderToken = jobSync.GetToken();
+		size_t renderToken = jobSync->GetToken();
 
 		return concurrency::create_task([=]
 		{
@@ -80,9 +80,9 @@ namespace RenderJob
 
 			return cmdList;
 
-		}).then([&, renderToken](FCommandList* recordedCl) mutable
+		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync.Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl);
 		});
 	}
 }
