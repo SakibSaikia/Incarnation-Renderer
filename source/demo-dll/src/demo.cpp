@@ -2172,49 +2172,57 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", cmdListType);
-	FScopedGpuCapture capture(cmdList);
-
-	if (bUseAsyncCompute)
 	{
-		Renderer::SyncQueueToBeginPass(cmdListType, Renderer::SyncVisibilityPass);
-	}
+		//FScopedGpuCapture capture(cmdList);
 
-	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "update_dynamic_sky", 0);
-
-	// Render dynamic sky to 2D surface using spherical/equirectangular projection
-	const int resX = 2 * cubemapRes, resY = cubemapRes;
-	std::unique_ptr<FShaderSurface> dynamicSkySurface = RenderBackend12::CreateSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips);
-	Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_uavIndices[0], resX, resY, m_sunDir);
-
-	// Downsample to generate mips
-	{
-		SCOPED_COMMAND_LIST_EVENT(cmdList, "mip_generation", 0);
-		int mipResX = resX >> 1, mipResY = resY >> 1;
-		int srcMip = 0;
-		while (mipResY >= 1)
+		if (bUseAsyncCompute)
 		{
-			Renderer::DownsampleUav(cmdList, dynamicSkySurface->m_uavIndices[srcMip], dynamicSkySurface->m_uavIndices[srcMip + 1], mipResX, mipResY);
-			dynamicSkySurface->m_resource->UavBarrier(cmdList);
-
-			mipResX = mipResX >> 1;
-			mipResY = mipResY >> 1;
-			srcMip++;
+			Renderer::SyncQueueToBeginPass(cmdListType, Renderer::SyncVisibilityPass);
 		}
+
+		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "update_dynamic_sky", 0);
+
+		// Render dynamic sky to 2D surface using spherical/equirectangular projection
+		const int resX = 2 * cubemapRes, resY = cubemapRes;
+		auto dynamicSkySurface = RenderBackend12::CreateSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips);
+		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_uavIndices[0], resX, resY, m_sunDir);
+
+		// Downsample to generate mips
+		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "mip_generation", 0);
+			int mipResX = resX >> 1, mipResY = resY >> 1;
+			int srcMip = 0;
+			while (mipResY >= 1)
+			{
+				Renderer::DownsampleUav(cmdList, dynamicSkySurface->m_uavIndices[srcMip], dynamicSkySurface->m_uavIndices[srcMip + 1], mipResX, mipResY);
+				dynamicSkySurface->m_resource->UavBarrier(cmdList);
+
+				mipResX = mipResX >> 1;
+				mipResY = mipResY >> 1;
+				srcMip++;
+			}
+		}
+
+		// Convert to cubemap
+		const size_t cubemapSize = cubemapRes;
+		auto texCubeUav = RenderBackend12::CreateSurface(L"src_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6);
+		Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
+
+		// Prefilter the cubemap
+		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, m_dynamicSkyEnvmap->m_uavIndices, cubemapRes, 1, numMips);
+
+		RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
 	}
 
-	// Convert to cubemap
-	const size_t cubemapSize = cubemapRes;
-	auto texCubeUav = RenderBackend12::CreateSurface(L"src_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6);
-	Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
-
-	// Prefilter the cubemap
-	const size_t filteredCubemapSize = cubemapSize >> 1;
-	const int filteredMipCount = numMips - 1;
-	auto texFilteredEnvmapUav = RenderBackend12::CreateSurface(L"filtered_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, filteredCubemapSize, filteredCubemapSize, filteredMipCount, 1, 6);
-	texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredCubemapSize, filteredMipCount);
-
-	RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
+	// Update reference when the update is complete on the GPU
+	concurrency::create_task([fence = cmdList->GetFence()]()
+	{
+		fence.BlockingWait();
+	}).then([this]()
+	{
+		m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_srvIndex;
+	});
 }
 
 // Generate a lat-long sky texutre (spherical projection) using Preetham sky model
@@ -2574,7 +2582,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		const int filteredEnvmapMips = numMips - 1;
 		auto texFilteredEnvmapUav = RenderBackend12::CreateSurface(L"filtered_envmap", SurfaceType::UAV, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6);
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredEnvmapSize, filteredEnvmapMips);
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredEnvmapSize, 0, filteredEnvmapMips);
 
 
 		// Copy from UAV to destination cubemap texture

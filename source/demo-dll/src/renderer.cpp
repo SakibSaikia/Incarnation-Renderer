@@ -251,7 +251,7 @@ void Renderer::ConvertLatlong2Cubemap(FCommandList* cmdList, const uint32_t srcS
 }
 
 // Prefilter a source cubemap using GGX importance sampling 
-void Renderer::PrefilterCubemap(FCommandList* cmdList, const uint32_t srcCubemapSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t numMips)
+void Renderer::PrefilterCubemap(FCommandList* cmdList, const uint32_t srcCubemapSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t mipOffset, const uint32_t numMips)
 {
 	SCOPED_COMMAND_LIST_EVENT(cmdList, "prefilter_envmap", 0);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
@@ -284,7 +284,7 @@ void Renderer::PrefilterCubemap(FCommandList* cmdList, const uint32_t srcCubemap
 	D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 	d3dCmdList->SetPipelineState(pso);
 
-	for (uint32_t mipIndex = 0; mipIndex < numMips; ++mipIndex)
+	for (uint32_t mipIndex = mipOffset; mipIndex < numMips; ++mipIndex)
 	{
 		uint32_t mipSize = cubemapRes >> mipIndex;
 
