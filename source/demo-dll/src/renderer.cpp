@@ -87,6 +87,16 @@ void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 	s_debugDrawing.Initialize();
 }
 
+void Renderer::BlockUntilBeginPass(SyncRenderPass waitPass)
+{
+	s_jobSync->BlockingWaitForBeginPass(waitPass);
+}
+
+void Renderer::BlockUntilEndPass(SyncRenderPass waitPass)
+{
+	s_jobSync->BlockingWaitForEndPass(waitPass);
+}
+
 void Renderer::SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass)
 {
 	s_jobSync->InsertGpuWaitForBeginPass(queueType, waitPass);

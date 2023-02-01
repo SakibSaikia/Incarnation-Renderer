@@ -239,6 +239,8 @@ namespace Renderer
 	void Teardown();
 	void Render(const FRenderState& renderState);
 
+	void BlockUntilBeginPass(SyncRenderPass waitPass);
+	void BlockUntilEndPass(SyncRenderPass waitPass);
 	void SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass);
 	void SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass);
 

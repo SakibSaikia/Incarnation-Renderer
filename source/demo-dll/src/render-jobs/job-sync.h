@@ -56,6 +56,28 @@ namespace RenderJob
 			return FFenceMarker{ m_cpuFence.get(), m_cpuFenceValue };
 		}
 
+		// Halt CPU execution until the start of the specified pass on the GPU
+		void BlockingWaitForBeginPass(Renderer::SyncRenderPass pass)
+		{
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				m_gpuBeginFence->SetEventOnCompletion(m_beginRenderPassGpuSync[pass], event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		}
+
+		// Halt CPU execution until the end of the specified pass on the GPU
+		void BlockingWaitForEndPass(Renderer::SyncRenderPass pass)
+		{
+			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+			if (event)
+			{
+				m_gpuEndFence->SetEventOnCompletion(m_endRenderPassGpuSync[pass], event);
+				WaitForSingleObject(event, INFINITE);
+			}
+		}
+
 		// Halt execution on the command queue until the specified pass begins execution
 		void InsertGpuWaitForBeginPass(D3D12_COMMAND_LIST_TYPE queueType, Renderer::SyncRenderPass pass)
 		{
