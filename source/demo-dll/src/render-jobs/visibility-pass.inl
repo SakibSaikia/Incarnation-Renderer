@@ -161,7 +161,7 @@ namespace RenderJob
 
 		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync->Execute(renderToken, recordedCl);
+			jobSync->Execute(renderToken, recordedCl, Renderer::SyncVisibilityPass);
 		});
 	}
 }

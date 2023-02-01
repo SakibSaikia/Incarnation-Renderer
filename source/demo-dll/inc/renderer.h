@@ -89,7 +89,7 @@ struct FScene : public FModelLoader
 	void Clear();
 	int GetDirectionalLight() const;
 	void UpdateSunDirection();
-	void UpdateDynamicSky();
+	void UpdateDynamicSky(bool bUseAsyncCompute = false);
 	size_t GetPunctualLightCount() const;
 
 	// Scene files
@@ -229,9 +229,18 @@ private:
 //--------------------------------------------------------------------
 namespace Renderer
 {
+	enum SyncRenderPass
+	{
+		SyncVisibilityPass,
+		SyncRenderPassCount
+	};
+
 	void Initialize(const uint32_t resX, const uint32_t resY);
 	void Teardown();
 	void Render(const FRenderState& renderState);
+
+	void SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass);
+	void SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass);
 
 	FRenderStats GetRenderStats();
 	void ResetPathtraceAccumulation();

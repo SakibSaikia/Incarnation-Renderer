@@ -86,6 +86,17 @@ void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 
 	s_debugDrawing.Initialize();
 }
+
+void Renderer::SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass)
+{
+	s_jobSync->InsertGpuWaitForBeginPass(queueType, waitPass);
+}
+
+void Renderer::SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass)
+{
+	s_jobSync->InsertGpuWaitForEndPass(queueType, waitPass);
+}
+
 std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
 {
 	auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);

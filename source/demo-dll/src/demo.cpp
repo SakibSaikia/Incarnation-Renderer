@@ -653,7 +653,7 @@ void Demo::UpdateUI(float deltaTime)
 			{
 				bResetPathtracelAccumulation = true;
 				s_scene.UpdateSunDirection();
-				s_scene.UpdateDynamicSky();
+				s_scene.UpdateDynamicSky(true);
 			}
 		}
 
@@ -2162,7 +2162,7 @@ void FScene::UpdateSunDirection()
 	}
 }
 
-void FScene::UpdateDynamicSky()
+void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 {
 	const int numSHCoefficients = 9;
 	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
@@ -2170,8 +2170,15 @@ void FScene::UpdateDynamicSky()
 	m_dynamicSkyEnvmap = RenderBackend12::CreateSurface(L"dynamic_sky_envmap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6);
 	m_dynamicSkySH = RenderBackend12::CreateSurface(L"dynamic_sky_SH", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1);
 
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", D3D12_COMMAND_LIST_TYPE_COMPUTE);
+	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", cmdListType);
 	FScopedGpuCapture capture(cmdList);
+
+	if (bUseAsyncCompute)
+	{
+		Renderer::SyncQueueToBeginPass(cmdListType, Renderer::SyncVisibilityPass);
+	}
+
 	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "update_dynamic_sky", 0);
 
 	// Render dynamic sky to 2D surface using spherical/equirectangular projection
@@ -2207,7 +2214,7 @@ void FScene::UpdateDynamicSky()
 	texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredCubemapSize, filteredMipCount);
 
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COMPUTE, { cmdList });
+	RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
 }
 
 // Generate a lat-long sky texutre (spherical projection) using Preetham sky model
