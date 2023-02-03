@@ -72,9 +72,9 @@ void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 	s_jobSync = std::make_unique<RenderJob::Sync>();
 	s_envBRDF = Renderer::GenerateEnvBrdfTexture(512, 512);
 
-	s_pathtraceHistoryBuffer = RenderBackend12::CreateSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
-	s_taaAccumulationBuffer = RenderBackend12::CreateSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1);
-	s_renderStatsBuffer = RenderBackend12::CreateBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStats), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex);
+	s_pathtraceHistoryBuffer.reset(RenderBackend12::CreateNewSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
+	s_taaAccumulationBuffer.reset(RenderBackend12::CreateNewSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
+	s_renderStatsBuffer.reset(RenderBackend12::CreateNewBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(FRenderStats), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex));
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -109,7 +109,7 @@ void Renderer::SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderP
 
 std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
 {
-	auto brdfUav = RenderBackend12::CreateSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height);
+	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewSurface(L"env_brdf_uav", SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, width, height) };
 
 	// Compute CL
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -163,7 +163,7 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 
 	// Copy from UAV to destination texture
 	brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-	auto brdfTex = RenderBackend12::CreateTexture(L"env_brdf_tex", TextureType::Tex2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST);
+	std::unique_ptr<FTexture> brdfTex{ RenderBackend12::CreateNewTexture(L"env_brdf_tex", TextureType::Tex2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
 	d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
 	brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -197,7 +197,7 @@ std::unique_ptr<FTexture> Renderer::GenerateWhiteNoiseTextures(const uint32_t wi
 	}
 
 	FResourceUploadContext uploader{ numSamples };
-	auto noiseTexArray = RenderBackend12::CreateTexture(L"white_noise_array", TextureType::Tex2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader);
+	std::unique_ptr<FTexture> noiseTexArray{ RenderBackend12::CreateNewTexture(L"white_noise_array", TextureType::Tex2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader) };
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_noise_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -444,7 +444,7 @@ void FDebugDraw::Initialize()
 		const size_t uploadBufferSize = primitives.size() * sizeof(FGpuPrimitive) + primitiveIndexCounts.size() * sizeof(uint32_t);
 		FResourceUploadContext uploader{ uploadBufferSize };
 
-		m_packedPrimitives = RenderBackend12::CreateBuffer(
+		m_packedPrimitives.reset(RenderBackend12::CreateNewBuffer(
 			L"debug_primitives",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
@@ -452,9 +452,9 @@ void FDebugDraw::Initialize()
 			primitives.size() * sizeof(FGpuPrimitive),
 			false,
 			(const uint8_t*)primitives.data(),
-			&uploader);
+			&uploader));
 
-		m_packedPrimitiveIndexCounts = RenderBackend12::CreateBuffer(
+		m_packedPrimitiveIndexCounts.reset(RenderBackend12::CreateNewBuffer(
 			L"debug_primitive_index_counts",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
@@ -464,7 +464,7 @@ void FDebugDraw::Initialize()
 			(const uint8_t*)primitiveIndexCounts.data(),
 			&uploader,
 			-1,
-			SpecialDescriptors::DebugPrimitiveIndexCountSrvIndex);
+			SpecialDescriptors::DebugPrimitiveIndexCountSrvIndex));
 
 		uploader.SubmitUploads(cmdList);
 
@@ -472,13 +472,13 @@ void FDebugDraw::Initialize()
 	}
 
 	// Buffer that contains queued debug draw commands
-	m_queuedCommandsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd));
+	m_queuedCommandsBuffer.reset(RenderBackend12::CreateNewBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FDebugDrawCmd)));
 
 	// Indirect draw buffers
-	m_indirectPrimitiveArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex);
-	m_indirectPrimitiveCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex);
-	m_indirectLineArgsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex);
-	m_indirectLineCountsBuffer = RenderBackend12::CreateBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex);
+	m_indirectPrimitiveArgsBuffer.reset(RenderBackend12::CreateNewBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex));
+	m_indirectPrimitiveCountsBuffer.reset(RenderBackend12::CreateNewBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex));
+	m_indirectLineArgsBuffer.reset(RenderBackend12::CreateNewBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex));
+	m_indirectLineCountsBuffer.reset(RenderBackend12::CreateNewBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Committed, sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex));
 }
 
 void FDebugDraw::DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
@@ -564,7 +564,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				uint32_t debugDrawCount;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
 				L"debug_drawcall_gen_cb",
 				sizeof(Constants),
 				cmdList->GetFence(),
@@ -573,7 +573,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->queuedCommandsBufferIndex = m_queuedCommandsBuffer->m_srvIndex;
 					cb->debugDrawCount = (uint32_t)numCommands;
-				});
+				}) };
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -614,7 +614,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				int debugPrimitivesIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(),
@@ -625,7 +625,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 					cbDest->debugMeshAccessorsIndex = m_packedMeshAccessors->m_srvIndex;
 					cbDest->debugMeshBufferViewsIndex = m_packedMeshBufferViews->m_srvIndex;
 					cbDest->debugPrimitivesIndex = m_packedPrimitives->m_srvIndex;
-				});
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -635,7 +635,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix viewProjTransform;
 			};
 
-			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(),
@@ -643,7 +643,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
-				});
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -759,7 +759,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix sceneRotation;
 			};
 
-			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(),
@@ -767,7 +767,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
-				});
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -777,7 +777,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix viewProjTransform;
 			};
 
-			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(),
@@ -785,7 +785,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
-				});
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -936,19 +936,19 @@ void Renderer::Render(const FRenderState& renderState)
 	// These resources need to be kept alive until all the render jobs have finished and joined
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-	std::unique_ptr<FShaderSurface> hdrRasterSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true);
-	std::unique_ptr<FShaderSurface> depthBuffer = RenderBackend12::CreateSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY);
-	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor = RenderBackend12::CreateSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true);
-	std::unique_ptr<FShaderSurface> visBuffer = RenderBackend12::CreateSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY);
-	std::unique_ptr<FShaderSurface> gbuffer_basecolor = RenderBackend12::CreateSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FShaderSurface> gbuffer_normals = RenderBackend12::CreateSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1);
-	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo = RenderBackend12::CreateSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1);
-	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs = RenderBackend12::CreateBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(FIndirectDrawWithRootConstants));
-	std::unique_ptr<FShaderBuffer> batchArgsBuffer = RenderBackend12::CreateBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, totalPrimitives * sizeof(FIndirectDrawWithRootConstants));
-	std::unique_ptr<FShaderBuffer> batchCountsBuffer = RenderBackend12::CreateBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
-	std::unique_ptr<FShaderBuffer> culledLightCountBuffer = RenderBackend12::CreateBuffer(L"culled_light_count", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true);
-	std::unique_ptr<FShaderBuffer> culledLightListsBuffer = RenderBackend12::CreateBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true);
-	std::unique_ptr<FShaderBuffer> lightGridBuffer = RenderBackend12::CreateBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)); // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
+	std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, hdrFormat, resX, resY, 1, 1, 1, 1, true, true) };
+	std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
+	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewSurface(L"hdr_scene_color_rt", SurfaceType::UAV, DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
+	std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, visBufferFormat, resX, resY) };
+	std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+	std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1) };
+	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(FIndirectDrawWithRootConstants)) };
+	std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
+	std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true) };
+	std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewBuffer(L"culled_light_count", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, sizeof(uint32_t), true) };
+	std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true) };
+	std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocationType::Pooled, 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)) }; // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -959,7 +959,7 @@ void Renderer::Render(const FRenderState& renderState)
 		const size_t bufferSize = renderState.m_scene->m_globalLightList.size() * sizeof(FLight);
 		FResourceUploadContext uploader{ bufferSize };
 
-		packedLightPropertiesBuffer = RenderBackend12::CreateBuffer(
+		packedLightPropertiesBuffer.reset(RenderBackend12::CreateNewBuffer(
 			L"light_properties_buffer",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
@@ -967,7 +967,7 @@ void Renderer::Render(const FRenderState& renderState)
 			bufferSize,
 			false,
 			(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
-			&uploader);
+			&uploader));
 
 		
 		uploader.SubmitUploads(cmdList);
@@ -981,7 +981,7 @@ void Renderer::Render(const FRenderState& renderState)
 		const size_t bufferSize = sceneLightCount * sizeof(Matrix);
 		FResourceUploadContext uploader{ bufferSize };
 
-		packedLightTransformsBuffer = RenderBackend12::CreateBuffer(
+		packedLightTransformsBuffer.reset(RenderBackend12::CreateNewBuffer(
 			L"scene_light_transforms",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
@@ -989,7 +989,7 @@ void Renderer::Render(const FRenderState& renderState)
 			bufferSize,
 			false,
 			(const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),
-			&uploader);
+			&uploader));
 
 		uploader.SubmitUploads(cmdList);
 	}
@@ -998,7 +998,7 @@ void Renderer::Render(const FRenderState& renderState)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	// Scene Constants
-	std::unique_ptr<FUploadBuffer> cbSceneConstants = RenderBackend12::CreateUploadBuffer(
+	std::unique_ptr<FUploadBuffer> cbSceneConstants{ RenderBackend12::CreateNewUploadBuffer(
 		L"scene_constants_cb",
 		sizeof(FSceneConstants),
 		RenderBackend12::GetCurrentFrameFence(),
@@ -1027,12 +1027,12 @@ void Renderer::Render(const FRenderState& renderState)
 			cb->m_skylightProbeIndex = scene->m_skylight.m_shTextureIndex;
 			cb->m_envBrdfTextureIndex = s_envBRDF->m_srvIndex;
 			cb->m_sunIndex = scene->GetDirectionalLight();
-		});
+		}) };
 
 	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 	// View Constants
-	std::unique_ptr<FUploadBuffer> cbViewConstants = RenderBackend12::CreateUploadBuffer(
+	std::unique_ptr<FUploadBuffer> cbViewConstants{ RenderBackend12::CreateNewUploadBuffer(
 		L"view_constants_cb",
 		sizeof(FViewConstants),
 		RenderBackend12::GetCurrentFrameFence(),
@@ -1065,7 +1065,7 @@ void Renderer::Render(const FRenderState& renderState)
 			cb->m_mouseX = renderState.m_mouseX;
 			cb->m_mouseY = renderState.m_mouseY;
 			cb->m_viewmode = config.Viewmode;
-		});
+		}) };
 
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.

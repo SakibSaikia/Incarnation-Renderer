@@ -86,7 +86,7 @@ namespace RenderJob
 				Matrix invViewProjTransform;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
 				L"light_cull_cb",
 				sizeof(Constants),
 				cmdList->GetFence(),
@@ -107,7 +107,7 @@ namespace RenderJob
 					cb->cameraNearPlane = passDesc.renderConfig.CameraNearPlane;
 					cb->projTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
-				});
+				}) };
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 

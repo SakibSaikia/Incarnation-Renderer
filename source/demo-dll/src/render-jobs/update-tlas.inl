@@ -42,14 +42,14 @@ namespace RenderJob
 			}
 
 			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-			auto instanceDescBuffer = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> instanceDescBuffer{ RenderBackend12::CreateNewUploadBuffer(
 				L"instance_descs_buffer",
 				instanceDescBufferSize,
 				cmdList->GetFence(),
 				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 				{
 					memcpy(pDest, pData, instanceDescBufferSize);
-				});
+				}) };
 
 			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
 			tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
@@ -62,12 +62,12 @@ namespace RenderJob
 			RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
 			// TLAS scratch buffer
-			auto tlasScratch = RenderBackend12::CreateBuffer(
+			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewBuffer(
 				L"tlas_scratch",
 				BufferType::AccelerationStructure,
 				ResourceAccessMode::GpuWriteOnly,
 				ResourceAllocationType::Pooled,
-				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes));
+				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 			// Build TLAS
 			scene->m_tlas->m_resource->UavBarrier(cmdList);

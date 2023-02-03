@@ -30,7 +30,7 @@ namespace RenderJob
 
 			// Vertex Buffer
 			{
-				std::unique_ptr<FUploadBuffer> vtxBuffer = RenderBackend12::CreateUploadBuffer(
+				std::unique_ptr<FUploadBuffer> vtxBuffer{ RenderBackend12::CreateNewUploadBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
 					cmdList->GetFence(),
@@ -43,7 +43,7 @@ namespace RenderJob
 						memcpy(vbDest, imguiCL->VtxBuffer.Data, imguiCL->VtxBuffer.Size * sizeof(ImDrawVert));
 						vbDest += imguiCL->VtxBuffer.Size;
 					}
-				});
+				}) };
 
 				D3D12_VERTEX_BUFFER_VIEW vbDescriptor = {};
 				vbDescriptor.BufferLocation = vtxBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
@@ -54,7 +54,7 @@ namespace RenderJob
 
 			// Index Buffer
 			{
-				std::unique_ptr<FUploadBuffer> idxBuffer = RenderBackend12::CreateUploadBuffer(
+				std::unique_ptr<FUploadBuffer> idxBuffer{ RenderBackend12::CreateNewUploadBuffer(
 					L"imgui_ib",
 					idxBufferSize,
 					cmdList->GetFence(),
@@ -67,7 +67,7 @@ namespace RenderJob
 						memcpy(ibDest, imguiCL->IdxBuffer.Data, imguiCL->IdxBuffer.Size * sizeof(ImDrawIdx));
 						ibDest += imguiCL->IdxBuffer.Size;
 					}
-				});
+				}) };
 
 				D3D12_INDEX_BUFFER_VIEW ibDescriptor = {};
 				ibDescriptor.BufferLocation = idxBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();

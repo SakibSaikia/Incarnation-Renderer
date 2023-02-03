@@ -412,7 +412,7 @@ namespace RenderBackend12
 	uint32_t GetLaneCount();
 
 	// Resource Management
-	std::unique_ptr<FShaderSurface> CreateSurface(
+	FShaderSurface* CreateNewSurface(
 		const std::wstring& name,
 		const uint32_t surfaceType,
 		const DXGI_FORMAT format,
@@ -425,7 +425,7 @@ namespace RenderBackend12
 		const bool bCreateSRV = true,
 		const bool bCreateNonShaderVisibleDescriptors = false);
 
-	std::unique_ptr<FTexture> CreateTexture(
+	FTexture* CreateNewTexture(
 		const std::wstring& name, 
 		const TextureType type,
 		const DXGI_FORMAT format,
@@ -443,7 +443,7 @@ namespace RenderBackend12
 		const D3D12_TEXTURE_ADDRESS_MODE addressV,
 		const D3D12_TEXTURE_ADDRESS_MODE addressW);
 
-	std::unique_ptr<FShaderBuffer> CreateBuffer(
+	FShaderBuffer* CreateNewBuffer(
 		const std::wstring& name,
 		const BufferType type,
 		const ResourceAccessMode accessMode,
@@ -456,7 +456,7 @@ namespace RenderBackend12
 		const int fixedSrvIndex = -1								// Use provided SRV index instead of fetching one from bindless descriptor pool
 		);
 
-	std::unique_ptr<FUploadBuffer> CreateUploadBuffer(
+	FUploadBuffer* CreateNewUploadBuffer(
 		const std::wstring& name,
 		const size_t size,
 		const FFenceMarker retireFence,								// Fence marker that decides whether the buffer is ready to be released. This is usually the fence for the associated command list that uses this buffer.

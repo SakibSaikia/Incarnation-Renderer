@@ -132,7 +132,7 @@ namespace RenderJob
 				Vector3 sunDir;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
 				L"dynamic_sky_cb",
 				sizeof(Constants),
 				cmdList->GetFence(),
@@ -150,8 +150,8 @@ namespace RenderJob
 					cb->perez = perezConstants;
 					cb->turbidity = passDesc.renderConfig.Turbidity;
 					cb->sunDir = L;
-					
-				});
+
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);

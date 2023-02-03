@@ -71,7 +71,7 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
 				L"taa_cb",
 				sizeof(TaaConstants),
 				cmdList->GetFence(),
@@ -88,7 +88,7 @@ namespace RenderJob
 					cb->resY = passDesc.resY;
 					cb->historyIndex = passDesc.historyIndex;
 					cb->exposure = passDesc.renderConfig.Exposure;
-				});
+				}) };
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 

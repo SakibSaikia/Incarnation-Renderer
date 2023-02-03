@@ -77,18 +77,18 @@ namespace RenderJob
 
 			// Raygen shader table
 			const size_t raygenShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FUploadBuffer> raygenShaderTable = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> raygenShaderTable{ RenderBackend12::CreateNewUploadBuffer(
 				L"raygen_sbt",
 				1 * raygenShaderRecordSize,
 				cmdList->GetFence(),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-				});
+				}) };
 
 			// Miss shader table
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FUploadBuffer> missShaderTable = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> missShaderTable{ RenderBackend12::CreateNewUploadBuffer(
 				L"miss_sbt",
 				3 * missShaderRecordSize,
 				cmdList->GetFence(),
@@ -97,11 +97,11 @@ namespace RenderJob
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msDynamicSky"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					memcpy(pDest + 2 * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msShadow"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-				});
+				}) };
 
 			// Hit shader table
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FUploadBuffer> hitGroupShaderTable = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewUploadBuffer(
 				L"hit_sbt",
 				2 * hitGroupShaderRecordSize,
 				cmdList->GetFence(),
@@ -109,7 +109,7 @@ namespace RenderJob
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"k_shadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-				});
+				}) };
 
 			// Descriptor heaps
 			D3DDescriptorHeap_t* descriptorHeaps[] =
@@ -158,7 +158,7 @@ namespace RenderJob
 				Vector3 sunDir;
 			};
 
-			std::unique_ptr<FUploadBuffer> globalCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> globalCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"global_cb",
 				sizeof(GlobalCbLayout),
 				cmdList->GetFence(),
@@ -200,7 +200,7 @@ namespace RenderJob
 					cbDest->perez = perezConstants;
 					cbDest->turbidity = passDesc.renderConfig.Turbidity;
 					cbDest->sunDir = Vector3(L);
-				});
+				}) };
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->SetComputeRootShaderResourceView(1, passDesc.scene->m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress());

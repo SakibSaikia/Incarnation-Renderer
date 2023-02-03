@@ -2372,7 +2372,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 	return descriptor;
 }
 
-std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
+FUploadBuffer* RenderBackend12::CreateNewUploadBuffer(
 	const std::wstring& name,
 	const size_t sizeInBytes,
 	const FFenceMarker retireFence,
@@ -2396,14 +2396,14 @@ std::unique_ptr<FUploadBuffer> RenderBackend12::CreateUploadBuffer(
 		buffer->m_d3dResource->Unmap(0, nullptr);
 	}
 
-	auto tempBuffer = std::make_unique<FUploadBuffer>();
-	tempBuffer->m_resource = buffer;
-	tempBuffer->m_fenceMarker = retireFence;
+	auto newBuffer = new FUploadBuffer;
+	newBuffer->m_resource = buffer;
+	newBuffer->m_fenceMarker = retireFence;
 
-	return std::move(tempBuffer);
+	return newBuffer;
 }
 
-std::unique_ptr<FShaderSurface> RenderBackend12::CreateSurface(
+FShaderSurface* RenderBackend12::CreateNewSurface(
 	const std::wstring& name,
 	const uint32_t surfaceType,
 	const DXGI_FORMAT format,
@@ -2646,18 +2646,18 @@ std::unique_ptr<FShaderSurface> RenderBackend12::CreateSurface(
 		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
 
-	auto surface = std::make_unique<FShaderSurface>();
-	surface->m_type = surfaceType;
-	surface->m_resource = resource;
-	surface->m_renderTextureIndices = std::move(renderTextureDescriptorIndices);
-	surface->m_uavIndices = std::move(uavDescriptorIndices);
-	surface->m_nonShaderVisibleUavIndices = std::move(nonShaderVisibleUavIndices);
-	surface->m_srvIndex = srvIndex;
+	auto newSurface = new FShaderSurface;
+	newSurface->m_type = surfaceType;
+	newSurface->m_resource = resource;
+	newSurface->m_renderTextureIndices = std::move(renderTextureDescriptorIndices);
+	newSurface->m_uavIndices = std::move(uavDescriptorIndices);
+	newSurface->m_nonShaderVisibleUavIndices = std::move(nonShaderVisibleUavIndices);
+	newSurface->m_srvIndex = srvIndex;
 
-	return std::move(surface);
+	return newSurface;
 }
 
-std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
+FTexture* RenderBackend12::CreateNewTexture(
 	const std::wstring& name,
 	const TextureType type,
 	const DXGI_FORMAT format,
@@ -2670,7 +2670,7 @@ std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
 	FResourceUploadContext* uploadContext)
 {
 	SCOPED_CPU_EVENT("create_texture", PIX_COLOR_DEFAULT);
-	auto newTexture = std::make_unique<FTexture>();
+	FTexture* newTexture = new FTexture;
 
 	// Create resource
 	{
@@ -2717,9 +2717,9 @@ std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
 		uploadContext->UpdateSubresources(
 			newTexture->m_resource,
 			srcData,
-			[texture = newTexture.get(), resourceState](FCommandList* cmdList)
+			[newTexture, resourceState](FCommandList* cmdList)
 			{
-				texture->m_resource->Transition(cmdList, texture->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				newTexture->m_resource->Transition(cmdList, newTexture->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
 			});
 	}
 
@@ -2766,10 +2766,10 @@ std::unique_ptr<FTexture> RenderBackend12::CreateTexture(
 		DebugAssert(false, "Not Implemented");
 	}
 
-	return std::move(newTexture);
+	return newTexture;
 }
 
-std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
+FShaderBuffer* RenderBackend12::CreateNewBuffer(
 	const std::wstring& name,
 	const BufferType type,
 	const ResourceAccessMode accessMode,
@@ -2915,15 +2915,15 @@ std::unique_ptr<FShaderBuffer> RenderBackend12::CreateBuffer(
 		}
 	}
 
-	auto buffer = std::make_unique<FShaderBuffer>();
-	buffer->m_accessMode = accessMode;
-	buffer->m_allocType = allocType;
-	buffer->m_resource = resource;
-	buffer->m_uavIndex = uavIndex;
-	buffer->m_nonShaderVisibleUavIndex = nonShaderVisibleUavIndex;
-	buffer->m_srvIndex = srvIndex;
+	auto newBuffer = new FShaderBuffer;
+	newBuffer->m_accessMode = accessMode;
+	newBuffer->m_allocType = allocType;
+	newBuffer->m_resource = resource;
+	newBuffer->m_uavIndex = uavIndex;
+	newBuffer->m_nonShaderVisibleUavIndex = nonShaderVisibleUavIndex;
+	newBuffer->m_srvIndex = srvIndex;
 
-	return std::move(buffer);
+	return newBuffer;
 }
 
 uint32_t RenderBackend12::CreateSampler(

@@ -61,7 +61,7 @@ namespace RenderJob
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> frameCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(),
@@ -81,7 +81,7 @@ namespace RenderJob
 					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
-				});
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -94,7 +94,7 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FUploadBuffer> viewCb = RenderBackend12::CreateUploadBuffer(
+			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(),
@@ -105,7 +105,7 @@ namespace RenderJob
 					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 					cbDest->eyePos = passDesc.view->m_position;
 					cbDest->exposure = passDesc.renderConfig.Exposure;
-				});
+				}) };
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
