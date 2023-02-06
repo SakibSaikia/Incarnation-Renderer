@@ -2082,7 +2082,7 @@ void FScene::Clear()
 	m_packedMeshAccessors.reset(nullptr);
 	m_packedMaterials.reset(nullptr);
 	m_tlas.reset(nullptr);
-	m_dynamicSkyEnvmap.reset(nullptr);
+	m_dynamicSkyEnvmap.reset();
 	m_dynamicSkySH.reset(nullptr);
 }
 
@@ -2167,7 +2167,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	const int numSHCoefficients = 9;
 	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
 	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
-	m_dynamicSkyEnvmap.reset(RenderBackend12::CreateNewSurface(L"dynamic_sky_envmap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6));
+	std::shared_ptr<FShaderSurface> newEnvmap { RenderBackend12::CreateNewSurface(L"dynamic_sky_envmap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
 	m_dynamicSkySH.reset(RenderBackend12::CreateNewSurface(L"dynamic_sky_SH", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1));
 
 	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -2210,7 +2210,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Prefilter the cubemap
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, m_dynamicSkyEnvmap->m_uavIndices, cubemapRes, 1, numMips);
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, newEnvmap->m_uavIndices, cubemapRes, 1, numMips);
 
 		RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
 	}
@@ -2219,8 +2219,9 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	concurrency::create_task([fence = cmdList->GetFence()]()
 	{
 		fence.BlockingWait();
-	}).then([this]()
+	}).then([this, newEnvmap]() mutable
 	{
+		m_dynamicSkyEnvmap = newEnvmap;
 		m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_srvIndex;
 	});
 }

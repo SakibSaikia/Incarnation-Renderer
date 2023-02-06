@@ -122,8 +122,8 @@ struct FScene : public FModelLoader
 
 	// Sky
 	FLightProbe m_skylight;
-	std::unique_ptr<FShaderSurface> m_dynamicSkySH;
-	std::unique_ptr<FShaderSurface> m_dynamicSkyEnvmap;
+	std::unique_ptr<FShaderSurface> m_dynamicSkySH = nullptr;
+	std::shared_ptr<FShaderSurface> m_dynamicSkyEnvmap = nullptr;
 
 	// Sun Dir
 	Vector3 m_sunDir = { 1, 0.1, 1};
