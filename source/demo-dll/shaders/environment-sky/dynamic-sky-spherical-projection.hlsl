@@ -43,6 +43,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		float3 dir = Polar2Rect(theta, phi, true);
 
 		RWTexture2D<float4> dest = ResourceDescriptorHeap[g_uavIndex];
-		dest[dispatchThreadId.xy].rgb = 1000 * CalculateSkyRadianceRGB(g_sunDir, normalize(dir), g_turbidity, g_perezConstants);
+		dest[dispatchThreadId.xy].rgb = 0.04f * CalculateSkyRadianceRGB(g_sunDir, normalize(dir), g_turbidity, g_perezConstants);
 	}
 }

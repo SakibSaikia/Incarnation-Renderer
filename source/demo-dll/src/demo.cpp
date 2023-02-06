@@ -445,6 +445,7 @@ void Demo::UpdateUI(float deltaTime)
 	const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
 	bool bResetPathtracelAccumulation = false;
+	bool bUpdateSkylight = false;
 
 	ImGui::SetNextWindowPos(ImVec2(0.8f * viewport->WorkSize.x,0), ImGuiCond_Always);
 	ImGui::SetNextWindowSize(ImVec2(0.2f * viewport->WorkSize.x, viewport->WorkSize.y), ImGuiCond_Always);
@@ -508,6 +509,7 @@ void Demo::UpdateUI(float deltaTime)
 					ImGui::SameLine();
 					ImGui::RadioButton("Dynamic Sky", &s_globalConfig.EnvSkyMode, (int)EnvSkyMode::DynamicSky);
 					bResetPathtracelAccumulation |= (s_globalConfig.EnvSkyMode != currentSkyMode);
+					bUpdateSkylight |= (currentSkyMode == (int)EnvSkyMode::Environmentmap) && (s_globalConfig.EnvSkyMode == (int)EnvSkyMode::DynamicSky);
 
 
 					// ----------------------------------------------------------
@@ -653,7 +655,11 @@ void Demo::UpdateUI(float deltaTime)
 			{
 				bResetPathtracelAccumulation = true;
 				s_scene.UpdateSunDirection();
-				s_scene.UpdateDynamicSky(true);
+
+				if (s_globalConfig.EnvSkyMode == (int)EnvSkyMode::DynamicSky)
+				{
+					bUpdateSkylight = true;
+				}
 			}
 		}
 
@@ -737,6 +743,11 @@ void Demo::UpdateUI(float deltaTime)
 	if (bResetPathtracelAccumulation)
 	{
 		Renderer::ResetPathtraceAccumulation();
+	}
+
+	if (bUpdateSkylight)
+	{
+		s_scene.UpdateDynamicSky(true);
 	}
 }
 
@@ -955,9 +966,12 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
-	m_skylight = Demo::s_textureCache.CacheHDRI(filename);
-	m_environmentFilename = filename;
-	FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
+	if (Demo::s_globalConfig.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
+	{
+		m_skylight = Demo::s_textureCache.CacheHDRI(filename);
+		m_environmentFilename = filename;
+		FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
+	}
 }
 
 void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
