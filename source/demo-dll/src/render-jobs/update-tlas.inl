@@ -45,7 +45,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> instanceDescBuffer{ RenderBackend12::CreateNewUploadBuffer(
 				L"instance_descs_buffer",
 				instanceDescBufferSize,
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 				{
 					memcpy(pDest, pData, instanceDescBufferSize);

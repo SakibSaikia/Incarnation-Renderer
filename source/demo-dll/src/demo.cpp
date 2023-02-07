@@ -1449,7 +1449,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		std::unique_ptr<FUploadBuffer> instanceDescBuffer{ RenderBackend12::CreateNewUploadBuffer(
 			L"instance_descs_buffer",
 			instanceDescBufferSize,
-			cmdList->GetFence(),
+			cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 			[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 			{
 				memcpy(pDest, pData, instanceDescBufferSize);
@@ -1918,7 +1918,8 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	metallicRoughnessFilterUav->m_resource->Transition(cmdList, metallicRoughnessFilterUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COMMON);
 
 	// Execute CL
-	FFenceMarker fenceMarker = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	FFenceMarker completionFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
 
 	// Initialize destination textures where the filtered results will be copied
 	int normalmapSrvIndex = (int) Demo::s_textureCache.CacheEmptyTexture2D(s2ws(normalmap.uri), normalmapCompressionFormat, normalmap.width, normalmap.height, normalmapMipCount);
@@ -1926,10 +1927,10 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 
 	// Copy back normal texture and compress
 	auto normalmapReadbackContext = std::make_shared<FResourceReadbackContext>(normalmapFilterUav->m_resource);
-	FFenceMarker normalmapStageCompleteMarker = normalmapReadbackContext->StageSubresources(fenceMarker);
+	FFenceMarker normalmapStageCompleteMarker = normalmapReadbackContext->StageSubresources(completionFence);
 	auto normalmapProcessingJob = concurrency::create_task([normalmapStageCompleteMarker, this]()
 	{
-		normalmapStageCompleteMarker.BlockingWait();
+		normalmapStageCompleteMarker.Wait();
 	}).then([
 		normalmapReadbackContext, 
 		width = normalmap.width, 
@@ -1946,10 +1947,10 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 
 	// Copy back metallic-roughness texture and compress
 	auto metallicRoughnessReadbackContext = std::make_shared<FResourceReadbackContext>(metallicRoughnessFilterUav->m_resource);
-	FFenceMarker metallicRoughnessStageCompleteMarker = metallicRoughnessReadbackContext->StageSubresources(fenceMarker);
+	FFenceMarker metallicRoughnessStageCompleteMarker = metallicRoughnessReadbackContext->StageSubresources(completionFence);
 	auto metallicRoughnessProcessingJob = concurrency::create_task([metallicRoughnessStageCompleteMarker, this]()
 	{
-		metallicRoughnessStageCompleteMarker.BlockingWait();
+		metallicRoughnessStageCompleteMarker.Wait();
 	}).then([
 		metallicRoughnessReadbackContext,
 		width = metallicRoughnessmap.width,
@@ -2230,9 +2231,9 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	}
 
 	// Update reference when the update is complete on the GPU
-	concurrency::create_task([fence = cmdList->GetFence()]()
+	concurrency::create_task([cmdList]()
 	{
-		fence.BlockingWait();
+		cmdList->GetFence(FCommandList::FenceType::GpuFinish).Wait();
 	}).then([this, newEnvmap]() mutable
 	{
 		m_dynamicSkyEnvmap = newEnvmap;

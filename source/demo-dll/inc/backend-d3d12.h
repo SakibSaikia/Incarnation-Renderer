@@ -130,31 +130,38 @@ struct FFenceMarker
 	FFenceMarker(D3DFence_t* fence, const size_t value) :
 		m_fence{ fence }, m_value{ value }{}
 
-	void BlockingWait() const
-	{
-		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-		if (event)
-		{
-			m_fence->SetEventOnCompletion(m_value, event);
-			WaitForSingleObject(event, INFINITE);
-		}
-	}
+	// CPU sync
+	void Signal() const;
+	void Wait() const;
+
+	// GPU sync
+	void Signal(D3DCommandQueue_t* cmdQueue) const;
+	void Wait(D3DCommandQueue_t* cmdQueue) const;
 };
 
 struct FCommandList
 {
+	typedef
+	enum FenceType
+	{
+		CpuSubmission,
+		GpuBegin,
+		GpuFinish
+	};
+
 	D3D12_COMMAND_LIST_TYPE m_type;
 	std::wstring m_name;
-	size_t m_fenceValue;
+	size_t m_fenceValues[3];
 	winrt::com_ptr<D3DCommandList_t> m_d3dCmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
-	winrt::com_ptr<D3DFence_t> m_fence;
+	winrt::com_ptr<D3DFence_t> m_fence[3];
 	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
 
 	FCommandList() = default;
-	FCommandList(const D3D12_COMMAND_LIST_TYPE type, const size_t  fenceValue);
+	FCommandList(const D3D12_COMMAND_LIST_TYPE type);
+	void ResetFence(const size_t fenceValue);
 	void SetName(const std::wstring& name);
-	FFenceMarker GetFence() const;
+	FFenceMarker GetFence(const FenceType) const;
 };
 
 // Saves the capture to a file named PIXGpuCapture.wpix in the binaries directory
@@ -294,7 +301,7 @@ public:
 		const std::vector<D3D12_SUBRESOURCE_DATA>& srcData,
 		std::function<void(FCommandList*)> transition);
 
-	FFenceMarker SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent = nullptr);
+	void SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent = nullptr);
 
 private:
 	FResource* m_uploadBuffer;
@@ -377,7 +384,7 @@ namespace RenderBackend12
 
 	// Command Lists
 	FCommandList* FetchCommandlist(const std::wstring& name, const D3D12_COMMAND_LIST_TYPE type);
-	FFenceMarker ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
+	void ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQueueType, std::vector<FCommandList*> commandLists);
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures

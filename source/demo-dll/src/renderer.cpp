@@ -567,7 +567,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
 				L"debug_drawcall_gen_cb",
 				sizeof(Constants),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[&](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
@@ -617,7 +617,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -638,7 +638,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -762,7 +762,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"frame_cb",
 				sizeof(FrameCbLayout),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -780,7 +780,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"view_cb",
 				sizeof(ViewCbLayout),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -895,7 +895,8 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			clearValue, 0, nullptr);
 	}
 
-	flushCompleteFence = RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	flushCompleteFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
 }
 
 void Renderer::Teardown()
@@ -1357,7 +1358,7 @@ void Renderer::Render(const FRenderState& renderState)
 	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(s_jobSync->GetCpuFence());
 	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
 	{
-			readbackCompleteCompleteMarker.BlockingWait();
+			readbackCompleteCompleteMarker.Wait();
 	}).then([renderStatsReadbackContext]()
 		{
 			s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStats>();

@@ -89,7 +89,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
 				L"light_cull_cb",
 				sizeof(Constants),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);

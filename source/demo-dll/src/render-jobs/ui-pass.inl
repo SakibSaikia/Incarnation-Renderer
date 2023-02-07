@@ -33,7 +33,7 @@ namespace RenderJob
 				std::unique_ptr<FUploadBuffer> vtxBuffer{ RenderBackend12::CreateNewUploadBuffer(
 					L"imgui_vb",
 					vtxBufferSize,
-					cmdList->GetFence(),
+					cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 					[drawData](uint8_t* pDest)
 				{
 					ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
@@ -57,7 +57,7 @@ namespace RenderJob
 				std::unique_ptr<FUploadBuffer> idxBuffer{ RenderBackend12::CreateNewUploadBuffer(
 					L"imgui_ib",
 					idxBufferSize,
-					cmdList->GetFence(),
+					cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 					[drawData](uint8_t* pDest)
 				{
 					ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);

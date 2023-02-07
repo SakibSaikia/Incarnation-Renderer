@@ -80,7 +80,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> raygenShaderTable{ RenderBackend12::CreateNewUploadBuffer(
 				L"raygen_sbt",
 				1 * raygenShaderRecordSize,
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -91,7 +91,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> missShaderTable{ RenderBackend12::CreateNewUploadBuffer(
 				L"miss_sbt",
 				3 * missShaderRecordSize,
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -104,7 +104,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewUploadBuffer(
 				L"hit_sbt",
 				2 * hitGroupShaderRecordSize,
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -161,7 +161,7 @@ namespace RenderJob
 			std::unique_ptr<FUploadBuffer> globalCb{ RenderBackend12::CreateNewUploadBuffer(
 				L"global_cb",
 				sizeof(GlobalCbLayout),
-				cmdList->GetFence(),
+				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
