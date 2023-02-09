@@ -34,7 +34,7 @@ namespace RenderJob
 					L"imgui_vb",
 					ResourceAccessMode::CpuWriteOnly,
 					vtxBufferSize,
-					cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+					cmdList->GetFence(SyncFence::GpuFinish),
 					[drawData](uint8_t* pDest)
 				{
 					ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
@@ -59,7 +59,7 @@ namespace RenderJob
 					L"imgui_ib",
 					ResourceAccessMode::CpuWriteOnly,
 					idxBufferSize,
-					cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+					cmdList->GetFence(SyncFence::GpuFinish),
 					[drawData](uint8_t* pDest)
 				{
 					ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);

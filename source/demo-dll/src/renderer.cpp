@@ -137,7 +137,7 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", SurfaceType::UAV, ResourceAllocation::Pooled(cmdList->GetFence(FCommandList::FenceType::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
+	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", SurfaceType::UAV, ResourceAllocation::Pooled(cmdList->GetFence(SyncFence::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
 
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
@@ -592,7 +592,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"debug_drawcall_gen_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+				cmdList->GetFence(SyncFence::GpuFinish),
 				[&](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
@@ -643,7 +643,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"frame_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
-				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+				cmdList->GetFence(SyncFence::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -665,7 +665,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"view_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
-				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+				cmdList->GetFence(SyncFence::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -790,7 +790,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"frame_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
-				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+				cmdList->GetFence(SyncFence::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -809,7 +809,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"view_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
-				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+				cmdList->GetFence(SyncFence::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -925,7 +925,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 	}
 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-	flushCompleteFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+	flushCompleteFence = cmdList->GetFence(SyncFence::GpuFinish);
 }
 
 void Renderer::Teardown()

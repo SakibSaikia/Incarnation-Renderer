@@ -124,6 +124,13 @@ enum class ResourceAccessMode
 	CpuReadOnly,	// Readback resources
 };
 
+enum class SyncFence
+{
+	CpuSubmission,
+	GpuBegin,
+	GpuFinish
+};
+
 struct FFenceMarker
 {
 	D3DFence_t* m_fence;
@@ -163,14 +170,6 @@ struct ResourceAllocation
 
 struct FCommandList
 {
-	typedef
-	enum FenceType
-	{
-		CpuSubmission,
-		GpuBegin,
-		GpuFinish
-	};
-
 	D3D12_COMMAND_LIST_TYPE m_type;
 	std::wstring m_name;
 	size_t m_fenceValues[3];
@@ -183,7 +182,7 @@ struct FCommandList
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type);
 	void ResetFence(const size_t fenceValue);
 	void SetName(const std::wstring& name);
-	FFenceMarker GetFence(const FenceType) const;
+	FFenceMarker GetFence(const SyncFence type) const;
 };
 
 // Saves the capture to a file named PIXGpuCapture.wpix in the binaries directory

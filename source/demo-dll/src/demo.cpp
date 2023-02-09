@@ -1297,7 +1297,7 @@ void FScene::CreateGpuLightBuffers()
 void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"create_acceleration_structure", D3D12_COMMAND_LIST_TYPE_DIRECT);
-	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+	FFenceMarker gpuFinishFence = cmdList->GetFence(SyncFence::GpuFinish);
 
 	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
 	for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
@@ -1813,7 +1813,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	metallicRoughnessScratch.InitializeFromImage(metallicRoughnessImage);
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"prefilter_normal_roughness", D3D12_COMMAND_LIST_TYPE_DIRECT);
-	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+	FFenceMarker gpuFinishFence = cmdList->GetFence(SyncFence::GpuFinish);
 
 	// Create source textures
 	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
@@ -1901,7 +1901,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 
 	// Execute CL
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-	FFenceMarker completionFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+	FFenceMarker completionFence = cmdList->GetFence(SyncFence::GpuFinish);
 
 	// Initialize destination textures where the filtered results will be copied
 	int normalmapSrvIndex = (int) Demo::s_textureCache.CacheEmptyTexture2D(s2ws(normalmap.uri), normalmapCompressionFormat, normalmap.width, normalmap.height, normalmapMipCount);
@@ -2163,7 +2163,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 {
 	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", cmdListType);
-	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+	FFenceMarker gpuFinishFence = cmdList->GetFence(SyncFence::GpuFinish);
 
 	const int numSHCoefficients = 9;
 	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
@@ -2565,7 +2565,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
-		FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+		FFenceMarker gpuFinishFence = cmdList->GetFence(SyncFence::GpuFinish);
 
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "hdr_preprocess", 0);

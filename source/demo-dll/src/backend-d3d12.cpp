@@ -412,7 +412,7 @@ bool operator==(const D3D12_RESOURCE_DESC& lhs, const D3D12_RESOURCE_DESC& rhs)
 //														Programmatic Captures
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 FScopedGpuCapture::FScopedGpuCapture(FCommandList* cl) :
-	m_waitFence{ cl->GetFence(FCommandList::FenceType::CpuSubmission) }
+	m_waitFence{ cl->GetFence(SyncFence::CpuSubmission) }
 {
 	PIXCaptureParameters params = {};
 	params.GpuCaptureParameters.FileName = L"PIXGpuCapture.wpix";
@@ -508,7 +508,7 @@ public:
 	{
 		auto waitForFenceTask = concurrency::create_task([cmdList, this]()
 		{
-			cmdList->GetFence(FCommandList::FenceType::GpuFinish).Wait();
+			cmdList->GetFence(SyncFence::GpuFinish).Wait();
 		});
 
 		auto addToFreePool = [cmdList, this]()
@@ -566,17 +566,17 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type) :
 	AssertIfFailed(GetDevice()->CreateFence(
 		0,
 		D3D12_FENCE_FLAG_NONE,
-		IID_PPV_ARGS(m_fence[FenceType::CpuSubmission].put())));
+		IID_PPV_ARGS(m_fence[(uint32_t)SyncFence::CpuSubmission].put())));
 
 	AssertIfFailed(GetDevice()->CreateFence(
 		0,
 		D3D12_FENCE_FLAG_NONE,
-		IID_PPV_ARGS(m_fence[FenceType::GpuBegin].put())));
+		IID_PPV_ARGS(m_fence[(uint32_t)SyncFence::GpuBegin].put())));
 
 	AssertIfFailed(GetDevice()->CreateFence(
 		0,
 		D3D12_FENCE_FLAG_NONE,
-		IID_PPV_ARGS(m_fence[FenceType::GpuFinish].put())));
+		IID_PPV_ARGS(m_fence[(uint32_t)SyncFence::GpuFinish].put())));
 
 	// Start fence values at 1. All fences are trivially signalled at 0.
 	ResetFence(1);
@@ -584,7 +584,7 @@ FCommandList::FCommandList(const D3D12_COMMAND_LIST_TYPE type) :
 
 void FCommandList::ResetFence(const size_t fenceValue)
 {
-	m_fenceValues[FenceType::CpuSubmission] = m_fenceValues[FenceType::GpuBegin] = m_fenceValues[FenceType::GpuFinish] = fenceValue;
+	m_fenceValues[(uint32_t)SyncFence::CpuSubmission] = m_fenceValues[(uint32_t)SyncFence::GpuBegin] = m_fenceValues[(uint32_t)SyncFence::GpuFinish] = fenceValue;
 }
 
 void FCommandList::SetName(const std::wstring& name)
@@ -594,9 +594,9 @@ void FCommandList::SetName(const std::wstring& name)
 	m_cmdAllocator->SetName(name.c_str());
 }
 
-FFenceMarker FCommandList::GetFence(const FenceType type) const
+FFenceMarker FCommandList::GetFence(const SyncFence type) const
 {
-	return FFenceMarker{ m_fence[type].get(), m_fenceValues[type]};
+	return FFenceMarker{ m_fence[(uint32_t)type].get(), m_fenceValues[(uint32_t)type]};
 }
 
 #pragma endregion
@@ -759,7 +759,7 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 
 	m_copyCommandlist = FetchCommandlist(L"upload_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 
-	m_uploadBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"upload_context_buffer", ResourceAccessMode::CpuWriteOnly, m_sizeInBytes, m_copyCommandlist->GetFence(FCommandList::FenceType::GpuFinish)));
+	m_uploadBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"upload_context_buffer", ResourceAccessMode::CpuWriteOnly, m_sizeInBytes, m_copyCommandlist->GetFence(SyncFence::GpuFinish)));
 	m_uploadBuffer->m_resource->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
 }
 
@@ -860,7 +860,7 @@ void FResourceUploadContext::SubmitUploads(FCommandList* owningCL, FFenceMarker*
 	// Transition all the destination resources on the owning/direct CL since the copy CLs have limited transition capabilities
 	// Wait for the copy to finish before doing the transitions.
 	D3DCommandQueue_t* queue = owningCL->m_type == D3D12_COMMAND_LIST_TYPE_DIRECT ? GetGraphicsQueue() : GetComputeQueue();
-	FFenceMarker copyFinishFence = m_copyCommandlist->GetFence(FCommandList::FenceType::GpuFinish);
+	FFenceMarker copyFinishFence = m_copyCommandlist->GetFence(SyncFence::GpuFinish);
 	queue->Wait(copyFinishFence.m_fence, copyFinishFence.m_value);
 	for (auto& transitionCallback : m_pendingTransitions)
 	{
@@ -889,7 +889,7 @@ FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
 	readbackSizeInBytes = std::max<size_t>(readbackSizeInBytes, 256);
 
 	m_copyCommandlist = FetchCommandlist(L"readback_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
-	m_readbackBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"readback_context_buffer", ResourceAccessMode::CpuReadOnly, readbackSizeInBytes, m_copyCommandlist->GetFence(FCommandList::FenceType::GpuFinish)));
+	m_readbackBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"readback_context_buffer", ResourceAccessMode::CpuReadOnly, readbackSizeInBytes, m_copyCommandlist->GetFence(SyncFence::GpuFinish)));
 }
 
 FFenceMarker FResourceReadbackContext::StageSubresources(const FFenceMarker sourceReadyMarker)
@@ -935,7 +935,7 @@ FFenceMarker FResourceReadbackContext::StageSubresources(const FFenceMarker sour
 	}
 
 	ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_COPY, { m_copyCommandlist });
-	return m_copyCommandlist->GetFence(FCommandList::FenceType::GpuFinish);
+	return m_copyCommandlist->GetFence(SyncFence::GpuFinish);
 }
 
 D3D12_SUBRESOURCE_DATA FResourceReadbackContext::GetTextureData(int subresourceIndex)
@@ -2074,7 +2074,7 @@ std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::w
 {
 	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
 	auto rs = std::make_unique<FRootSignature>();
-	rs->m_fenceMarker = dependentCL->GetFence(FCommandList::FenceType::GpuFinish);
+	rs->m_fenceMarker = dependentCL->GetFence(SyncFence::GpuFinish);
 
 	IDxcBlob* rsBlob = CacheRootsignature(desc);
 	s_d3dDevice->CreateRootSignature(0, rsBlob->GetBufferPointer(), rsBlob->GetBufferSize(), IID_PPV_ARGS(&rs->m_rootsig));
@@ -2086,7 +2086,7 @@ std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::w
 {
 	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
 	auto rs = std::make_unique<FRootSignature>();
-	rs->m_fenceMarker = dependentCL->GetFence(FCommandList::FenceType::GpuFinish);
+	rs->m_fenceMarker = dependentCL->GetFence(SyncFence::GpuFinish);
 
 	s_d3dDevice->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rs->m_rootsig));
 	rs->m_rootsig->SetName(name.c_str());
@@ -2203,7 +2203,7 @@ void RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQ
 	// Signal the beginning of GPU work
 	for (FCommandList* cl : commandLists)
 	{
-		FFenceMarker gpuBeginFenceMarker = cl->GetFence(FCommandList::FenceType::GpuBegin);
+		FFenceMarker gpuBeginFenceMarker = cl->GetFence(SyncFence::GpuBegin);
 		gpuBeginFenceMarker.Signal(activeCommandQueue);
 	}
 
@@ -2219,11 +2219,11 @@ void RenderBackend12::ExecuteCommandlists(const D3D12_COMMAND_LIST_TYPE commandQ
 		cl->m_postExecuteCallbacks.clear();
 
 		// Signal the submission of the CL
-		FFenceMarker submissionFenceMarker = cl->GetFence(FCommandList::FenceType::CpuSubmission);
+		FFenceMarker submissionFenceMarker = cl->GetFence(SyncFence::CpuSubmission);
 		submissionFenceMarker.Signal();
 
 		// Signal the completion of GPU work
-		FFenceMarker gpuFinishFenceMarker = cl->GetFence(FCommandList::FenceType::GpuFinish);
+		FFenceMarker gpuFinishFenceMarker = cl->GetFence(SyncFence::GpuFinish);
 		gpuFinishFenceMarker.Signal(activeCommandQueue);
 		s_commandListPool.Retire(cl);
 	}
