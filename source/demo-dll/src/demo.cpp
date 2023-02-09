@@ -2219,10 +2219,13 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	{
 		// Wait for the update to finish
 		gpuFinishFence.Wait();
-	}).then([]()
+	}).then([bUseAsyncCompute]()
 		{
 			// Wait till the end of the frame before we flush and swap the envmap
-			RenderBackend12::GetCurrentFrameFence().Wait();
+			if (bUseAsyncCompute)
+			{
+				RenderBackend12::GetCurrentFrameFence().Wait();
+			}
 		}).then([this, newEnvmap]() mutable
 			{
 				// Swap with new envmap
