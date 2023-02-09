@@ -2217,14 +2217,20 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	// Update reference when the update is complete on the GPU
 	concurrency::create_task([gpuFinishFence]()
 	{
+		// Wait for the update to finish
 		gpuFinishFence.Wait();
-	}).then([this, newEnvmap]() mutable
-	{
-		Renderer::Status::Pause();
-		m_dynamicSkyEnvmap = newEnvmap;
-		m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_descriptorIndices.SRV;
-		Renderer::Status::Resume();
-	});
+	}).then([]()
+		{
+			// Wait till the end of the frame before we flush and swap the envmap
+			RenderBackend12::GetCurrentFrameFence().Wait();
+		}).then([this, newEnvmap]() mutable
+			{
+				// Swap with new envmap
+				Renderer::Status::Pause();
+				m_dynamicSkyEnvmap = newEnvmap;
+				m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_descriptorIndices.SRV;
+				Renderer::Status::Resume();
+			});
 }
 
 // Generate a lat-long sky texutre (spherical projection) using Preetham sky model
