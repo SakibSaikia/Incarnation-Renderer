@@ -291,8 +291,8 @@ void Demo::Tick(float deltaTime)
 	}
 
 	// Reload scene environment if required
-	if (s_scene.m_environmentFilename.empty() ||
-		s_scene.m_environmentFilename != s_globalConfig.EnvironmentFilename)
+	if (Demo::s_globalConfig.EnvSkyMode == (int)EnvSkyMode::Environmentmap &&
+		(s_scene.m_environmentFilename.empty() || s_scene.m_environmentFilename != s_globalConfig.EnvironmentFilename))
 	{
 		Renderer::Status::Pause();
 		s_scene.ReloadEnvironment(s_globalConfig.EnvironmentFilename);
@@ -945,12 +945,9 @@ void FScene::ReloadModel(const std::wstring& filename)
 
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
-	if (Demo::s_globalConfig.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
-	{
-		m_skylight = Demo::s_textureCache.CacheHDRI(filename);
-		m_environmentFilename = filename;
-		FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
-	}
+	m_skylight = Demo::s_textureCache.CacheHDRI(filename);
+	m_environmentFilename = filename;
+	FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
 }
 
 void FScene::LoadNode(int nodeIndex, tinygltf::Model& model, const Matrix& parentTransform)
