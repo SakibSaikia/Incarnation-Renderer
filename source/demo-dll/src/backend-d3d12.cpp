@@ -1285,26 +1285,6 @@ private:
 class FSharedResourcePool
 {
 public:
-	void Initialize(size_t sizeInBytes)
-	{
-		D3D12_HEAP_DESC desc
-		{
-			.SizeInBytes = sizeInBytes,
-			.Properties
-			{
-				.Type = D3D12_HEAP_TYPE_DEFAULT,
-				.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
-				.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN,
-			},
-			.Alignment = 0,
-			.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES
-		};
-
-		AssertIfFailed(GetDevice()->CreateHeap(&desc, IID_PPV_ARGS(m_heap.put())));
-
-		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(m_fence.put())));
-	}
-
 	FResource* GetOrCreate(const std::wstring& name, const D3D12_RESOURCE_DESC& desc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
@@ -1398,11 +1378,6 @@ public:
 		waitForFenceTask.then(addToFreePool);
 	}
 
-	D3DHeap_t* GetHeap()
-	{
-		return m_heap.get();
-	}
-
 	void Clear()
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
@@ -1412,9 +1387,6 @@ public:
 
 private:
 	std::mutex m_mutex;
-	winrt::com_ptr<D3DHeap_t> m_heap;
-	winrt::com_ptr<D3DFence_t> m_fence;
-	std::atomic_size_t m_fenceValue = 0;
 	std::list<std::unique_ptr<FResource>> m_freeList;
 	std::list<std::unique_ptr<FResource>> m_useList;
 };
@@ -1934,9 +1906,6 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 	}
 
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
-
-	// Pooled resource memory shared between Render Targets and UAVs
-	s_sharedResourcePool.Initialize(k_sharedResourceMemory);
 
 	// Frame sync
 	AssertIfFailed(s_d3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(s_frameFence.put())));
