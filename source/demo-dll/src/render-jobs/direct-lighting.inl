@@ -75,11 +75,11 @@ namespace RenderJob
 			};
 
 			FPassConstants cb = {};
-			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
-			cb.m_depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
-			cb.m_gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
-			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
-			cb.m_gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
+			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_descriptorIndices.UAVs[0];
+			cb.m_depthTargetSrvIndex = passDesc.depthStencilTex->m_descriptorIndices.SRV;
+			cb.m_gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_descriptorIndices.SRV;
+			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_descriptorIndices.SRV;
+			cb.m_gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_descriptorIndices.SRV;
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FPassConstants) / 4, &cb, 0);
 			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());

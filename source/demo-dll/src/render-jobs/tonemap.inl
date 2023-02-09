@@ -101,7 +101,7 @@ namespace RenderJob
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.target->m_renderTextureIndices[0]) };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.target->m_descriptorIndices.RTVorDSVs[0]) };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -112,7 +112,7 @@ namespace RenderJob
 				int hdrSceneColorTextureIndex;
 				float exposure;
 			} rootConstants = { 
-					(int)passDesc.source->m_srvIndex, 
+					(int)passDesc.source->m_descriptorIndices.SRV,
 					passDesc.renderConfig.Exposure, 
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);

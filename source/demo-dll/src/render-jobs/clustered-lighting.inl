@@ -89,13 +89,13 @@ namespace RenderJob
 			cb.m_clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
 			cb.m_clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
 			cb.m_clusterGridSize[3] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
-			cb.m_lightListsBufferSrvIndex = passDesc.lightListsBuffer->m_srvIndex;
-			cb.m_lightGridBufferSrvIndex = passDesc.lightGridBuffer->m_srvIndex;
-			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
-			cb.m_depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
-			cb.m_gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
-			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
-			cb.m_gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
+			cb.m_lightListsBufferSrvIndex = passDesc.lightListsBuffer->m_descriptorIndices.SRV;
+			cb.m_lightGridBufferSrvIndex = passDesc.lightGridBuffer->m_descriptorIndices.SRV;
+			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_descriptorIndices.UAVs[0];
+			cb.m_depthTargetSrvIndex = passDesc.depthStencilTex->m_descriptorIndices.SRV;
+			cb.m_gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_descriptorIndices.SRV;
+			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_descriptorIndices.SRV;
+			cb.m_gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_descriptorIndices.SRV;
 			cb.m_clusterSliceScaleAndBias.x = scale;
 			cb.m_clusterSliceScaleAndBias.y = -scale * std::log(passDesc.renderConfig.CameraNearPlane);
 
@@ -108,8 +108,8 @@ namespace RenderJob
 				// Clear the color target
 				const uint32_t clearValue[] = { 0, 0, 0, 0 };
 				d3dCmdList->ClearUnorderedAccessViewUint(
-					RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_uavIndices[0]),
-					RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_nonShaderVisibleUavIndices[0], false),
+					RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_descriptorIndices.UAVs[0]),
+					RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_descriptorIndices.NonShaderVisibleUAVs[0], false),
 					passDesc.colorTarget->m_resource->m_d3dResource,
 					clearValue, 0, nullptr);
 			}

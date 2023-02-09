@@ -75,11 +75,11 @@ namespace RenderJob
 			};
 
 			FPassConstants cb = {};
-			cb.gbuffer0UavIndex = passDesc.gbufferTargets[0]->m_uavIndices[0];
-			cb.gbuffer1UavIndex = passDesc.gbufferTargets[1]->m_uavIndices[0];
-			cb.gbuffer2UavIndex = passDesc.gbufferTargets[2]->m_uavIndices[0];
-			cb.visBufferSrvIndex = passDesc.sourceVisBuffer->m_srvIndex;
-			cb.colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
+			cb.gbuffer0UavIndex = passDesc.gbufferTargets[0]->m_descriptorIndices.UAVs[0];
+			cb.gbuffer1UavIndex = passDesc.gbufferTargets[1]->m_descriptorIndices.UAVs[0];
+			cb.gbuffer2UavIndex = passDesc.gbufferTargets[2]->m_descriptorIndices.UAVs[0];
+			cb.visBufferSrvIndex = passDesc.sourceVisBuffer->m_descriptorIndices.SRV;
+			cb.colorTargetUavIndex = passDesc.colorTarget->m_descriptorIndices.UAVs[0];
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FPassConstants) / 4, &cb, 0);
 			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -88,8 +88,8 @@ namespace RenderJob
 			// Clear the color target
 			const uint32_t clearValue[] = { 0, 0, 0, 0 };
 			d3dCmdList->ClearUnorderedAccessViewUint(
-				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_uavIndices[0]),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_nonShaderVisibleUavIndices[0], false),
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_descriptorIndices.UAVs[0]),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.colorTarget->m_descriptorIndices.NonShaderVisibleUAVs[0], false),
 				passDesc.colorTarget->m_resource->m_d3dResource,
 				clearValue, 0, nullptr);
 
@@ -151,12 +151,12 @@ namespace RenderJob
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
 			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { 
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.gbufferTargets[0]->m_renderTextureIndices[0]),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.gbufferTargets[1]->m_renderTextureIndices[0]),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.gbufferTargets[2]->m_renderTextureIndices[0])
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.gbufferTargets[0]->m_descriptorIndices.RTVorDSVs[0]),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.gbufferTargets[1]->m_descriptorIndices.RTVorDSVs[0]),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.gbufferTargets[2]->m_descriptorIndices.RTVorDSVs[0])
 			};
 
-			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthStencilTarget->m_renderTextureIndices[0]);
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthStencilTarget->m_descriptorIndices.RTVorDSVs[0]);
 			d3dCmdList->OMSetRenderTargets(3, rtvs, FALSE, &dsv);
 
 			// Issue decal draws

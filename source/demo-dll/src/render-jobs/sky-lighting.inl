@@ -96,11 +96,11 @@ namespace RenderJob
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->skylightProbeIndex = passDesc.scene->m_skylight.m_shTextureIndex;
 					cb->envmapIndex = passDesc.scene->m_skylight.m_envmapTextureIndex;
-					cb->colorTargetUavIndex = passDesc.colorTarget->m_uavIndices[0];
-					cb->depthTargetSrvIndex = passDesc.depthStencilTex->m_srvIndex;
-					cb->gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_srvIndex;
-					cb->gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_srvIndex;
-					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_srvIndex;
+					cb->colorTargetUavIndex = passDesc.colorTarget->m_descriptorIndices.UAVs[0];
+					cb->depthTargetSrvIndex = passDesc.depthStencilTex->m_descriptorIndices.SRV;
+					cb->gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_descriptorIndices.SRV;
+					cb->gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_descriptorIndices.SRV;
+					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_descriptorIndices.SRV;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
 					cb->eyePos = passDesc.view->m_position;

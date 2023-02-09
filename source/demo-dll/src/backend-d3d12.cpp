@@ -797,7 +797,7 @@ void FResourceUploadContext::UpdateSubresources(
 void FResourceUploadContext::SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent)
 {
 	// If a wait event is provided, stall until the fence is hit.
-	// Used for cross-queue synchronization since transitions along cannot avoid data races in that case.
+	// Used for cross-queue synchronization since transitions alone cannot avoid data races in that case.
 	if (waitEvent && waitEvent->m_fence)
 	{
 		GetCopyQueue()->Wait(waitEvent->m_fence, waitEvent->m_value);
@@ -1337,123 +1337,48 @@ public:
 
 	void Retire(const FShaderSurface* surface)
 	{
-		// FIXME: This wait is not sufficient if the resource goes out of scope before the CL using it is submitted.
-		// Use a RetireFence similar to the FUploadBuffer API.
-		auto waitForFenceTask = concurrency::create_task([this]() mutable
+		auto waitForFenceTask = concurrency::create_task([this, fence = surface->m_alloc.m_lifetime]() mutable
 		{
-			GetGraphicsQueue()->Signal(m_fence.get(), ++m_fenceValue);
-			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-			if (event)
-			{
-				m_fence->SetEventOnCompletion(m_fenceValue, event);
-				WaitForSingleObject(event, INFINITE);
-			}
+			fence.Wait();
 		});
 
-		auto addToFreePool = [
-			this, 
-			surfaceType = surface->m_type,
-			resource = surface->m_resource, 
-			rtIndices = surface->m_renderTextureIndices,
-			uavIndices = surface->m_uavIndices,
-			srvIndex = surface->m_srvIndex,
-			nonShaderVisibleDescriptorIndices = surface->m_nonShaderVisibleUavIndices
-		]() mutable
-		{
-			const std::lock_guard<std::mutex> lock(m_mutex);
+		auto addToFreePool = 
+			[this, surfaceType = surface->m_type, resource = surface->m_resource, descriptors = surface->m_descriptorIndices]() mutable
+			{
+				const std::lock_guard<std::mutex> lock(m_mutex);
 
-			// Return surface descriptor indices
-			if (surfaceType & SurfaceType::RenderTarget)
-			{
-				for (uint32_t id : rtIndices)
-				{
-					GetRTVIndexPool().push(id);
-				}
-			}
-			else if(surfaceType & SurfaceType::DepthStencil)
-			{
-				for (uint32_t id : rtIndices)
-				{
-					GetDSVIndexPool().push(id);
-				}
-			}
+				descriptors.Release(surfaceType);
 
-			// This is not `else if` because a surface can be a render texture and also an UAV
-			if (surfaceType & SurfaceType::UAV)
-			{
-				for (uint32_t id : uavIndices)
+				for (auto it = m_useList.begin(); it != m_useList.end();)
 				{
-					GetBindlessPool()->ReturnIndex(id);
+					if (it->get() == resource)
+					{
+						m_freeList.push_back(std::move(*it));
+						it = m_useList.erase(it);
+						break;
+					}
+					else
+					{
+						++it;
+					}
 				}
-			}
-
-			// Return SRV index
-			if (srvIndex != ~0u)
-			{
-				GetBindlessPool()->ReturnIndex(srvIndex);
-			}
-
-			// Return any non shader visible UAV indices
-			for (uint32_t id : nonShaderVisibleDescriptorIndices)
-			{
-				GetNonShaderVisibleDescriptorPool().push(id);
-			}
-
-			for (auto it = m_useList.begin(); it != m_useList.end();)
-			{
-				if (it->get() == resource)
-				{
-					m_freeList.push_back(std::move(*it));
-					it = m_useList.erase(it);
-					break;
-				}
-				else
-				{
-					++it;
-				}
-			}
-		};
+			};
 
 		waitForFenceTask.then(addToFreePool);
 	}
 
 	void Retire(const FShaderBuffer* buffer)
 	{
-		auto waitForFenceTask = concurrency::create_task([this]() mutable
+		auto waitForFenceTask = concurrency::create_task([this, fence = buffer->m_alloc.m_lifetime]() mutable
 		{
-			GetGraphicsQueue()->Signal(m_fence.get(), ++m_fenceValue);
-			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-			if (event)
-			{
-				m_fence->SetEventOnCompletion(m_fenceValue, event);
-				WaitForSingleObject(event, INFINITE);
-			}
+			fence.Wait();
 		});
 
-		auto addToFreePool = [
-			this, 
-			resource = buffer->m_resource, 
-			uavIndex = buffer->m_uavIndex,
-			nonShaderVisibleUavIndex = buffer->m_nonShaderVisibleUavIndex,
-			srvIndex = buffer->m_srvIndex
-		]() mutable
+		auto addToFreePool = [this,  resource = buffer->m_resource, descriptors = buffer->m_descriptorIndices]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
-			if (uavIndex != ~0u)
-			{
-				GetBindlessPool()->ReturnIndex(uavIndex);
-			}
-
-			if (srvIndex != ~0u)
-			{
-				GetBindlessPool()->ReturnIndex(srvIndex);
-			}
-
-			if (nonShaderVisibleUavIndex != ~0u)
-			{
-				GetNonShaderVisibleDescriptorPool().push(nonShaderVisibleUavIndex);
-			}
+			descriptors.Release();
 
 			for (auto it = m_useList.begin(); it != m_useList.end();)
 			{
@@ -1528,52 +1453,115 @@ FTexture::~FTexture()
 	waitForFenceTask.then(freeResource);
 }
 
+void FShaderSurface::FDescriptors::Release(const uint32_t surfaceType)
+{
+	// Return surface descriptor indices
+	if (surfaceType & SurfaceType::RenderTarget)
+	{
+		for (uint32_t id : RTVorDSVs)
+		{
+			GetRTVIndexPool().push(id);
+		}
+	}
+	else if (surfaceType & SurfaceType::DepthStencil)
+	{
+		for (uint32_t id : RTVorDSVs)
+		{
+			GetDSVIndexPool().push(id);
+		}
+	}
+
+	// This is not `else if` because a surface can be a render texture and also an UAV
+	if (surfaceType & SurfaceType::UAV)
+	{
+		for (uint32_t id : UAVs)
+		{
+			GetBindlessPool()->ReturnIndex(id);
+		}
+	}
+
+	// Return SRV index
+	if (SRV != ~0u)
+	{
+		GetBindlessPool()->ReturnIndex(SRV);
+	}
+
+	// Return any non shader visible UAV indices
+	for (uint32_t id : NonShaderVisibleUAVs)
+	{
+		GetNonShaderVisibleDescriptorPool().push(id);
+	}
+}
+
+FShaderSurface& FShaderSurface::operator=(FShaderSurface&& other)
+{
+	m_type = other.m_type;
+	m_alloc = other.m_alloc;
+	m_resource = other.m_resource;
+	m_descriptorIndices = std::move(other.m_descriptorIndices);
+	other.m_resource = nullptr;
+	other.m_descriptorIndices.SRV = ~0u;
+
+	return *this;
+}
+
 FShaderSurface::~FShaderSurface()
 {
-	if (m_type & SurfaceType::SwapChain)
+	if (m_type & SurfaceType::SwapChain || m_alloc.m_type == ResourceAllocationType::Committed)
 	{
+		m_descriptorIndices.Release(m_type);
 		delete m_resource;
 	}
-	else
+	else if(m_alloc.m_type == ResourceAllocationType::Pooled)
 	{
 		GetSharedResourcePool()->Retire(this);
 	}
 }
 
+void FShaderBuffer::FDescriptors::Release()
+{
+	if (UAV != ~0u)
+	{
+		GetBindlessPool()->ReturnIndex(UAV);
+	}
+
+	if (SRV != ~0u)
+	{
+		GetBindlessPool()->ReturnIndex(SRV);
+	}
+
+	if (NonShaderVisibleUAV != ~0u)
+	{
+		GetNonShaderVisibleDescriptorPool().push(NonShaderVisibleUAV);
+	}
+}
+
+FShaderBuffer& FShaderBuffer::operator=(FShaderBuffer&& other)
+{
+	// FShaderBuffer(s) are moved during async level load. 
+	// A custom move assingment is used here because we want to avoid 
+	// calling the desctructor which can release the resource.
+	m_accessMode = other.m_accessMode;
+	m_alloc = other.m_alloc;
+	m_resource = other.m_resource;
+	m_descriptorIndices = other.m_descriptorIndices;
+	other.m_resource = nullptr;
+	other.m_descriptorIndices.SRV = ~0u;
+	other.m_descriptorIndices.UAV = ~0u;
+
+	return *this;
+}
+
 FShaderBuffer::~FShaderBuffer()
 {
-	if (m_allocType == ResourceAllocationType::Pooled)
+	if (m_alloc.m_type == ResourceAllocationType::Pooled)
 	{
 		GetSharedResourcePool()->Retire(this);
 	}
-	else
+	else if(m_alloc.m_type == ResourceAllocationType::Committed)
 	{
-		auto waitForFenceTask = concurrency::create_task([this]() mutable
-		{
-			winrt::com_ptr<D3DFence_t> fence;
-			AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
-
-			GetGraphicsQueue()->Signal(fence.get(), 1);
-			HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-			if (event)
-			{
-				fence->SetEventOnCompletion(1, event);
-				WaitForSingleObject(event, INFINITE);
-			}
-		});
-
-		// Make a copy of the resource contents as it will be cleaned up by the destructor
-		auto freeResource = [resource = m_resource, srvIndex = m_srvIndex]() mutable
-		{
-			if (srvIndex != ~0u)
-			{
-				GetBindlessPool()->ReturnIndex(srvIndex);
-			}
-
-			delete resource;
-		};
-
-		waitForFenceTask.then(freeResource);
+		m_descriptorIndices.Release();
+		delete m_resource;
 	}
 }
 
@@ -1942,7 +1930,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, rtvIndex);
 		s_d3dDevice->CreateRenderTargetView(backBuffer->m_resource->m_d3dResource, &rtvDesc, rtvDescriptor);
-		backBuffer->m_renderTextureIndices.push_back(rtvIndex);
+		backBuffer->m_descriptorIndices.RTVorDSVs.push_back(rtvIndex);
 	}
 
 	s_currentBufferIndex = s_swapChain->GetCurrentBackBufferIndex();
@@ -2462,6 +2450,7 @@ FUploadBuffer* RenderBackend12::CreateNewUploadBuffer(
 FShaderSurface* RenderBackend12::CreateNewSurface(
 	const std::wstring& name,
 	const uint32_t surfaceType,
+	const ResourceAllocation alloc,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
@@ -2494,7 +2483,7 @@ FShaderSurface* RenderBackend12::CreateNewSurface(
 	std::vector<uint32_t> uavDescriptorIndices;
 	std::vector<uint32_t> nonShaderVisibleUavIndices;
 
-	if (surfaceType & (uint32_t)SurfaceType::RenderTarget)
+	if (surfaceType & SurfaceType::RenderTarget)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		clearValue = &defaultClearColor;
@@ -2508,7 +2497,7 @@ FShaderSurface* RenderBackend12::CreateNewSurface(
 			renderTextureDescriptorIndices.push_back(id);
 		}
 	}
-	else if (surfaceType & (uint32_t)SurfaceType::DepthStencil)
+	else if (surfaceType & SurfaceType::DepthStencil)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 		surfaceFormat = GetTypelessDepthStencilFormat(format);
@@ -2524,7 +2513,7 @@ FShaderSurface* RenderBackend12::CreateNewSurface(
 		}
 	}
 
-	if (surfaceType & (uint32_t)SurfaceType::UAV)
+	if (surfaceType & SurfaceType::UAV)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 		initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
@@ -2546,6 +2535,7 @@ FShaderSurface* RenderBackend12::CreateNewSurface(
 	}
 
 	// Create resource 
+	FResource* resource = {};
 	D3D12_RESOURCE_DESC surfaceDesc = {};
 	surfaceDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	surfaceDesc.Width = width;
@@ -2556,7 +2546,21 @@ FShaderSurface* RenderBackend12::CreateNewSurface(
 	surfaceDesc.SampleDesc.Count = sampleCount;
 	surfaceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	surfaceDesc.Flags = surfaceFlags;
-	FResource* resource = s_sharedResourcePool.GetOrCreate(name, surfaceDesc, initialState, clearValue);
+
+	if (alloc.m_type == ResourceAllocationType::Pooled)
+	{
+		resource = s_sharedResourcePool.GetOrCreate(name, surfaceDesc, initialState, clearValue);
+	}
+	else if (alloc.m_type == ResourceAllocationType::Committed)
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+		resource = new FResource;
+		AssertIfFailed(resource->InitCommittedResource(name, heapProps, surfaceDesc, initialState, clearValue));
+	}
 
 	// Create render texture descriptors
 	if (surfaceType & SurfaceType::RenderTarget)
@@ -2704,11 +2708,12 @@ FShaderSurface* RenderBackend12::CreateNewSurface(
 
 	auto newSurface = new FShaderSurface;
 	newSurface->m_type = surfaceType;
+	newSurface->m_alloc = alloc;
 	newSurface->m_resource = resource;
-	newSurface->m_renderTextureIndices = std::move(renderTextureDescriptorIndices);
-	newSurface->m_uavIndices = std::move(uavDescriptorIndices);
-	newSurface->m_nonShaderVisibleUavIndices = std::move(nonShaderVisibleUavIndices);
-	newSurface->m_srvIndex = srvIndex;
+	newSurface->m_descriptorIndices.RTVorDSVs = std::move(renderTextureDescriptorIndices);
+	newSurface->m_descriptorIndices.UAVs = std::move(uavDescriptorIndices);
+	newSurface->m_descriptorIndices.NonShaderVisibleUAVs = std::move(nonShaderVisibleUavIndices);
+	newSurface->m_descriptorIndices.SRV = srvIndex;
 
 	return newSurface;
 }
@@ -2829,7 +2834,7 @@ FShaderBuffer* RenderBackend12::CreateNewBuffer(
 	const std::wstring& name,
 	const BufferType type,
 	const ResourceAccessMode accessMode,
-	const ResourceAllocationType allocType,
+	const ResourceAllocation alloc,
 	const size_t size,
 	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
@@ -2877,11 +2882,11 @@ FShaderBuffer* RenderBackend12::CreateNewBuffer(
 
 	// Create Resource
 	FResource* resource = {};
-	if (allocType == ResourceAllocationType::Pooled)
+	if (alloc.m_type == ResourceAllocationType::Pooled)
 	{
 		resource = s_sharedResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState, nullptr);
 	}
-	else if (allocType == ResourceAllocationType::Committed)
+	else if (alloc.m_type == ResourceAllocationType::Committed)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2973,11 +2978,11 @@ FShaderBuffer* RenderBackend12::CreateNewBuffer(
 
 	auto newBuffer = new FShaderBuffer;
 	newBuffer->m_accessMode = accessMode;
-	newBuffer->m_allocType = allocType;
+	newBuffer->m_alloc = alloc;
 	newBuffer->m_resource = resource;
-	newBuffer->m_uavIndex = uavIndex;
-	newBuffer->m_nonShaderVisibleUavIndex = nonShaderVisibleUavIndex;
-	newBuffer->m_srvIndex = srvIndex;
+	newBuffer->m_descriptorIndices.UAV = uavIndex;
+	newBuffer->m_descriptorIndices.NonShaderVisibleUAV = nonShaderVisibleUavIndex;
+	newBuffer->m_descriptorIndices.SRV = srvIndex;
 
 	return newBuffer;
 }

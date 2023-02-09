@@ -61,8 +61,8 @@ namespace RenderJob
 			};
 
 			FPassConstants cb = {};
-			cb.m_argsBufferIndex = passDesc.batchArgsBuffer->m_uavIndex;
-			cb.m_countsBufferIndex = passDesc.batchCountsBuffer->m_uavIndex;
+			cb.m_argsBufferIndex = passDesc.batchArgsBuffer->m_descriptorIndices.UAV;
+			cb.m_countsBufferIndex = passDesc.batchCountsBuffer->m_descriptorIndices.UAV;
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, std::max<uint32_t>(1, sizeof(FPassConstants) / 4), &cb, 0);
 			d3dCmdList->SetComputeRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -71,8 +71,8 @@ namespace RenderJob
 			// Initialize counts buffer to 0
 			const uint32_t clearValue[] = { 0, 0, 0, 0 };
 			d3dCmdList->ClearUnorderedAccessViewUint(
-				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.batchCountsBuffer->m_uavIndex),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.batchCountsBuffer->m_nonShaderVisibleUavIndex, false),
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.batchCountsBuffer->m_descriptorIndices.UAV),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.batchCountsBuffer->m_descriptorIndices.NonShaderVisibleUAV, false),
 				passDesc.batchCountsBuffer->m_resource->m_d3dResource,
 				clearValue, 0, nullptr);
 

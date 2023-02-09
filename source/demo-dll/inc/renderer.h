@@ -184,7 +184,6 @@ private:
 struct FRenderState
 {
 	FConfig m_config;
-	bool m_suspendRendering;
 	FScene* m_scene;
 	FView m_view;
 	FView m_cullingView;
@@ -233,6 +232,16 @@ namespace Renderer
 	{
 		SyncVisibilityPass,
 		SyncRenderPassCount
+	};
+
+	struct Status
+	{
+		static void Initialize();
+		static void Pause();
+		static void Resume();
+		static bool IsPaused();
+		static inline winrt::com_ptr<D3DFence_t> m_fence;
+		static inline uint64_t m_fenceVal = 0;
 	};
 
 	void Initialize(const uint32_t resX, const uint32_t resY);

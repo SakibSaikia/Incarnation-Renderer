@@ -93,12 +93,12 @@ namespace RenderJob
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
-					cb->culledLightCountBufferUavIndex = passDesc.culledLightCountBuffer->m_uavIndex;
-					cb->culledLightListsBufferUavIndex = passDesc.culledLightListsBuffer->m_uavIndex;
-					cb->lightGridBufferUavIndex = passDesc.lightGridBuffer->m_uavIndex;
-					cb->packedLightIndicesBufferIndex = passDesc.scene->m_packedLightIndices->m_srvIndex;
-					cb->packedLightTransformsBufferIndex = passDesc.lightTransformsBuffer->m_srvIndex;
-					cb->packedGlobalLightPropertiesBufferIndex = passDesc.lightPropertiesBuffer->m_srvIndex;
+					cb->culledLightCountBufferUavIndex = passDesc.culledLightCountBuffer->m_descriptorIndices.UAV;
+					cb->culledLightListsBufferUavIndex = passDesc.culledLightListsBuffer->m_descriptorIndices.UAV;
+					cb->lightGridBufferUavIndex = passDesc.lightGridBuffer->m_descriptorIndices.UAV;
+					cb->packedLightIndicesBufferIndex = passDesc.scene->m_packedLightIndices->m_descriptorIndices.SRV;
+					cb->packedLightTransformsBufferIndex = passDesc.lightTransformsBuffer->m_descriptorIndices.SRV;
+					cb->packedGlobalLightPropertiesBufferIndex = passDesc.lightPropertiesBuffer->m_descriptorIndices.SRV;
 					cb->lightCount = (uint32_t)passDesc.scene->m_sceneLights.GetCount();
 					cb->clusterDepthExtent = passDesc.renderConfig.ClusterDepthExtent;
 					cb->clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
@@ -114,14 +114,14 @@ namespace RenderJob
 			// Initialize culled light count and lists buffer to 0
 			const uint32_t clearValue[] = { 0, 0, 0, 0 };
 			d3dCmdList->ClearUnorderedAccessViewUint(
-				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightCountBuffer->m_uavIndex),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightCountBuffer->m_nonShaderVisibleUavIndex, false),
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightCountBuffer->m_descriptorIndices.UAV),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightCountBuffer->m_descriptorIndices.NonShaderVisibleUAV, false),
 				passDesc.culledLightCountBuffer->m_resource->m_d3dResource,
 				clearValue, 0, nullptr);
 			
 			d3dCmdList->ClearUnorderedAccessViewUint(
-				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightListsBuffer->m_uavIndex),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightListsBuffer->m_nonShaderVisibleUavIndex, false),
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightListsBuffer->m_descriptorIndices.UAV),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.culledLightListsBuffer->m_descriptorIndices.NonShaderVisibleUAV, false),
 				passDesc.culledLightListsBuffer->m_resource->m_d3dResource,
 				clearValue, 0, nullptr);
 

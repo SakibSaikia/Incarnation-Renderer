@@ -178,7 +178,6 @@ namespace Demo
 	FTextureCache s_textureCache;
 	FSamplerCache s_samplerCache;
 	float s_aspectRatio;
-	bool s_suspendRendering = true;
 
 	std::vector<std::wstring> s_modelList;
 	std::vector<std::wstring> s_hdriList;
@@ -187,7 +186,6 @@ namespace Demo
 	{
 		FRenderState s;
 		s.m_config = s_globalConfig;
-		s.m_suspendRendering = s_suspendRendering;
 		s.m_scene = &s_scene;
 		s.m_view = s_view;
 		s.m_cullingView = s_cullingView;
@@ -196,11 +194,6 @@ namespace Demo
 		s.m_mouseX = s_controller.m_mouseCurrentPosition.x;
 		s.m_mouseY = s_controller.m_mouseCurrentPosition.y;
 		return s;
-	}
-
-	bool IsRenderingSuspended()
-	{
-		return s_suspendRendering;
 	}
 
 	FScene* GetScene()
@@ -215,24 +208,6 @@ namespace Demo
 
 	void UpdateUI(float deltaTime);
 }
-
-class ScopedPauseRendering
-{
-public:
-	ScopedPauseRendering()
-	{
-		Demo::s_suspendRendering = true;
-		RenderBackend12::FlushGPU();
-	}
-
-	~ScopedPauseRendering()
-	{
-		RenderBackend12::FlushGPU();
-		Demo::s_suspendRendering = false;
-	}
-};
-
-#define SCOPED_PAUSE_RENDERING ScopedPauseRendering temp
 
 bool Demo::Initialize(const HWND& windowHandle, const uint32_t resX, const uint32_t resY)
 {
@@ -296,12 +271,13 @@ void Demo::Tick(float deltaTime)
 			newScene->ReloadEnvironment(s_globalConfig.EnvironmentFilename);
 		}).then([newScene]()
 		{
-			SCOPED_PAUSE_RENDERING;
+			Renderer::Status::Pause();
 			s_scene = std::move(*newScene);
 			s_view.Reset(&s_scene);
 			rotX = 0.f;
 			rotY = 0.f;
 			FScene::s_loadProgress = 1.f;
+			Renderer::Status::Resume();
 		});
 
 		// Block when loading for the first time so that we have a scene to render.
@@ -318,9 +294,10 @@ void Demo::Tick(float deltaTime)
 	if (s_scene.m_environmentFilename.empty() ||
 		s_scene.m_environmentFilename != s_globalConfig.EnvironmentFilename)
 	{
-		SCOPED_PAUSE_RENDERING;
+		Renderer::Status::Pause();
 		s_scene.ReloadEnvironment(s_globalConfig.EnvironmentFilename);
 		FScene::s_loadProgress = 1.f;
+		Renderer::Status::Resume();
 	}
 
 	// Tick components
@@ -366,7 +343,7 @@ void Demo::HeartbeatThread()
 {
 	while (true)
 	{
-		if (!s_suspendRendering)
+		if (!Renderer::Status::IsPaused())
 		{
 			RenderBackend12::RecompileModifiedShaders(&Renderer::ResetPathtraceAccumulation);
 		}
@@ -377,8 +354,7 @@ void Demo::HeartbeatThread()
 
 void Demo::Teardown(HWND& windowHandle)
 {
-	s_suspendRendering = true;
-	RenderBackend12::FlushGPU();
+	Renderer::Status::Pause();
 
 	s_scene.Clear();
 	s_textureCache.Clear();
@@ -407,14 +383,17 @@ void Demo::OnMouseMove(WPARAM buttonState, int x, int y)
 
 void Demo::Render(const uint32_t resX, const uint32_t resY)
 {
-	// Create a immutable copy of the demo state for the renderer to use
-	const FRenderState renderState = CreateRenderState(resX, resY);
-	Renderer::Render(renderState);
+	if (!Renderer::Status::IsPaused())
+	{
+		// Create a immutable copy of the demo state for the renderer to use
+		const FRenderState renderState = CreateRenderState(resX, resY);
+		Renderer::Render(renderState);
+	}
 }
 
 void Demo::UpdateUI(float deltaTime)
 {
-	if (IsRenderingSuspended())
+	if (Renderer::Status::IsPaused())
 		return;
 
 	SCOPED_CPU_EVENT("ui_update", PIX_COLOR_DEFAULT);
@@ -1137,7 +1116,7 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 			PrintString(L"scene_mesh_buffer_%d", bufferIndex),
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocationType::Committed,
+			ResourceAllocation::Committed(),
 			model.buffers[bufferIndex].data.size(),
 			false,
 			model.buffers[bufferIndex].data.data(),
@@ -1160,7 +1139,7 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 	concurrency::parallel_for(0, (int)model.bufferViews.size(), [&](int viewIndex)
 	{
 		const int meshBufferIndex = model.bufferViews[viewIndex].buffer;
-		views[viewIndex].m_bufferSrvIndex = m_meshBuffers[meshBufferIndex]->m_srvIndex;
+		views[viewIndex].m_bufferSrvIndex = m_meshBuffers[meshBufferIndex]->m_descriptorIndices.SRV;
 		views[viewIndex].m_byteLength = model.bufferViews[viewIndex].byteLength;
 		views[viewIndex].m_byteOffset = model.bufferViews[viewIndex].byteOffset;
 	});
@@ -1172,7 +1151,7 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 		L"scene_mesh_buffer_views",
 		BufferType::Raw,
 		ResourceAccessMode::GpuReadOnly,
-		ResourceAllocationType::Committed,
+		ResourceAllocation::Committed(),
 		bufferSize,
 		false,
 		(const uint8_t*) views.data(),
@@ -1206,7 +1185,7 @@ void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 		L"scene_mesh_accessors",
 		BufferType::Raw,
 		ResourceAccessMode::GpuReadOnly,
-		ResourceAllocationType::Committed,
+		ResourceAllocation::Committed(),
 		bufferSize,
 		false,
 		(const uint8_t*) accessors.data(),
@@ -1255,7 +1234,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 			L"scene_primitives",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocationType::Committed,
+			ResourceAllocation::Committed(),
 			bufferSize,
 			false,
 			(const uint8_t*)primitives.data(),
@@ -1279,7 +1258,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 			L"scene_primitive_counts",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocationType::Committed,
+			ResourceAllocation::Committed(),
 			bufferSize,
 			false,
 			(const uint8_t*)primitiveCounts.data(),
@@ -1303,7 +1282,7 @@ void FScene::CreateGpuLightBuffers()
 			L"scene_light_indices",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocationType::Committed,
+			ResourceAllocation::Committed(),
 			indexBufferSize,
 			false,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
@@ -1318,6 +1297,7 @@ void FScene::CreateGpuLightBuffers()
 void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"create_acceleration_structure", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
 
 	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs;
 	for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
@@ -1398,14 +1378,14 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 					L"blas_scratch",
 					BufferType::AccelerationStructure,
 					ResourceAccessMode::GpuWriteOnly,
-					ResourceAllocationType::Pooled,
+					ResourceAllocation::Pooled(gpuFinishFence),
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 				m_blasList[meshName].reset(RenderBackend12::CreateNewBuffer(
 					PrintString(L"%s_blas", s2ws(meshName)),
 					BufferType::AccelerationStructure,
 					ResourceAccessMode::GpuReadWrite,
-					ResourceAllocationType::Committed,
+					ResourceAllocation::Committed(),
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes)));
 
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
@@ -1449,7 +1429,7 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		std::unique_ptr<FUploadBuffer> instanceDescBuffer{ RenderBackend12::CreateNewUploadBuffer(
 			L"instance_descs_buffer",
 			instanceDescBufferSize,
-			cmdList->GetFence(FCommandList::FenceType::GpuFinish),
+			gpuFinishFence,
 			[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 			{
 				memcpy(pDest, pData, instanceDescBufferSize);
@@ -1469,14 +1449,14 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 			L"tlas_scratch",
 			BufferType::AccelerationStructure,
 			ResourceAccessMode::GpuWriteOnly,
-			ResourceAllocationType::Pooled,
+			ResourceAllocation::Pooled(gpuFinishFence),
 			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 		m_tlas.reset(RenderBackend12::CreateNewBuffer(
 			L"tlas_buffer",
 			BufferType::AccelerationStructure,
 			ResourceAccessMode::GpuReadWrite,
-			ResourceAllocationType::Committed,
+			ResourceAllocation::Committed(),
 			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes)));
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
@@ -1514,7 +1494,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 		L"scene_materials",
 		BufferType::Raw,
 		ResourceAccessMode::GpuReadOnly,
-		ResourceAllocationType::Committed,
+		ResourceAllocation::Committed(),
 		bufferSize,
 		false,
 		(const uint8_t*)m_materialList.data(),
@@ -1831,6 +1811,9 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	DirectX::ScratchImage metallicRoughnessScratch;
 	metallicRoughnessScratch.InitializeFromImage(metallicRoughnessImage);
 
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"prefilter_normal_roughness", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+
 	// Create source textures
 	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
 	FResourceUploadContext uploader{ uploadSize };
@@ -1840,10 +1823,8 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Create UAVs for prefiltering
 	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);
 	size_t metallicRoughnessMipCount = RenderUtils12::CalcMipCount(metallicRoughnessImage.width, metallicRoughnessImage.height, true);
-	std::unique_ptr<FShaderSurface> normalmapFilterUav{ RenderBackend12::CreateNewSurface(L"dest_normalmap", SurfaceType::UAV, normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount) };
-	std::unique_ptr<FShaderSurface> metallicRoughnessFilterUav{ RenderBackend12::CreateNewSurface(L"dest_metallicRoughnessmap", SurfaceType::UAV, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount) };
-
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"prefilter_normal_roughness", D3D12_COMMAND_LIST_TYPE_DIRECT);
+	std::unique_ptr<FShaderSurface> normalmapFilterUav{ RenderBackend12::CreateNewSurface(L"dest_normalmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount)};
+	std::unique_ptr<FShaderSurface> metallicRoughnessFilterUav{ RenderBackend12::CreateNewSurface(L"dest_metallicRoughnessmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount) };
 
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "prefilter_normal_roughness", 0);
@@ -1898,7 +1879,7 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 				uint32_t normalmapUavIndex;
 				uint32_t metallicRoughnessUavIndex;
 			} rootConstants = { 
-				mipIndex, (uint32_t)normalmapImage.width, (uint32_t)normalmapImage.height, srcNormalmap->m_srvIndex, srcMetallicRoughnessmap->m_srvIndex, normalmapFilterUav->m_uavIndices[mipIndex], metallicRoughnessFilterUav->m_uavIndices[mipIndex]
+				mipIndex, (uint32_t)normalmapImage.width, (uint32_t)normalmapImage.height, srcNormalmap->m_srvIndex, srcMetallicRoughnessmap->m_srvIndex, normalmapFilterUav->m_descriptorIndices.UAVs[mipIndex], metallicRoughnessFilterUav->m_descriptorIndices.UAVs[mipIndex]
 			};
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
@@ -2179,14 +2160,16 @@ void FScene::UpdateSunDirection()
 
 void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 {
+	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
+	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", cmdListType);
+	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
+
 	const int numSHCoefficients = 9;
 	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
 	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
-	std::shared_ptr<FShaderSurface> newEnvmap { RenderBackend12::CreateNewSurface(L"dynamic_sky_envmap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
-	m_dynamicSkySH.reset(RenderBackend12::CreateNewSurface(L"dynamic_sky_SH", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1));
+	std::shared_ptr<FShaderSurface> newEnvmap { RenderBackend12::CreateNewSurface(L"dynamic_sky_envmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
+	m_dynamicSkySH.reset(RenderBackend12::CreateNewSurface(L"dynamic_sky_SH", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1));
 
-	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", cmdListType);
 	{
 		//FScopedGpuCapture capture(cmdList);
 
@@ -2199,8 +2182,8 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Render dynamic sky to 2D surface using spherical/equirectangular projection
 		const int resX = 2 * cubemapRes, resY = cubemapRes;
-		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewSurface(L"dynamic_sky_tex", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips) };
-		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_uavIndices[0], resX, resY, m_sunDir);
+		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewSurface(L"dynamic_sky_tex", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips) };
+		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_descriptorIndices.UAVs[0], resX, resY, m_sunDir);
 
 		// Downsample to generate mips
 		{
@@ -2209,7 +2192,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 			int srcMip = 0;
 			while (mipResY >= 1)
 			{
-				Renderer::DownsampleUav(cmdList, dynamicSkySurface->m_uavIndices[srcMip], dynamicSkySurface->m_uavIndices[srcMip + 1], mipResX, mipResY);
+				Renderer::DownsampleUav(cmdList, dynamicSkySurface->m_descriptorIndices.UAVs[srcMip], dynamicSkySurface->m_descriptorIndices.UAVs[srcMip + 1], mipResX, mipResY);
 				dynamicSkySurface->m_resource->UavBarrier(cmdList);
 
 				mipResX = mipResX >> 1;
@@ -2220,24 +2203,26 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Convert to cubemap
 		const size_t cubemapSize = cubemapRes;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewSurface(L"src_cubemap", SurfaceType::UAV, DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6) };
-		Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewSurface(L"src_cubemap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6) };
+		Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_descriptorIndices.SRV, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// Prefilter the cubemap
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, newEnvmap->m_uavIndices, cubemapRes, 1, numMips);
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, newEnvmap->m_descriptorIndices.UAVs, cubemapRes, 1, numMips);
 
 		RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
 	}
 
 	// Update reference when the update is complete on the GPU
-	concurrency::create_task([cmdList]()
+	concurrency::create_task([gpuFinishFence]()
 	{
-		cmdList->GetFence(FCommandList::FenceType::GpuFinish).Wait();
+		gpuFinishFence.Wait();
 	}).then([this, newEnvmap]() mutable
 	{
+		Renderer::Status::Pause();
 		m_dynamicSkyEnvmap = newEnvmap;
-		m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_srvIndex;
+		m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_descriptorIndices.SRV;
+		Renderer::Status::Resume();
 	});
 }
 
@@ -2579,6 +2564,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::FenceType::GpuFinish);
 
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "hdr_preprocess", 0);
@@ -2588,17 +2574,17 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// Generate environment cubemap
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t cubemapSize = metadata.height;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewSurface(L"src_cubemap", SurfaceType::UAV, metadata.format, cubemapSize, cubemapSize, numMips, 1, 6) };
-		Renderer::ConvertLatlong2Cubemap(cmdList, srcHdrTex->m_srvIndex, texCubeUav->m_uavIndices, cubemapSize, numMips);
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewSurface(L"src_cubemap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, cubemapSize, cubemapSize, numMips, 1, 6) };
+		Renderer::ConvertLatlong2Cubemap(cmdList, srcHdrTex->m_srvIndex, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// ---------------------------------------------------------------------------------------------------------
 		// Prefilter Environment map
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t filteredEnvmapSize = cubemapSize >> 1;
 		const int filteredEnvmapMips = numMips - 1;
-		std::unique_ptr<FShaderSurface> texFilteredEnvmapUav{ RenderBackend12::CreateNewSurface(L"filtered_envmap", SurfaceType::UAV, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texFilteredEnvmapUav{ RenderBackend12::CreateNewSurface(L"filtered_envmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6) };
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_srvIndex, texFilteredEnvmapUav->m_uavIndices, filteredEnvmapSize, 0, filteredEnvmapMips);
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, texFilteredEnvmapUav->m_descriptorIndices.UAVs, filteredEnvmapSize, 0, filteredEnvmapMips);
 
 
 		// Copy from UAV to destination cubemap texture
@@ -2613,7 +2599,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
 		constexpr uint32_t srcMipIndex = 2;
-		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewSurface(L"ShProj_0", SurfaceType::UAV, metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, 1, numCoefficients) };
+		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewSurface(L"ShProj_0", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, 1, numCoefficients) };
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
@@ -2654,7 +2640,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t hdriHeight;
 				uint32_t srcMip;
 				float radianceScale;
-			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_uavIndices[0], (uint32_t)metadata.width, (uint32_t)metadata.height, srcMipIndex, 25000.f };
+			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_descriptorIndices.UAVs[0], (uint32_t)metadata.width, (uint32_t)metadata.height, srcMipIndex, 25000.f };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
@@ -2664,7 +2650,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		}
 
 		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
-		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewSurface(L"ShProj_1", SurfaceType::UAV, metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, 1, numCoefficients) };
+		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewSurface(L"ShProj_1", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, 1, numCoefficients) };
 
 		// Ping-pong UAVs
 		FShaderSurface* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
@@ -2718,7 +2704,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				{
 					uint32_t srcUavIndex;
 					uint32_t destUavIndex;
-				} rootConstants = { uavs[src]->m_uavIndices[0], uavs[dest]->m_uavIndices[0] };
+				} rootConstants = { uavs[src]->m_descriptorIndices.UAVs[0], uavs[dest]->m_descriptorIndices.UAVs[0] };
 
 				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
@@ -2736,7 +2722,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			}
 		}
 
-		std::unique_ptr<FShaderSurface> shTexureUavAccum{ RenderBackend12::CreateNewSurface(L"ShAccum", SurfaceType::UAV, metadata.format, numCoefficients, 1) };
+		std::unique_ptr<FShaderSurface> shTexureUavAccum{ RenderBackend12::CreateNewSurface(L"ShAccum", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, numCoefficients, 1) };
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
@@ -2774,7 +2760,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t srcIndex;
 				uint32_t destIndex;
 				float normalizationFactor;
-			} rootConstants = { uavs[src]->m_uavIndices[0], shTexureUavAccum->m_uavIndices[0], 1.f / (float)((metadata.width >> srcMipIndex) * (metadata.height >> srcMipIndex)) };
+			} rootConstants = { uavs[src]->m_descriptorIndices.UAVs[0], shTexureUavAccum->m_descriptorIndices.UAVs[0], 1.f / (float)((metadata.width >> srcMipIndex) * (metadata.height >> srcMipIndex)) };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 			d3dCmdList->Dispatch(1, 1, 1);

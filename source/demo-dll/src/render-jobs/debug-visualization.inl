@@ -115,7 +115,7 @@ namespace RenderJob
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.target->m_renderTextureIndices[0]) };
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.target->m_descriptorIndices.RTVorDSVs[0]) };
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -141,15 +141,15 @@ namespace RenderJob
 				float __padding;
 				Matrix invProjectionTransform;
 			} rootConstants = {
-					(int)passDesc.visBuffer->m_srvIndex,
-					(int)passDesc.gbuffers[0]->m_srvIndex,
-					(int)passDesc.gbuffers[1]->m_srvIndex,
-					(int)passDesc.gbuffers[2]->m_srvIndex,
-					(int)passDesc.depthBuffer->m_srvIndex,
-					(int)passDesc.indirectArgsBuffer->m_uavIndex,
-					(int)passDesc.scene->m_packedMeshAccessors->m_srvIndex,
-					(int)passDesc.scene->m_packedMeshBufferViews->m_srvIndex,
-					(int)passDesc.scene->m_packedPrimitives->m_srvIndex,
+					(int)passDesc.visBuffer->m_descriptorIndices.SRV,
+					(int)passDesc.gbuffers[0]->m_descriptorIndices.SRV,
+					(int)passDesc.gbuffers[1]->m_descriptorIndices.SRV,
+					(int)passDesc.gbuffers[2]->m_descriptorIndices.SRV,
+					(int)passDesc.depthBuffer->m_descriptorIndices.SRV,
+					(int)passDesc.indirectArgsBuffer->m_descriptorIndices.UAV,
+					(int)passDesc.scene->m_packedMeshAccessors->m_descriptorIndices.SRV,
+					(int)passDesc.scene->m_packedMeshBufferViews->m_descriptorIndices.SRV,
+					(int)passDesc.scene->m_packedPrimitives->m_descriptorIndices.SRV,
 					passDesc.renderConfig.Viewmode,
 					passDesc.resX,
 					passDesc.resY,

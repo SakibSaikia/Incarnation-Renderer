@@ -178,11 +178,11 @@ namespace RenderJob
 					L.Normalize();
 
 					auto cbDest = reinterpret_cast<GlobalCbLayout*>(pDest);
-					cbDest->destUavIndex = passDesc.targetBuffer->m_uavIndices[0];
-					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
-					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
-					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
-					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
+					cbDest->destUavIndex = passDesc.targetBuffer->m_descriptorIndices.UAVs[0];
+					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_descriptorIndices.SRV;
+					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_descriptorIndices.SRV;
+					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_descriptorIndices.SRV;
+					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_descriptorIndices.SRV;
 					cbDest->cameraAperture = passDesc.renderConfig.Pathtracing_CameraAperture;
 					cbDest->cameraFocalLength = passDesc.renderConfig.Pathtracing_CameraFocalLength;
 					cbDest->lightCount = passDesc.scene->m_globalLightList.size();
@@ -190,13 +190,13 @@ namespace RenderJob
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->cameraMatrix = passDesc.view->m_viewTransform.Invert();
 					cbDest->envmapTextureIndex = passDesc.scene->m_skylight.m_envmapTextureIndex;
-					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_srvIndex;
-					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_srvIndex;
+					cbDest->scenePrimitivesIndex = passDesc.scene->m_packedPrimitives->m_descriptorIndices.SRV;
+					cbDest->scenePrimitiveCountsIndex = passDesc.scene->m_packedPrimitiveCounts->m_descriptorIndices.SRV;
 					cbDest->currentSampleIndex = passDesc.currentSampleIndex;
 					cbDest->sqrtSampleCount = std::sqrt(passDesc.renderConfig.MaxSampleCount);
-					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.lightPropertiesBuffer->m_srvIndex : -1;
-					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
-					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.lightTransformsBuffer->m_srvIndex : -1;
+					cbDest->globalLightPropertiesBufferIndex = lightCount > 0 ? passDesc.lightPropertiesBuffer->m_descriptorIndices.SRV : -1;
+					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_descriptorIndices.SRV : -1;
+					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.lightTransformsBuffer->m_descriptorIndices.SRV : -1;
 					cbDest->perez = perezConstants;
 					cbDest->turbidity = passDesc.renderConfig.Turbidity;
 					cbDest->sunDir = Vector3(L);
@@ -210,8 +210,8 @@ namespace RenderJob
 
 			const float clearValue[] = { 0.f, 0.f, 0.f, 0.f };
 			d3dCmdList->ClearUnorderedAccessViewFloat(
-				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.targetBuffer->m_uavIndices[0]),
-				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.targetBuffer->m_nonShaderVisibleUavIndices[0], false),
+				RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.targetBuffer->m_descriptorIndices.UAVs[0]),
+				RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, passDesc.targetBuffer->m_descriptorIndices.NonShaderVisibleUAVs[0], false),
 				passDesc.targetBuffer->m_resource->m_d3dResource,
 				clearValue, 0, nullptr);
 
@@ -262,8 +262,8 @@ namespace RenderJob
 				uint32_t resX;
 				uint32_t resY;
 			} rootConstants = { 
-				passDesc.targetBuffer->m_srvIndex,
-				passDesc.historyBuffer->m_uavIndices[0],
+				passDesc.targetBuffer->m_descriptorIndices.SRV,
+				passDesc.historyBuffer->m_descriptorIndices.UAVs[0],
 				passDesc.currentSampleIndex,
 				passDesc.resX,
 				passDesc.resY

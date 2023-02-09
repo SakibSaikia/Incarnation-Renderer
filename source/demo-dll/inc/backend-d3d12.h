@@ -93,6 +93,7 @@ enum class DescriptorRange : uint32_t
 	TotalCount
 };
 
+// Not using enum class here so that we can easily pass in OR'd values from call sites to create surfaces
 enum SurfaceType : uint32_t
 {
 	RenderTarget	= (1 << 0),
@@ -137,6 +138,25 @@ struct FFenceMarker
 	// GPU sync
 	void Signal(D3DCommandQueue_t* cmdQueue) const;
 	void Wait(D3DCommandQueue_t* cmdQueue) const;
+};
+
+struct ResourceAllocation
+{
+	// Specifies pooled or committed resource type
+	ResourceAllocationType m_type;
+
+	// Pooled resources must specify lifetime via fence marker
+	FFenceMarker m_lifetime;
+
+	static ResourceAllocation Committed()
+	{
+		return { ResourceAllocationType::Committed };
+	}
+
+	static ResourceAllocation Pooled(const FFenceMarker fence)
+	{
+		return { ResourceAllocationType::Pooled, fence };
+	}
 };
 
 struct FCommandList
@@ -247,39 +267,40 @@ struct FTexture
 
 struct FShaderSurface
 {
+	struct FDescriptors
+	{
+		uint32_t SRV;
+		std::vector<uint32_t> RTVorDSVs;					// RTV or DSV indices. One for each mip level
+		std::vector<uint32_t> UAVs;							// One for each mip level
+		std::vector<uint32_t> NonShaderVisibleUAVs;			// One for each mip level
+		void Release(const uint32_t surfaceType);
+	};
+
 	uint32_t m_type;
+	ResourceAllocation m_alloc;
 	FResource* m_resource;
-	std::vector<uint32_t> m_renderTextureIndices;		// RTV or DSV indices. One for each mip level
-	std::vector<uint32_t> m_uavIndices;					// One for each mip level
-	std::vector<uint32_t> m_nonShaderVisibleUavIndices;	// One for each mip level
-	uint32_t m_srvIndex;
+	FDescriptors m_descriptorIndices;
 	~FShaderSurface();
+	FShaderSurface& operator=(FShaderSurface&& other);
 };
 
 struct FShaderBuffer
 {
-	ResourceAccessMode m_accessMode;
-	ResourceAllocationType m_allocType;
-	FResource* m_resource;
-	uint32_t m_uavIndex;
-	uint32_t m_nonShaderVisibleUavIndex;
-	uint32_t m_srvIndex;
-	~FShaderBuffer();
-	FShaderBuffer& operator=(FShaderBuffer&& other)
+	struct FDescriptors
 	{
-		// FShaderBuffer(s) are moved during async level load. 
-		// A custom move assingment is used here because we want to avoid 
-		// calling the desctructor which can release the resource.
-		m_accessMode = other.m_accessMode;
-		m_allocType = other.m_allocType;
-		m_resource = other.m_resource;
-		m_srvIndex = other.m_srvIndex;
-		m_uavIndex = other.m_uavIndex;
-		m_nonShaderVisibleUavIndex = other.m_nonShaderVisibleUavIndex;
-		other.m_resource = nullptr;
-		other.m_srvIndex = ~0u;
-		other.m_uavIndex = ~0u;
-	}
+		uint32_t UAV;
+		uint32_t NonShaderVisibleUAV;
+		uint32_t SRV;
+		void Release();
+	};
+
+	ResourceAccessMode m_accessMode;
+	ResourceAllocation m_alloc;
+	FResource* m_resource;
+	FDescriptors m_descriptorIndices;
+	
+	~FShaderBuffer();
+	FShaderBuffer& operator=(FShaderBuffer&& other);
 };
 
 struct FUploadBuffer
@@ -422,6 +443,7 @@ namespace RenderBackend12
 	FShaderSurface* CreateNewSurface(
 		const std::wstring& name,
 		const uint32_t surfaceType,
+		const ResourceAllocation alloc,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -454,7 +476,7 @@ namespace RenderBackend12
 		const std::wstring& name,
 		const BufferType type,
 		const ResourceAccessMode accessMode,
-		const ResourceAllocationType allocType,
+		const ResourceAllocation alloc,
 		const size_t size,
 		const bool bCreateNonShaderVisibleDescriptor = false,
 		const uint8_t* pData = nullptr,

@@ -80,9 +80,9 @@ namespace RenderJob
 					auto cb = reinterpret_cast<TaaConstants*>(pDest);
 					cb->invViewProjectionTransform = passDesc.invViewProjectionTransform;
 					cb->prevViewProjectionTransform = passDesc.prevViewProjectionTransform;
-					cb->hdrSceneColorTextureIndex = passDesc.source->m_srvIndex;
-					cb->taaAccumulationUavIndex = passDesc.target->m_uavIndices[0];
-					cb->taaAccumulationSrvIndex = passDesc.target->m_srvIndex;
+					cb->hdrSceneColorTextureIndex = passDesc.source->m_descriptorIndices.SRV;
+					cb->taaAccumulationUavIndex = passDesc.target->m_descriptorIndices.UAVs[0];
+					cb->taaAccumulationSrvIndex = passDesc.target->m_descriptorIndices.SRV;
 					cb->depthTextureIndex = passDesc.depthTextureIndex;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
