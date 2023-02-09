@@ -40,7 +40,7 @@ struct FConfig
 	int EnvSkyMode = 1;
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;
-	bool EnableSpecularIBL = false;
+	bool EnableSpecularIBL = true;
 	bool PathTrace = false;
 	bool EnableTAA = true;
 	bool FreezeCulling = false;

@@ -63,7 +63,7 @@ namespace RenderJob
 			RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
 			// TLAS scratch buffer
-			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewBuffer(
+			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer(
 				L"tlas_scratch",
 				BufferType::AccelerationStructure,
 				ResourceAccessMode::GpuWriteOnly,

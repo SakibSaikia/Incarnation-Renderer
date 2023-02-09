@@ -2383,7 +2383,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 	return newBuffer;
 }
 
-FShaderSurface* RenderBackend12::CreateNewSurface(
+FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	const std::wstring& name,
 	const uint32_t surfaceType,
 	const ResourceAllocation alloc,
@@ -2766,7 +2766,7 @@ FTexture* RenderBackend12::CreateNewTexture(
 	return newTexture;
 }
 
-FShaderBuffer* RenderBackend12::CreateNewBuffer(
+FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 	const std::wstring& name,
 	const BufferType type,
 	const ResourceAccessMode accessMode,

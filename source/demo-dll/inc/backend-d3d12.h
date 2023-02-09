@@ -443,7 +443,7 @@ namespace RenderBackend12
 	uint32_t GetLaneCount();
 
 	// Resource Management
-	FShaderSurface* CreateNewSurface(
+	FShaderSurface* CreateNewShaderSurface(
 		const std::wstring& name,
 		const uint32_t surfaceType,
 		const ResourceAllocation alloc,
@@ -475,7 +475,7 @@ namespace RenderBackend12
 		const D3D12_TEXTURE_ADDRESS_MODE addressV,
 		const D3D12_TEXTURE_ADDRESS_MODE addressW);
 
-	FShaderBuffer* CreateNewBuffer(
+	FShaderBuffer* CreateNewShaderBuffer(
 		const std::wstring& name,
 		const BufferType type,
 		const ResourceAccessMode accessMode,
