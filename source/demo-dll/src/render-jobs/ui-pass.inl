@@ -30,8 +30,9 @@ namespace RenderJob
 
 			// Vertex Buffer
 			{
-				std::unique_ptr<FUploadBuffer> vtxBuffer{ RenderBackend12::CreateNewUploadBuffer(
+				std::unique_ptr<FSystemBuffer> vtxBuffer{ RenderBackend12::CreateNewSystemBuffer(
 					L"imgui_vb",
+					ResourceAccessMode::CpuWriteOnly,
 					vtxBufferSize,
 					cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 					[drawData](uint8_t* pDest)
@@ -54,8 +55,9 @@ namespace RenderJob
 
 			// Index Buffer
 			{
-				std::unique_ptr<FUploadBuffer> idxBuffer{ RenderBackend12::CreateNewUploadBuffer(
+				std::unique_ptr<FSystemBuffer> idxBuffer{ RenderBackend12::CreateNewSystemBuffer(
 					L"imgui_ib",
+					ResourceAccessMode::CpuWriteOnly,
 					idxBufferSize,
 					cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 					[drawData](uint8_t* pDest)

@@ -61,8 +61,9 @@ namespace RenderJob
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"frame_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
@@ -94,8 +95,9 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"view_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)

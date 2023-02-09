@@ -4,8 +4,8 @@ namespace RenderJob
 	{
 		FShaderBuffer* batchArgsBuffer;
 		FShaderBuffer* batchCountsBuffer;
-		FUploadBuffer* sceneConstantBuffer;
-		FUploadBuffer* viewConstantBuffer;
+		FSystemBuffer* sceneConstantBuffer;
+		FSystemBuffer* viewConstantBuffer;
 		size_t primitiveCount;
 	};
 

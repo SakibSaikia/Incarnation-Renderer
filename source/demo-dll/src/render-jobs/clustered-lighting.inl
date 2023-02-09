@@ -9,8 +9,8 @@ namespace RenderJob
 		FShaderSurface* gbufferBaseColorTex;
 		FShaderSurface* gbufferNormalsTex;
 		FShaderSurface* gbufferMetallicRoughnessAoTex;
-		FUploadBuffer* sceneConstantBuffer;
-		FUploadBuffer* viewConstantBuffer;
+		FSystemBuffer* sceneConstantBuffer;
+		FSystemBuffer* viewConstantBuffer;
 		FConfig renderConfig;
 		uint32_t resX;
 		uint32_t resY;

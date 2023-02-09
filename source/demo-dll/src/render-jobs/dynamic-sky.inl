@@ -132,8 +132,9 @@ namespace RenderJob
 				Vector3 sunDir;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
 				L"dynamic_sky_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)

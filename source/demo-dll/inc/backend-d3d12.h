@@ -120,6 +120,8 @@ enum class ResourceAccessMode
 	GpuReadOnly,
 	GpuReadWrite,
 	GpuWriteOnly,	// Used for acceleration structure scratch buffers
+	CpuWriteOnly,	// Upload resources
+	CpuReadOnly,	// Readback resources
 };
 
 struct FFenceMarker
@@ -303,18 +305,19 @@ struct FShaderBuffer
 	FShaderBuffer& operator=(FShaderBuffer&& other);
 };
 
-struct FUploadBuffer
+struct FSystemBuffer
 {
 	FResource* m_resource;
+	ResourceAccessMode m_accessMode;
 	FFenceMarker m_fenceMarker;
-	~FUploadBuffer();
+	~FSystemBuffer();
 };
 
 class FResourceUploadContext
 {
 public:
 	FResourceUploadContext() = delete;
-	explicit FResourceUploadContext(const size_t uploadBufferSizeInBytes);
+	FResourceUploadContext(const size_t uploadBufferSizeInBytes);
 	~FResourceUploadContext();
 
 	void UpdateSubresources(
@@ -325,7 +328,7 @@ public:
 	void SubmitUploads(FCommandList* owningCL, FFenceMarker* waitEvent = nullptr);
 
 private:
-	FResource* m_uploadBuffer;
+	std::unique_ptr<FSystemBuffer> m_uploadBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_currentOffset;
@@ -348,7 +351,7 @@ public:
 	{
 		if (!m_mappedPtr)
 		{
-			m_readbackBuffer->m_d3dResource->Map(0, nullptr, (void**)&m_mappedPtr);
+			m_readbackBuffer->m_resource->m_d3dResource->Map(0, nullptr, (void**)&m_mappedPtr);
 		}
 
 		return reinterpret_cast<T*>(m_mappedPtr);
@@ -356,7 +359,7 @@ public:
 
 private:
 	const FResource* m_source;
-	FResource* m_readbackBuffer;
+	std::unique_ptr<FSystemBuffer> m_readbackBuffer;
 	FCommandList* m_copyCommandlist;
 	uint8_t* m_mappedPtr;
 	size_t m_sizeInBytes;
@@ -485,8 +488,9 @@ namespace RenderBackend12
 		const int fixedSrvIndex = -1								// Use provided SRV index instead of fetching one from bindless descriptor pool
 		);
 
-	FUploadBuffer* CreateNewUploadBuffer(
+	FSystemBuffer* CreateNewSystemBuffer(
 		const std::wstring& name,
+		const ResourceAccessMode accessMode,
 		const size_t size,
 		const FFenceMarker retireFence,								// Fence marker that decides whether the buffer is ready to be released. This is usually the fence for the associated command list that uses this buffer.
 		std::function<void(uint8_t*)> uploadFunc = nullptr);

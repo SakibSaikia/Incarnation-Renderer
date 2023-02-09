@@ -5,8 +5,8 @@ namespace RenderJob
 		FShaderSurface* colorTarget;
 		FShaderSurface* depthStencilTarget;
 		FShaderBuffer* indirectArgsBuffer;
-		FUploadBuffer* sceneConstantBuffer;
-		FUploadBuffer* viewConstantBuffer;
+		FSystemBuffer* sceneConstantBuffer;
+		FSystemBuffer* viewConstantBuffer;
 		uint32_t resX, resY;
 		FConfig renderConfig;
 	};

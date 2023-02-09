@@ -588,8 +588,9 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				uint32_t debugDrawCount;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
 				L"debug_drawcall_gen_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[&](uint8_t* pDest)
@@ -638,8 +639,9 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				int debugPrimitivesIndex;
 			};
 
-			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"frame_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
@@ -659,8 +661,9 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix viewProjTransform;
 			};
 
-			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"view_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)
@@ -783,8 +786,9 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix sceneRotation;
 			};
 
-			std::unique_ptr<FUploadBuffer> frameCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"frame_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
@@ -801,8 +805,9 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix viewProjTransform;
 			};
 
-			std::unique_ptr<FUploadBuffer> viewCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"view_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)
@@ -1021,8 +1026,9 @@ void Renderer::Render(const FRenderState& renderState)
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	// Scene Constants
-	std::unique_ptr<FUploadBuffer> cbSceneConstants{ RenderBackend12::CreateNewUploadBuffer(
+	std::unique_ptr<FSystemBuffer> cbSceneConstants{ RenderBackend12::CreateNewSystemBuffer(
 		L"scene_constants_cb",
+		ResourceAccessMode::CpuWriteOnly,
 		sizeof(FSceneConstants),
 		gpuFinishFence, 
 		[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
@@ -1055,8 +1061,9 @@ void Renderer::Render(const FRenderState& renderState)
 	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 	// View Constants
-	std::unique_ptr<FUploadBuffer> cbViewConstants{ RenderBackend12::CreateNewUploadBuffer(
+	std::unique_ptr<FSystemBuffer> cbViewConstants{ RenderBackend12::CreateNewSystemBuffer(
 		L"view_constants_cb",
+		ResourceAccessMode::CpuWriteOnly,
 		sizeof(FViewConstants),
 		gpuFinishFence,
 		[&renderState, pixelJitter, config](uint8_t* pDest)

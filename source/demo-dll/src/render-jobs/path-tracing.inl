@@ -77,8 +77,9 @@ namespace RenderJob
 
 			// Raygen shader table
 			const size_t raygenShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FUploadBuffer> raygenShaderTable{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> raygenShaderTable{ RenderBackend12::CreateNewSystemBuffer(
 				L"raygen_sbt",
+				ResourceAccessMode::CpuWriteOnly,
 				1 * raygenShaderRecordSize,
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
@@ -88,8 +89,9 @@ namespace RenderJob
 
 			// Miss shader table
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FUploadBuffer> missShaderTable{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> missShaderTable{ RenderBackend12::CreateNewSystemBuffer(
 				L"miss_sbt",
+				ResourceAccessMode::CpuWriteOnly,
 				3 * missShaderRecordSize,
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
@@ -101,8 +103,9 @@ namespace RenderJob
 
 			// Hit shader table
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FUploadBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewSystemBuffer(
 				L"hit_sbt",
+				ResourceAccessMode::CpuWriteOnly,
 				2 * hitGroupShaderRecordSize,
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
@@ -158,8 +161,9 @@ namespace RenderJob
 				Vector3 sunDir;
 			};
 
-			std::unique_ptr<FUploadBuffer> globalCb{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> globalCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"global_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(GlobalCbLayout),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)

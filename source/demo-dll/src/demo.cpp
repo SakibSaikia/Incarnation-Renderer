@@ -1426,8 +1426,9 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	// Build TLAS
 	{
 		const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-		std::unique_ptr<FUploadBuffer> instanceDescBuffer{ RenderBackend12::CreateNewUploadBuffer(
+		std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer(
 			L"instance_descs_buffer",
+			ResourceAccessMode::CpuWriteOnly,
 			instanceDescBufferSize,
 			gpuFinishFence,
 			[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)

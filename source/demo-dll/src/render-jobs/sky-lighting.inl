@@ -87,8 +87,9 @@ namespace RenderJob
 				Matrix invViewProjTransform;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
 				L"sky_lighting_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)

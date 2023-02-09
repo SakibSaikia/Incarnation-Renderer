@@ -6,8 +6,8 @@ namespace RenderJob
 		FShaderSurface* depthStencilTarget;
 		FShaderBuffer* indirectArgsBuffer;
 		FShaderBuffer* indirectCountsBuffer;
-		FUploadBuffer* sceneConstantBuffer;
-		FUploadBuffer* viewConstantBuffer;
+		FSystemBuffer* sceneConstantBuffer;
+		FSystemBuffer* viewConstantBuffer;
 		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;

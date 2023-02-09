@@ -71,8 +71,9 @@ namespace RenderJob
 				float exposure;
 			};
 
-			std::unique_ptr<FUploadBuffer> cbuf{ RenderBackend12::CreateNewUploadBuffer(
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
 				L"taa_cb",
+				ResourceAccessMode::CpuWriteOnly,
 				sizeof(TaaConstants),
 				cmdList->GetFence(FCommandList::FenceType::GpuFinish),
 				[passDesc](uint8_t* pDest)
