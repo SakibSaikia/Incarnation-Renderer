@@ -15,7 +15,7 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	concurrency::task<void> DirectLighting(RenderJob::Sync* jobSync, const DirectLightingDesc& passDesc)
+	Result DirectLighting(RenderJob::Sync* jobSync, const DirectLightingDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
@@ -23,11 +23,13 @@ namespace RenderJob
 		size_t gbufferBaseColorTransitionToken = passDesc.gbufferBaseColorTex->m_resource->GetTransitionToken();
 		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormalsTex->m_resource->GetTransitionToken();
 		size_t gbufferMetallicRoughnessAoTransitionToken = passDesc.gbufferMetallicRoughnessAoTex->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"direct_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("direct_lighting", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"direct_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "direct_lighting", 0);
 
@@ -96,5 +98,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

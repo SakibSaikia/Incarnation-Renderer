@@ -9,16 +9,18 @@ namespace RenderJob
 		size_t primitiveCount;
 	};
 
-	concurrency::task<void> BatchCulling(RenderJob::Sync* jobSync, const BatchCullingDesc& passDesc)
+	Result BatchCulling(RenderJob::Sync* jobSync, const BatchCullingDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t batchArgsBufferTransitionToken = passDesc.batchArgsBuffer->m_resource->GetTransitionToken();
 		size_t batchCountsBufferTransitionToken = passDesc.batchCountsBuffer->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"batch_culling", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("batch_culling", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"batch_culling", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "batch_culling", 0);
 
@@ -86,5 +88,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

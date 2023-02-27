@@ -124,18 +124,8 @@ enum class ResourceAccessMode
 	CpuReadOnly,	// Readback resources
 };
 
-enum class SyncFence
-{
-	CpuSubmission,
-	GpuBegin,
-	GpuFinish
-};
-
 struct FFenceMarker
 {
-	D3DFence_t* m_fence;
-	size_t m_value;
-
 	FFenceMarker() = default;
 	FFenceMarker(D3DFence_t* fence, const size_t value) :
 		m_fence{ fence }, m_value{ value }{}
@@ -147,6 +137,10 @@ struct FFenceMarker
 	// GPU sync
 	void Signal(D3DCommandQueue_t* cmdQueue) const;
 	void Wait(D3DCommandQueue_t* cmdQueue) const;
+
+private:
+	D3DFence_t* m_fence;
+	size_t m_value;
 };
 
 struct ResourceAllocation
@@ -170,19 +164,33 @@ struct ResourceAllocation
 
 struct FCommandList
 {
+	enum class Sync
+	{
+		CpuSubmission,
+		GpuBegin,
+		GpuFinish,
+		Count
+	};
+
+	struct SyncObj
+	{
+		FFenceMarker m_fenceMarkers[(uint32_t)Sync::Count];
+	};
+
 	D3D12_COMMAND_LIST_TYPE m_type;
 	std::wstring m_name;
-	size_t m_fenceValues[3];
 	winrt::com_ptr<D3DCommandList_t> m_d3dCmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
-	winrt::com_ptr<D3DFence_t> m_fence[3];
+	winrt::com_ptr<D3DFence_t> m_fence[(uint32_t)Sync::Count];
+	size_t m_fenceValues[(uint32_t)Sync::Count];
 	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
 
 	FCommandList() = default;
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type);
 	void ResetFence(const size_t fenceValue);
 	void SetName(const std::wstring& name);
-	FFenceMarker GetFence(const SyncFence type) const;
+	FFenceMarker GetFence(const FCommandList::Sync type) const;
+	SyncObj GetSync() const;
 };
 
 // Saves the capture to a file named PIXGpuCapture.wpix in the binaries directory

@@ -14,18 +14,20 @@ namespace RenderJob
 		size_t scenePrimitiveCount;
 	};
 
-	concurrency::task<void> VisibilityPass(RenderJob::Sync* jobSync, const VisibilityPassDesc& passDesc)
+	Result VisibilityPass(RenderJob::Sync* jobSync, const VisibilityPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t visBufferTransitionToken = passDesc.visBufferTarget->m_resource->GetTransitionToken();
 		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
 		size_t indirectArgsToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
 		size_t indirectCountToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"visibility_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_visibility_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"visibility_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "visibility_pass", 0);
 
@@ -161,7 +163,9 @@ namespace RenderJob
 
 		}).then([=](FCommandList* recordedCl) mutable
 		{
-			jobSync->Execute(renderToken, recordedCl, Renderer::SyncVisibilityPass);
+			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

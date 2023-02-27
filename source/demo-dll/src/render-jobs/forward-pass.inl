@@ -13,16 +13,18 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> ForwardPass(RenderJob::Sync* jobSync, const ForwardPassDesc& passDesc)
+	Result ForwardPass(RenderJob::Sync* jobSync, const ForwardPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"forward_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_forward_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"forward_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "forward_pass", 0);
 
@@ -240,5 +242,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

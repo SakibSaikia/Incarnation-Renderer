@@ -228,10 +228,12 @@ private:
 //--------------------------------------------------------------------
 namespace Renderer
 {
-	enum SyncRenderPass
+	// Note: Not all render passes need to be annotated. If a pass needs to be accessed from 
+	// elsewhere for synchronization, add an annotation here and use the SyncObject to coordinate.
+	enum AnnotatedPass
 	{
-		SyncVisibilityPass,
-		SyncRenderPassCount
+		VisibilityPass,
+		AnnotatedPassCount
 	};
 
 	struct Status
@@ -248,10 +250,10 @@ namespace Renderer
 	void Teardown();
 	void Render(const FRenderState& renderState);
 
-	void BlockUntilBeginPass(SyncRenderPass waitPass);
-	void BlockUntilEndPass(SyncRenderPass waitPass);
-	void SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass);
-	void SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass);
+	void BlockUntilBeginPass(AnnotatedPass pass);
+	void BlockUntilEndPass(AnnotatedPass pass);
+	void SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, AnnotatedPass pass);
+	void SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, AnnotatedPass pass);
 
 	FRenderStats GetRenderStats();
 	void ResetPathtraceAccumulation();

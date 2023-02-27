@@ -16,7 +16,7 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	concurrency::task<void> ClusteredLighting(RenderJob::Sync* jobSync, const ClusteredLightingDesc& passDesc, const bool bRequiresClear)
+	RenderJob::Result ClusteredLighting(RenderJob::Sync* jobSync, const ClusteredLightingDesc& passDesc, const bool bRequiresClear)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t lightListsBufferTransitionToken = passDesc.lightListsBuffer->m_resource->GetTransitionToken();
@@ -26,11 +26,13 @@ namespace RenderJob
 		size_t gbufferBaseColorTransitionToken = passDesc.gbufferBaseColorTex->m_resource->GetTransitionToken();
 		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormalsTex->m_resource->GetTransitionToken();
 		size_t gbufferMetallicRoughnessAoTransitionToken = passDesc.gbufferMetallicRoughnessAoTex->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"clustered_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		RenderJob::Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("clustered_lighting", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"clustered_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "clustered_lighting", 0);
 
@@ -88,7 +90,7 @@ namespace RenderJob
 			FPassConstants cb = {};
 			cb.m_clusterGridSize[0] = (uint32_t)passDesc.renderConfig.LightClusterDimX;
 			cb.m_clusterGridSize[1] = (uint32_t)passDesc.renderConfig.LightClusterDimY;
-			cb.m_clusterGridSize[3] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
+			cb.m_clusterGridSize[2] = (uint32_t)passDesc.renderConfig.LightClusterDimZ;
 			cb.m_lightListsBufferSrvIndex = passDesc.lightListsBuffer->m_descriptorIndices.SRV;
 			cb.m_lightGridBufferSrvIndex = passDesc.lightGridBuffer->m_descriptorIndices.SRV;
 			cb.m_colorTargetUavIndex = passDesc.colorTarget->m_descriptorIndices.UAVs[0];
@@ -122,8 +124,10 @@ namespace RenderJob
 			return cmdList;
 
 		}).then([=](FCommandList* recordedCl) mutable
-			{
-				jobSync->Execute(renderToken, recordedCl);
-			});
+		{
+			jobSync->Execute(renderToken, recordedCl);
+		});
+
+		return passResult;
 	}
 }

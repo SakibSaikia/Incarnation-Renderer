@@ -13,16 +13,18 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> DynamicSkyPass(RenderJob::Sync* jobSync, const DynamicSkyPassDesc& passDesc)
+	Result DynamicSkyPass(RenderJob::Sync* jobSync, const DynamicSkyPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"dynamicsky_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_dynamicsky_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"dynamicsky_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "dynamicsky_pass", 0);
 
@@ -136,7 +138,7 @@ namespace RenderJob
 				L"dynamic_sky_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
@@ -160,8 +162,10 @@ namespace RenderJob
 			return cmdList;
 
 		}).then([=](FCommandList* recordedCl) mutable
-			{
-				jobSync->Execute(renderToken, recordedCl);
-			});
+		{
+			jobSync->Execute(renderToken, recordedCl);
+		});
+
+		return passResult;
 	}
 }

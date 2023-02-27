@@ -6,15 +6,17 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> UI(RenderJob::Sync* jobSync, const UIPassDesc& passDesc)
+	Result UI(RenderJob::Sync* jobSync, const UIPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_ui", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "imgui_commands", 0);
 
@@ -34,7 +36,7 @@ namespace RenderJob
 					L"imgui_vb",
 					ResourceAccessMode::CpuWriteOnly,
 					vtxBufferSize,
-					cmdList->GetFence(SyncFence::GpuFinish),
+					cmdList->GetFence(FCommandList::Sync::GpuFinish),
 					[drawData](uint8_t* pDest)
 				{
 					ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
@@ -59,7 +61,7 @@ namespace RenderJob
 					L"imgui_ib",
 					ResourceAccessMode::CpuWriteOnly,
 					idxBufferSize,
-					cmdList->GetFence(SyncFence::GpuFinish),
+					cmdList->GetFence(FCommandList::Sync::GpuFinish),
 					[drawData](uint8_t* pDest)
 				{
 					ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);
@@ -266,5 +268,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

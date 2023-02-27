@@ -14,15 +14,17 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> PathTrace(RenderJob::Sync* jobSync, const PathTracingDesc& passDesc)
+	Result PathTrace(RenderJob::Sync* jobSync, const PathTracingDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t uavTransitionToken = passDesc.targetBuffer->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"path_tracing_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_path_tracing", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"path_tracing_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "path_tracing", PIX_COLOR_DEFAULT);
 
@@ -81,7 +83,7 @@ namespace RenderJob
 				L"raygen_sbt",
 				ResourceAccessMode::CpuWriteOnly,
 				1 * raygenShaderRecordSize,
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -93,7 +95,7 @@ namespace RenderJob
 				L"miss_sbt",
 				ResourceAccessMode::CpuWriteOnly,
 				3 * missShaderRecordSize,
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -107,7 +109,7 @@ namespace RenderJob
 				L"hit_sbt",
 				ResourceAccessMode::CpuWriteOnly,
 				2 * hitGroupShaderRecordSize,
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -165,7 +167,7 @@ namespace RenderJob
 				L"global_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(GlobalCbLayout),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
@@ -284,5 +286,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

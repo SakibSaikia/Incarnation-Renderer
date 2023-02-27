@@ -16,7 +16,7 @@ namespace RenderJob
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	concurrency::task<void> DebugViz(RenderJob::Sync* jobSync, const DebugVizDesc& passDesc)
+	Result DebugViz(RenderJob::Sync* jobSync, const DebugVizDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t visBufferTransitionToken = passDesc.visBuffer->m_resource->GetTransitionToken();
@@ -26,11 +26,13 @@ namespace RenderJob
 		size_t gbuffer2TransitionToken = passDesc.gbuffers[2]->m_resource->GetTransitionToken();
 		size_t depthTransitionToken = passDesc.depthBuffer->m_resource->GetTransitionToken();
 		size_t indirectArgsTransitionToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"debugviz_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_debugviz_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"debugviz_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "debugviz", 0);
 
@@ -178,5 +180,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

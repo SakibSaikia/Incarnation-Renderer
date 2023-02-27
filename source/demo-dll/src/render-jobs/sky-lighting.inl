@@ -16,18 +16,20 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	concurrency::task<void> SkyLighting(RenderJob::Sync* jobSync, const SkyLightingDesc& passDesc)
+	Result SkyLighting(RenderJob::Sync* jobSync, const SkyLightingDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();
 		size_t gbufferBaseColorTransitionToken = passDesc.gbufferBaseColorTex->m_resource->GetTransitionToken();
 		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormalsTex->m_resource->GetTransitionToken();
 		size_t gbufferMetallicRoughnessAoTransitionToken = passDesc.gbufferMetallicRoughnessAoTex->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"sky_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("sky_lighting", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"sky_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "sky_lighting", 0);
 
@@ -91,7 +93,7 @@ namespace RenderJob
 				L"sky_lighting_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
@@ -119,8 +121,10 @@ namespace RenderJob
 			return cmdList;
 
 		}).then([=](FCommandList* recordedCl) mutable
-			{
-				jobSync->Execute(renderToken, recordedCl);
-			});
+		{
+			jobSync->Execute(renderToken, recordedCl);
+		});
+
+		return passResult;
 	}
 }

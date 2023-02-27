@@ -8,16 +8,18 @@ namespace RenderJob
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	concurrency::task<void> Tonemap(RenderJob::Sync* jobSync, const TonemapDesc& passDesc)
+	Result Tonemap(RenderJob::Sync* jobSync, const TonemapDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t sourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();
 		size_t targetTransitionToken = passDesc.target->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tonemap_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_tonemap_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tonemap_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "tonemap", 0);
 
@@ -129,5 +131,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

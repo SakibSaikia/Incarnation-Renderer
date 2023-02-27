@@ -13,16 +13,18 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	concurrency::task<void> TAAResolve(RenderJob::Sync* jobSync, const TAAResolveDesc& passDesc)
+	Result TAAResolve(RenderJob::Sync* jobSync, const TAAResolveDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorSourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();
 		size_t uavTransitionToken = passDesc.target->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"taa_resolve_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_taa_resolve", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"taa_resolve_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "taa_resolve", 0);
 
@@ -75,7 +77,7 @@ namespace RenderJob
 				L"taa_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(TaaConstants),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<TaaConstants*>(pDest);
@@ -104,5 +106,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

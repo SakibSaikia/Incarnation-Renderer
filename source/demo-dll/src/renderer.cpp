@@ -23,6 +23,7 @@ namespace Renderer
 	uint32_t s_pathtraceCurrentSampleIndex = 1;
 	FRenderStats s_renderStats;
 	FDebugDraw s_debugDrawing;
+	FCommandList::SyncObj s_renderPassSync[AnnotatedPassCount];	
 }
 
 // Render Jobs
@@ -111,24 +112,36 @@ void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 	s_debugDrawing.Initialize();
 }
 
-void Renderer::BlockUntilBeginPass(SyncRenderPass waitPass)
+void Renderer::BlockUntilBeginPass(AnnotatedPass pass)
 {
-	s_jobSync->BlockingWaitForBeginPass(waitPass);
+	const FFenceMarker& gpuBeginMarker = s_renderPassSync[pass].m_fenceMarkers[(uint32_t)FCommandList::Sync::GpuBegin];
+	gpuBeginMarker.Wait();
 }
 
-void Renderer::BlockUntilEndPass(SyncRenderPass waitPass)
+void Renderer::BlockUntilEndPass(AnnotatedPass pass)
 {
-	s_jobSync->BlockingWaitForEndPass(waitPass);
+	const FFenceMarker& gpuFinishMarker = s_renderPassSync[pass].m_fenceMarkers[(uint32_t)FCommandList::Sync::GpuFinish];
+	gpuFinishMarker.Wait();
 }
 
-void Renderer::SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass)
+void Renderer::SyncQueueToBeginPass(D3D12_COMMAND_LIST_TYPE queueType, AnnotatedPass pass)
 {
-	s_jobSync->InsertGpuWaitForBeginPass(queueType, waitPass);
+	using namespace Renderer;
+	SCOPED_COMMAND_QUEUE_EVENT(queueType, "cross_queue_sync", 0);
+
+	D3DCommandQueue_t* cmdQueue = RenderBackend12::GetCommandQueue(queueType);
+	const FFenceMarker& gpuBeginMarker = s_renderPassSync[pass].m_fenceMarkers[(uint32_t)FCommandList::Sync::GpuBegin];
+	gpuBeginMarker.Wait(cmdQueue);
 }
 
-void Renderer::SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, SyncRenderPass waitPass)
+void Renderer::SyncQueuetoEndPass(D3D12_COMMAND_LIST_TYPE queueType, AnnotatedPass pass)
 {
-	s_jobSync->InsertGpuWaitForEndPass(queueType, waitPass);
+	using namespace Renderer;
+	SCOPED_COMMAND_QUEUE_EVENT(queueType, "cross_queue_sync", 0);
+
+	D3DCommandQueue_t* cmdQueue = RenderBackend12::GetCommandQueue(queueType);
+	const FFenceMarker& gpuFinishMarker = s_renderPassSync[pass].m_fenceMarkers[(uint32_t)FCommandList::Sync::GpuFinish];
+	gpuFinishMarker.Wait(cmdQueue);
 }
 
 std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width, const uint32_t height)
@@ -137,7 +150,7 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", SurfaceType::UAV, ResourceAllocation::Pooled(cmdList->GetFence(SyncFence::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
+	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", SurfaceType::UAV, ResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
 
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
@@ -592,7 +605,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"debug_drawcall_gen_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[&](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
@@ -643,7 +656,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"frame_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -665,7 +678,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"view_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -790,7 +803,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"frame_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
@@ -809,7 +822,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				L"view_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
@@ -925,7 +938,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 	}
 
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-	flushCompleteFence = cmdList->GetFence(SyncFence::GpuFinish);
+	flushCompleteFence = cmdList->GetFence(FCommandList::Sync::GpuFinish);
 }
 
 void Renderer::Teardown()
@@ -1099,7 +1112,8 @@ void Renderer::Render(const FRenderState& renderState)
 
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
-	sceneRenderJobs.push_back(RenderJob::UpdateTLAS(s_jobSync.get(), renderState.m_scene));
+	RenderJob::Result updateTLASJob = RenderJob::UpdateTLAS(s_jobSync.get(), renderState.m_scene);
+	sceneRenderJobs.push_back(updateTLASJob.m_task);
 
 	if (c.PathTrace)
 	{
@@ -1116,7 +1130,9 @@ void Renderer::Render(const FRenderState& renderState)
 			pathtraceDesc.scene = renderState.m_scene;
 			pathtraceDesc.view = &renderState.m_view;
 			pathtraceDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::PathTrace(s_jobSync.get(), pathtraceDesc));
+
+			RenderJob::Result pathTraceJob = RenderJob::PathTrace(s_jobSync.get(), pathtraceDesc);
+			sceneRenderJobs.push_back(pathTraceJob.m_task);
 
 			// Accumulate samples
 			s_pathtraceCurrentSampleIndex++;
@@ -1126,7 +1142,9 @@ void Renderer::Render(const FRenderState& renderState)
 		tonemapDesc.source = s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.renderConfig = c;
-		sceneRenderJobs.push_back(RenderJob::Tonemap(s_jobSync.get(), tonemapDesc));
+
+		RenderJob::Result tonemapJob = RenderJob::Tonemap(s_jobSync.get(), tonemapDesc);
+		sceneRenderJobs.push_back(tonemapJob.m_task);
 
 	}
 	else
@@ -1138,7 +1156,9 @@ void Renderer::Render(const FRenderState& renderState)
 		batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
 		batchCullDesc.viewConstantBuffer = cbViewConstants.get();
 		batchCullDesc.primitiveCount = totalPrimitives;
-		sceneRenderJobs.push_back(RenderJob::BatchCulling(s_jobSync.get(), batchCullDesc));
+
+		RenderJob::Result batchCullJob = RenderJob::BatchCulling(s_jobSync.get(), batchCullDesc);
+		sceneRenderJobs.push_back(batchCullJob.m_task);
 
 		// Light Culling
 		const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
@@ -1155,7 +1175,9 @@ void Renderer::Render(const FRenderState& renderState)
 			lightCullDesc.view = &renderState.m_cullingView;
 			lightCullDesc.jitter = pixelJitter;
 			lightCullDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::LightCulling(s_jobSync.get(), lightCullDesc));
+
+			RenderJob::Result lightCullJob = RenderJob::LightCulling(s_jobSync.get(), lightCullDesc);
+			sceneRenderJobs.push_back(lightCullJob.m_task);
 		}
 
 		// Visibility Pass
@@ -1170,7 +1192,10 @@ void Renderer::Render(const FRenderState& renderState)
 		visDesc.resX = resX;
 		visDesc.resY = resY;
 		visDesc.scenePrimitiveCount = totalPrimitives;
-		sceneRenderJobs.push_back(RenderJob::VisibilityPass(s_jobSync.get(), visDesc));
+
+		RenderJob::Result visibilityJob = RenderJob::VisibilityPass(s_jobSync.get(), visDesc);
+		sceneRenderJobs.push_back(visibilityJob.m_task);
+		s_renderPassSync[VisibilityPass] = visibilityJob.m_syncObj;
 
 		// GBuffer Pass + Emissive
 		RenderJob::GBufferPassDesc gbufferDesc = {};
@@ -1185,8 +1210,12 @@ void Renderer::Render(const FRenderState& renderState)
 		gbufferDesc.resX = resX;
 		gbufferDesc.resY = resY;
 		gbufferDesc.scene = renderState.m_scene;
-		sceneRenderJobs.push_back(RenderJob::GBufferComputePass(s_jobSync.get(), gbufferDesc));
-		sceneRenderJobs.push_back(RenderJob::GBufferDecalPass(s_jobSync.get(), gbufferDesc));
+
+		RenderJob::Result gbufferJob = RenderJob::GBufferComputePass(s_jobSync.get(), gbufferDesc);
+		sceneRenderJobs.push_back(gbufferJob.m_task);
+
+		RenderJob::Result gbufferDecalsJob = RenderJob::GBufferDecalPass(s_jobSync.get(), gbufferDesc);
+		sceneRenderJobs.push_back(gbufferDecalsJob.m_task);
 
 		// Sky Lighting
 		RenderJob::SkyLightingDesc skyLightingDesc = {};
@@ -1202,7 +1231,9 @@ void Renderer::Render(const FRenderState& renderState)
 		skyLightingDesc.resX = resX;
 		skyLightingDesc.resY = resY;
 		skyLightingDesc.envBRDFTex = s_envBRDF.get();
-		sceneRenderJobs.push_back(RenderJob::SkyLighting(s_jobSync.get(), skyLightingDesc));
+
+		RenderJob::Result skylightJob = RenderJob::SkyLighting(s_jobSync.get(), skyLightingDesc);
+		sceneRenderJobs.push_back(skylightJob.m_task);
 
 		// Direct Lighting
 		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
@@ -1220,7 +1251,9 @@ void Renderer::Render(const FRenderState& renderState)
 			directLightingDesc.renderConfig = c;
 			directLightingDesc.resX = resX;
 			directLightingDesc.resY = resY;
-			sceneRenderJobs.push_back(RenderJob::DirectLighting(s_jobSync.get(), directLightingDesc));
+
+			RenderJob::Result directLightingJob = RenderJob::DirectLighting(s_jobSync.get(), directLightingDesc);
+			sceneRenderJobs.push_back(directLightingJob.m_task);
 		}
 
 		// Clustered Lighting
@@ -1240,7 +1273,9 @@ void Renderer::Render(const FRenderState& renderState)
 			clusteredLightingDesc.renderConfig = c;
 			clusteredLightingDesc.resX = resX;
 			clusteredLightingDesc.resY = resY;
-			sceneRenderJobs.push_back(RenderJob::ClusteredLighting(s_jobSync.get(), clusteredLightingDesc, bRequiresClear));
+
+			RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLighting(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
+			sceneRenderJobs.push_back(clusteredLightingJob.m_task);
 		}
 
 		if (c.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
@@ -1256,7 +1291,9 @@ void Renderer::Render(const FRenderState& renderState)
 			envmapDesc.view = &renderState.m_view;
 			envmapDesc.jitter = pixelJitter;
 			envmapDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::EnvironmentmapPass(s_jobSync.get(), envmapDesc));
+
+			RenderJob::Result envmapJob = RenderJob::EnvironmentmapPass(s_jobSync.get(), envmapDesc);
+			sceneRenderJobs.push_back(envmapJob.m_task);
 		}
 		else
 		{
@@ -1270,7 +1307,9 @@ void Renderer::Render(const FRenderState& renderState)
 			skyDesc.view = &renderState.m_view;
 			skyDesc.jitter = pixelJitter;
 			skyDesc.renderConfig = c;
-			sceneRenderJobs.push_back(RenderJob::DynamicSkyPass(s_jobSync.get(), skyDesc));
+
+			RenderJob::Result dynamicSkyJob = RenderJob::DynamicSkyPass(s_jobSync.get(), skyDesc);
+			sceneRenderJobs.push_back(dynamicSkyJob.m_task);
 		}
 
 		if (c.Viewmode != (int)Viewmode::Normal)
@@ -1292,7 +1331,9 @@ void Renderer::Render(const FRenderState& renderState)
 			desc.mouseY = renderState.m_mouseY;
 			desc.scene = renderState.m_scene;
 			desc.view = &renderState.m_view;
-			sceneRenderJobs.push_back(RenderJob::DebugViz(s_jobSync.get(), desc));
+
+			RenderJob::Result debugVizJob = RenderJob::DebugViz(s_jobSync.get(), desc);
+			sceneRenderJobs.push_back(debugVizJob.m_task);
 
 			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
 			{
@@ -1305,7 +1346,9 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.sceneConstantBuffer = cbSceneConstants.get();
 				desc.viewConstantBuffer = cbViewConstants.get();
 				desc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::HighlightPass(s_jobSync.get(), desc));
+
+				RenderJob::Result highlightJob = RenderJob::HighlightPass(s_jobSync.get(), desc);
+				sceneRenderJobs.push_back(highlightJob.m_task);
 			}
 		}
 		else
@@ -1326,14 +1369,18 @@ void Renderer::Render(const FRenderState& renderState)
 				resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
 				resolveDesc.depthTextureIndex = depthBuffer->m_descriptorIndices.SRV;
 				resolveDesc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::TAAResolve(s_jobSync.get(), resolveDesc));
+
+				RenderJob::Result resolveJob = RenderJob::TAAResolve(s_jobSync.get(), resolveDesc);
+				sceneRenderJobs.push_back(resolveJob.m_task);
 
 				// Tonemap
 				RenderJob::TonemapDesc tonemapDesc = {};
 				tonemapDesc.source = s_taaAccumulationBuffer.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::Tonemap(s_jobSync.get(), tonemapDesc));
+
+				RenderJob::Result tonemapJob = RenderJob::Tonemap(s_jobSync.get(), tonemapDesc);
+				sceneRenderJobs.push_back(tonemapJob.m_task);
 
 				// Save view projection transform for next frame's reprojection
 				s_prevViewProjectionTransform = viewProjectionTransform;
@@ -1345,7 +1392,9 @@ void Renderer::Render(const FRenderState& renderState)
 				tonemapDesc.source = hdrRasterSceneColor.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
-				sceneRenderJobs.push_back(RenderJob::Tonemap(s_jobSync.get(), tonemapDesc));
+
+				RenderJob::Result tonemapJob = RenderJob::Tonemap(s_jobSync.get(), tonemapDesc);
+				sceneRenderJobs.push_back(tonemapJob.m_task);
 			}
 		}
 	}
@@ -1366,17 +1415,13 @@ void Renderer::Render(const FRenderState& renderState)
 	s_debugDrawing.Flush(debugDesc);
 
 	// Render UI
-	std::vector<concurrency::task<void>> uiRenderJobs;
 	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), c };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
-		uiRenderJobs.push_back(RenderJob::UI(s_jobSync.get(), uiDesc));
+		RenderJob::Result uiJob = RenderJob::UI(s_jobSync.get(), uiDesc);
+		uiJob.m_task.wait();
 	}
-
-	// Wait for all UI render jobs to finish
-	auto uiRenderJoinTask = concurrency::when_all(std::begin(uiRenderJobs), std::end(uiRenderJobs));
-	uiRenderJoinTask.wait();
 
 	// Present the frame
 	frameIndex++;
@@ -1387,11 +1432,11 @@ void Renderer::Render(const FRenderState& renderState)
 	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(s_jobSync->GetCpuFence());
 	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
 	{
-			readbackCompleteCompleteMarker.Wait();
+		readbackCompleteCompleteMarker.Wait();
 	}).then([renderStatsReadbackContext]()
-		{
-			s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStats>();
-		});
+	{
+		s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStats>();
+	});
 }
 
 void Renderer::ResetPathtraceAccumulation()

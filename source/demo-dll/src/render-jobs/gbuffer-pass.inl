@@ -13,7 +13,7 @@ namespace RenderJob
 		const FScene* scene;
 	};
 
-	concurrency::task<void> GBufferComputePass(RenderJob::Sync* jobSync, const GBufferPassDesc& passDesc)
+	Result GBufferComputePass(RenderJob::Sync* jobSync, const GBufferPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t sourceTransitionToken = passDesc.sourceVisBuffer->m_resource->GetTransitionToken();
@@ -24,10 +24,13 @@ namespace RenderJob
 			passDesc.gbufferTargets[2]->m_resource->GetTransitionToken()
 		};
 
-		return concurrency::create_task([=]
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_pass", D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_gbuffer_pass", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_pass", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_pass", 0);
 
@@ -104,9 +107,11 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 
-	concurrency::task<void> GBufferDecalPass(RenderJob::Sync* jobSync, const GBufferPassDesc& passDesc)
+	Result GBufferDecalPass(RenderJob::Sync* jobSync, const GBufferPassDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t gbufferTransitionTokens[3] = {
@@ -115,10 +120,13 @@ namespace RenderJob
 			passDesc.gbufferTargets[2]->m_resource->GetTransitionToken()
 		};
 
-		return concurrency::create_task([=]
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_decals", D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_gbuffer_decals", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_decals", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_decals", 0);
 
@@ -318,5 +326,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

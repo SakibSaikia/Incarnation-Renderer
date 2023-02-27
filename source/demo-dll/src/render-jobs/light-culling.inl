@@ -13,17 +13,19 @@ namespace RenderJob
 		Vector2 jitter;
 	};
 
-	concurrency::task<void> LightCulling(RenderJob::Sync* jobSync, const LightCullingDesc& passDesc)
+	Result LightCulling(RenderJob::Sync* jobSync, const LightCullingDesc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t culledLightCountBufferTransitionToken = passDesc.culledLightCountBuffer->m_resource->GetTransitionToken();
 		size_t culledLightListsBufferTransitionToken = passDesc.culledLightListsBuffer->m_resource->GetTransitionToken();
 		size_t lightGridBufferTransitionToken = passDesc.lightGridBuffer->m_resource->GetTransitionToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"light_culling", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("light_culling", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"light_culling", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "light_culling", 0);
 
@@ -90,7 +92,7 @@ namespace RenderJob
 				L"light_cull_cb",
 				ResourceAccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
@@ -138,5 +140,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }

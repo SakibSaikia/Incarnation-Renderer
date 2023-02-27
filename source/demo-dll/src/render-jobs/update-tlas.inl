@@ -1,13 +1,15 @@
 namespace RenderJob
 {
-	concurrency::task<void> UpdateTLAS(RenderJob::Sync* jobSync, const FScene* scene)
+	Result UpdateTLAS(RenderJob::Sync* jobSync, const FScene* scene)
 	{
 		size_t renderToken = jobSync->GetToken();
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tlas_update_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		return concurrency::create_task([=]
+		Result passResult;
+		passResult.m_syncObj = cmdList->GetSync();
+		passResult.m_task = concurrency::create_task([=]
 		{
 			SCOPED_CPU_EVENT("record_tlas_update", PIX_COLOR_DEFAULT);
-			FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tlas_update_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "update_tlas", PIX_COLOR_DEFAULT);
 
@@ -46,7 +48,7 @@ namespace RenderJob
 				L"instance_descs_buffer",
 				ResourceAccessMode::CpuWriteOnly,
 				instanceDescBufferSize,
-				cmdList->GetFence(SyncFence::GpuFinish),
+				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 				{
 					memcpy(pDest, pData, instanceDescBufferSize);
@@ -67,7 +69,7 @@ namespace RenderJob
 				L"tlas_scratch",
 				BufferType::AccelerationStructure,
 				ResourceAccessMode::GpuWriteOnly,
-				ResourceAllocation::Pooled(cmdList->GetFence(SyncFence::GpuFinish)),
+				ResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)),
 				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 			// Build TLAS
@@ -85,5 +87,7 @@ namespace RenderJob
 		{
 			jobSync->Execute(renderToken, recordedCl);
 		});
+
+		return passResult;
 	}
 }
