@@ -22,15 +22,15 @@ namespace RenderJob::GBufferRasterPass
 			passDesc.gbufferTargets[2]->m_resource->GetTransitionToken()
 		};
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_decals", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_raster", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		Result passResult;
 		passResult.m_syncObj = cmdList->GetSync();
 		passResult.m_task = concurrency::create_task([=]
 		{
-			SCOPED_CPU_EVENT("record_gbuffer_decals", PIX_COLOR_DEFAULT);
+			SCOPED_CPU_EVENT("record_gbuffer_raster", PIX_COLOR_DEFAULT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_decals", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_raster", 0);
 
 			passDesc.gbufferTargets[0]->m_resource->Transition(cmdList, gbufferTransitionTokens[0], 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.gbufferTargets[1]->m_resource->Transition(cmdList, gbufferTransitionTokens[1], 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
@@ -47,9 +47,9 @@ namespace RenderJob::GBufferRasterPass
 
 			// Root Signature
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"gbuffer_geo_rootsig",
+				L"gbuffer_raster_rootsig",
 				cmdList,
-				FRootSignature::Desc{ L"geo-raster/gbuffer-geo.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"geo-raster/gbuffer-raster.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
@@ -96,8 +96,8 @@ namespace RenderJob::GBufferRasterPass
 
 					// PSO - Shaders
 					{
-						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/gbuffer-geo.hlsl", L"vs_main", L"" , L"vs_6_6" });
-						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/gbuffer-geo.hlsl", L"ps_main", L"" , L"ps_6_6"});
+						IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/gbuffer-raster.hlsl", L"vs_main", L"" , L"vs_6_6" });
+						IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/gbuffer-raster.hlsl", L"ps_main", L"" , L"ps_6_6"});
 
 						psoDesc.VS.pShaderBytecode = vsBlob->GetBufferPointer();
 						psoDesc.VS.BytecodeLength = vsBlob->GetBufferSize();

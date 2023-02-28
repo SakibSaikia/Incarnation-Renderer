@@ -24,15 +24,15 @@ namespace RenderJob::GBufferComputePass
 			passDesc.gbufferTargets[2]->m_resource->GetTransitionToken()
 		};
 
-		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_pass", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"gbuffer_compute", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		Result passResult;
 		passResult.m_syncObj = cmdList->GetSync();
 		passResult.m_task = concurrency::create_task([=]
 		{
-			SCOPED_CPU_EVENT("record_gbuffer_pass", PIX_COLOR_DEFAULT);
+			SCOPED_CPU_EVENT("record_gbuffer_compute", PIX_COLOR_DEFAULT);
 			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_pass", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "gbuffer_compute", 0);
 
 			passDesc.sourceVisBuffer->m_resource->Transition(cmdList, sourceTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			passDesc.colorTarget->m_resource->Transition(cmdList, colorTargetTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -46,15 +46,15 @@ namespace RenderJob::GBufferComputePass
 
 			// Root Signature
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"gbuffer_rootsig",
+				L"gbuffer_compute_rootsig",
 				cmdList,
-				FRootSignature::Desc { L"geo-raster/gbuffer-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc { L"geo-raster/gbuffer-compute.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
-				L"geo-raster/gbuffer-pass.hlsl",
+				L"geo-raster/gbuffer-compute.hlsl",
 				L"cs_main",
 				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16",
 				L"cs_6_6" });
