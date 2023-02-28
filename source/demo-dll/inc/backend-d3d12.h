@@ -9,8 +9,6 @@
 #include <pix3.h>
 #include <vector>
 #include <string>
-#include <functional>
-#include <optional>
 #include <concurrent_vector.h>
 
 // Aliased types
@@ -73,6 +71,7 @@ enum class DescriptorRange : uint32_t
 	TotalCount
 };
 
+//--------------------------------------------------------------------
 struct FFenceMarker
 {
 	FFenceMarker() = default;
@@ -92,6 +91,7 @@ private:
 	size_t m_value;
 };
 
+//--------------------------------------------------------------------
 struct FCommandList
 {
 	enum class Sync
@@ -123,6 +123,7 @@ struct FCommandList
 	SyncObj GetSync() const;
 };
 
+//--------------------------------------------------------------------
 // Saves the capture to a file named PIXGpuCapture.wpix in the binaries directory
 struct FScopedGpuCapture
 {
@@ -132,6 +133,7 @@ struct FScopedGpuCapture
 	FFenceMarker m_waitFence;
 };
 
+//--------------------------------------------------------------------
 struct FShaderDesc
 {
 	std::wstring m_relativepath;
@@ -140,6 +142,7 @@ struct FShaderDesc
 	std::wstring m_profile;
 };
 
+//--------------------------------------------------------------------
 struct FRootSignature
 {
 	struct Desc
@@ -154,6 +157,7 @@ struct FRootSignature
 	~FRootSignature();
 };
 
+//--------------------------------------------------------------------
 struct FResource
 {
 	enum class Type
@@ -224,6 +228,7 @@ struct FResource
 	size_t GetSizeBytes() const;
 };
 
+//--------------------------------------------------------------------
 struct FTexture
 {
 	enum class Type
@@ -250,6 +255,7 @@ struct FTexture
 	}
 };
 
+//--------------------------------------------------------------------
 struct FShaderSurface
 {
 	// Not using enum class here so that we can easily pass in OR'd values from call sites to create surfaces
@@ -278,6 +284,7 @@ struct FShaderSurface
 	FShaderSurface& operator=(FShaderSurface&& other);
 };
 
+//--------------------------------------------------------------------
 struct FShaderBuffer
 {
 	enum class Type
@@ -303,6 +310,7 @@ struct FShaderBuffer
 	FShaderBuffer& operator=(FShaderBuffer&& other);
 };
 
+//--------------------------------------------------------------------
 struct FSystemBuffer
 {
 	FResource* m_resource;
@@ -311,6 +319,7 @@ struct FSystemBuffer
 	~FSystemBuffer();
 };
 
+//--------------------------------------------------------------------
 class FResourceUploadContext
 {
 public:
@@ -334,6 +343,7 @@ private:
 	std::vector<std::function<void(FCommandList*)>> m_pendingTransitions;
 };
 
+//--------------------------------------------------------------------
 class FResourceReadbackContext
 {
 public:
