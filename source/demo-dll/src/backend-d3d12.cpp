@@ -617,7 +617,7 @@ template<D3D12_HEAP_TYPE heapType>
 class TResourcePool
 {
 public:
-	FResource* GetOrCreate(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState, const D3D12_CLEAR_VALUE* clearValue)
+	FResource* GetOrCreate(const std::wstring& name, const D3D12_RESOURCE_DESC& resourceDesc, const D3D12_RESOURCE_STATES initialState)
 	{
 		const std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -649,15 +649,48 @@ public:
 		return m_useList.back().get();
 	}
 
+	void Retire(const FTexture* texture)
+	{
+		auto waitForFenceTask = concurrency::create_task([this, fence = texture->m_alloc.m_lifetime]() mutable
+		{
+			fence.Wait();
+		});
+
+		auto addToFreePool = [this, resource = texture->m_resource, srvIndex = texture->m_srvIndex]() mutable
+		{
+			const std::lock_guard<std::mutex> lock(m_mutex);
+
+			if (srvIndex != ~0u)
+			{
+				GetBindlessPool()->ReturnIndex(srvIndex);
+			}
+
+			for (auto it = m_useList.begin(); it != m_useList.end();)
+			{
+				if (it->get() == resource)
+				{
+					m_freeList.push_back(std::move(*it));
+					it = m_useList.erase(it);
+					break;
+				}
+				else
+				{
+					++it;
+				}
+			}
+		};
+
+		waitForFenceTask.then(addToFreePool);
+	}
+
 	void Retire(const FShaderSurface* surface)
 	{
 		auto waitForFenceTask = concurrency::create_task([this, fence = surface->m_alloc.m_lifetime]() mutable
-			{
-				fence.Wait();
-			});
+		{
+			fence.Wait();
+		});
 
-		auto addToFreePool =
-			[this, surfaceType = surface->m_type, resource = surface->m_resource, descriptors = surface->m_descriptorIndices]() mutable
+		auto addToFreePool = [this, surfaceType = surface->m_type, resource = surface->m_resource, descriptors = surface->m_descriptorIndices]() mutable
 		{
 			const std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -1348,32 +1381,19 @@ private:
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 FTexture::~FTexture()
 {
-	auto waitForFenceTask = concurrency::create_task([this]() mutable
+	if (m_alloc.m_type == FResourceAllocation::Type::Committed)
 	{
-		winrt::com_ptr<D3DFence_t> fence;
-		AssertIfFailed(GetDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence.put())));
-
-		GetGraphicsQueue()->Signal(fence.get(), 1);
-		HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
-		if (event)
+		if (m_srvIndex != ~0u)
 		{
-			fence->SetEventOnCompletion(1, event);
-			WaitForSingleObject(event, INFINITE);
-		}
-	});
-
-	// Make a copy of the resource contents as it will be cleaned up by the destructor
-	auto freeResource = [resource = m_resource, srvIndex = m_srvIndex]() mutable
-	{
-		if (srvIndex != ~0u)
-		{
-			GetBindlessPool()->ReturnIndex(srvIndex);
+			GetBindlessPool()->ReturnIndex(m_srvIndex);
 		}
 
-		delete resource;
-	};
-
-	waitForFenceTask.then(freeResource);
+		delete m_resource;
+	}
+	else if (m_alloc.m_type == FResourceAllocation::Type::Pooled)
+	{
+		GetDefaultResourcePool()->Retire(this);
+	}
 }
 
 void FShaderSurface::FDescriptors::Release(const uint32_t surfaceType)
@@ -1430,12 +1450,12 @@ FShaderSurface& FShaderSurface::operator=(FShaderSurface&& other)
 
 FShaderSurface::~FShaderSurface()
 {
-	if (m_type & SurfaceType::SwapChain || m_alloc.m_type == ResourceAllocationType::Committed)
+	if (m_type & SurfaceType::SwapChain || m_alloc.m_type == FResourceAllocation::Type::Committed)
 	{
 		m_descriptorIndices.Release(m_type);
 		delete m_resource;
 	}
-	else if(m_alloc.m_type == ResourceAllocationType::Pooled)
+	else if(m_alloc.m_type == FResourceAllocation::Type::Pooled)
 	{
 		GetDefaultResourcePool()->Retire(this);
 	}
@@ -1477,11 +1497,11 @@ FShaderBuffer& FShaderBuffer::operator=(FShaderBuffer&& other)
 
 FShaderBuffer::~FShaderBuffer()
 {
-	if (m_alloc.m_type == ResourceAllocationType::Pooled)
+	if (m_alloc.m_type == FResourceAllocation::Type::Pooled)
 	{
 		GetDefaultResourcePool()->Retire(this);
 	}
-	else if(m_alloc.m_type == ResourceAllocationType::Committed)
+	else if(m_alloc.m_type == FResourceAllocation::Type::Committed)
 	{
 		m_descriptorIndices.Release();
 		delete m_resource;
@@ -2366,7 +2386,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 	if (accessMode == ResourceAccessMode::CpuWriteOnly)
 	{
 		// Upload Buffer
-		buffer = s_uploadResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr);
+		buffer = s_uploadResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ);
 
 		uint8_t* pData;
 		buffer->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&pData));
@@ -2381,7 +2401,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 	else if (accessMode == ResourceAccessMode::CpuReadOnly)
 	{
 		// Readback Buffer
-		buffer = s_readbackResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr);
+		buffer = s_readbackResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST);
 	}
 
 	auto newBuffer = new FSystemBuffer;
@@ -2395,7 +2415,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	const std::wstring& name,
 	const uint32_t surfaceType,
-	const ResourceAllocation alloc,
+	const FResourceAllocation alloc,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
@@ -2492,11 +2512,11 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	surfaceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	surfaceDesc.Flags = surfaceFlags;
 
-	if (alloc.m_type == ResourceAllocationType::Pooled)
+	if (alloc.m_type == FResourceAllocation::Type::Pooled)
 	{
-		resource = s_defaultResourcePool.GetOrCreate(name, surfaceDesc, initialState, clearValue);
+		resource = s_defaultResourcePool.GetOrCreate(name, surfaceDesc, initialState);
 	}
-	else if (alloc.m_type == ResourceAllocationType::Committed)
+	else if (alloc.m_type == FResourceAllocation::Type::Committed)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2504,7 +2524,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 		resource = new FResource;
-		AssertIfFailed(resource->InitCommittedResource(name, heapProps, surfaceDesc, initialState, clearValue));
+		AssertIfFailed(resource->InitCommittedResource(name, heapProps, surfaceDesc, initialState));
 	}
 
 	// Create render texture descriptors
@@ -2665,7 +2685,8 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 
 FTexture* RenderBackend12::CreateNewTexture(
 	const std::wstring& name,
-	const TextureType type,
+	const FTexture::Type type,
+	const FResourceAllocation alloc,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
@@ -2676,33 +2697,39 @@ FTexture* RenderBackend12::CreateNewTexture(
 	FResourceUploadContext* uploadContext)
 {
 	SCOPED_CPU_EVENT("create_texture", PIX_COLOR_DEFAULT);
-	FTexture* newTexture = new FTexture;
 
-	// Create resource
+	// Create resource 
+	FResource* resource = {};
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Alignment = 0;
+	desc.Width = width;
+	desc.Height = height;
+	desc.DepthOrArraySize = numSlices;
+	desc.MipLevels = numMips;
+	desc.Format = format;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+	desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+	// Use implicit state transition for uploads.
+	// The resource will decay back to COMMON state after the commandlist is submitted and will be ready for reuse.
+	const D3D12_RESOURCE_STATES initialState = images && uploadContext ? D3D12_RESOURCE_STATE_COMMON : resourceState;
+
+	if (alloc.m_type == FResourceAllocation::Type::Pooled)
 	{
-		D3D12_HEAP_PROPERTIES props = {};
-		props.Type = D3D12_HEAP_TYPE_DEFAULT;
-		props.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-		props.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		resource = s_defaultResourcePool.GetOrCreate(name, desc, initialState);
+	}
+	else if (alloc.m_type == FResourceAllocation::Type::Committed)
+	{
+		D3D12_HEAP_PROPERTIES heapProps = {};
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
-		D3D12_RESOURCE_DESC desc = {};
-		desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-		desc.Alignment = 0;
-		desc.Width = width;
-		desc.Height = height;
-		desc.DepthOrArraySize = numSlices;
-		desc.MipLevels = numMips;
-		desc.Format = format;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-		desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-		// If upload data is specified, create resource state in COPY_DEST state and then transition to specified state after the copy finishes
-		D3D12_RESOURCE_STATES initialState = (images && uploadContext) ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState;
-
-		newTexture->m_resource = new FResource;
-		AssertIfFailed(newTexture->m_resource->InitCommittedResource(name, props, desc, D3D12_RESOURCE_STATE_COPY_DEST));
+		resource = new FResource;
+		AssertIfFailed(resource->InitCommittedResource(name, heapProps, desc, initialState));
 	}
 
 	// Upload texture data
@@ -2721,43 +2748,44 @@ FTexture* RenderBackend12::CreateNewTexture(
 		}
 
 		uploadContext->UpdateSubresources(
-			newTexture->m_resource,
+			resource,
 			srcData,
-			[newTexture, resourceState](FCommandList* cmdList)
+			[](FCommandList* cmdList)
 			{
-				newTexture->m_resource->Transition(cmdList, newTexture->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, resourceState);
+				
 			});
 	}
 
 	// Descriptor
-	if (type == TextureType::Tex2D)
+	uint32_t srvIndex;
+	if (type == FTexture::Type::Tex2D)
 	{
-		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2D);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+		srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2D);
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		srvDesc.Texture2D.MipLevels = numMips;
 		srvDesc.Texture2D.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
-	else if (type == TextureType::TexCube)
+	else if (type == FTexture::Type::TexCube)
 	{
-		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(ResourceType::TextureCube);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+		srvIndex = GetBindlessPool()->FetchIndex(ResourceType::TextureCube);
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
 		srvDesc.TextureCube.MipLevels = numMips;
 		srvDesc.TextureCube.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
-	else if (type == TextureType::Tex2DArray)
+	else if (type == FTexture::Type::Tex2DArray)
 	{
-		newTexture->m_srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2DArray);
-		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, newTexture->m_srvIndex);
+		srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2DArray);
+		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
@@ -2765,12 +2793,17 @@ FTexture* RenderBackend12::CreateNewTexture(
 		srvDesc.Texture2DArray.MipLevels = numMips;
 		srvDesc.Texture2DArray.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		GetDevice()->CreateShaderResourceView(newTexture->m_resource->m_d3dResource, &srvDesc, srv);
+		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
 	else
 	{
 		DebugAssert(false, "Not Implemented");
 	}
+
+	auto newTexture = new FTexture;
+	newTexture->m_alloc = alloc;
+	newTexture->m_resource = resource;
+	newTexture->m_srvIndex = srvIndex;
 
 	return newTexture;
 }
@@ -2779,7 +2812,7 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 	const std::wstring& name,
 	const BufferType type,
 	const ResourceAccessMode accessMode,
-	const ResourceAllocation alloc,
+	const FResourceAllocation alloc,
 	const size_t size,
 	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
@@ -2827,11 +2860,11 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 
 	// Create Resource
 	FResource* resource = {};
-	if (alloc.m_type == ResourceAllocationType::Pooled)
+	if (alloc.m_type == FResourceAllocation::Type::Pooled)
 	{
-		resource = s_defaultResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState, nullptr);
+		resource = s_defaultResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState);
 	}
-	else if (alloc.m_type == ResourceAllocationType::Committed)
+	else if (alloc.m_type == FResourceAllocation::Type::Committed)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;

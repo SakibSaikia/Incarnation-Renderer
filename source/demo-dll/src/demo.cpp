@@ -1113,7 +1113,7 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 			PrintString(L"scene_mesh_buffer_%d", bufferIndex),
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			model.buffers[bufferIndex].data.size(),
 			false,
 			model.buffers[bufferIndex].data.data(),
@@ -1148,7 +1148,7 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 		L"scene_mesh_buffer_views",
 		BufferType::Raw,
 		ResourceAccessMode::GpuReadOnly,
-		ResourceAllocation::Committed(),
+		FResourceAllocation::Committed(),
 		bufferSize,
 		false,
 		(const uint8_t*) views.data(),
@@ -1182,7 +1182,7 @@ void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 		L"scene_mesh_accessors",
 		BufferType::Raw,
 		ResourceAccessMode::GpuReadOnly,
-		ResourceAllocation::Committed(),
+		FResourceAllocation::Committed(),
 		bufferSize,
 		false,
 		(const uint8_t*) accessors.data(),
@@ -1231,7 +1231,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 			L"scene_primitives",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			bufferSize,
 			false,
 			(const uint8_t*)primitives.data(),
@@ -1255,7 +1255,7 @@ void FScene::CreateGpuPrimitiveBuffers()
 			L"scene_primitive_counts",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			bufferSize,
 			false,
 			(const uint8_t*)primitiveCounts.data(),
@@ -1279,7 +1279,7 @@ void FScene::CreateGpuLightBuffers()
 			L"scene_light_indices",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			indexBufferSize,
 			false,
 			(const uint8_t*)m_sceneLights.m_entityList.data(),
@@ -1375,14 +1375,14 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 					L"blas_scratch",
 					BufferType::AccelerationStructure,
 					ResourceAccessMode::GpuWriteOnly,
-					ResourceAllocation::Pooled(gpuFinishFence),
+					FResourceAllocation::Pooled(gpuFinishFence),
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 				m_blasList[meshName].reset(RenderBackend12::CreateNewShaderBuffer(
 					PrintString(L"%s_blas", s2ws(meshName)),
 					BufferType::AccelerationStructure,
 					ResourceAccessMode::GpuReadWrite,
-					ResourceAllocation::Committed(),
+					FResourceAllocation::Committed(),
 					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes)));
 
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
@@ -1447,14 +1447,14 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 			L"tlas_scratch",
 			BufferType::AccelerationStructure,
 			ResourceAccessMode::GpuWriteOnly,
-			ResourceAllocation::Pooled(gpuFinishFence),
+			FResourceAllocation::Pooled(gpuFinishFence),
 			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 		m_tlas.reset(RenderBackend12::CreateNewShaderBuffer(
 			L"tlas_buffer",
 			BufferType::AccelerationStructure,
 			ResourceAccessMode::GpuReadWrite,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes)));
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
@@ -1492,7 +1492,7 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 		L"scene_materials",
 		BufferType::Raw,
 		ResourceAccessMode::GpuReadOnly,
-		ResourceAllocation::Committed(),
+		FResourceAllocation::Committed(),
 		bufferSize,
 		false,
 		(const uint8_t*)m_materialList.data(),
@@ -1815,14 +1815,14 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Create source textures
 	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
 	FResourceUploadContext uploader{ uploadSize };
-	std::unique_ptr<FTexture> srcNormalmap{ RenderBackend12::CreateNewTexture(L"src_normalmap", TextureType::Tex2D, normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader) };
-	std::unique_ptr<FTexture> srcMetallicRoughnessmap{ RenderBackend12::CreateNewTexture(L"src_metallic_roughness", TextureType::Tex2D, metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader) };
+	std::unique_ptr<FTexture> srcNormalmap{ RenderBackend12::CreateNewTexture(L"src_normalmap", FTexture::Type::Tex2D, FResourceAllocation::Pooled(gpuFinishFence), normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader) };
+	std::unique_ptr<FTexture> srcMetallicRoughnessmap{ RenderBackend12::CreateNewTexture(L"src_metallic_roughness", FTexture::Type::Tex2D, FResourceAllocation::Pooled(gpuFinishFence), metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader) };
 
 	// Create UAVs for prefiltering
 	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);
 	size_t metallicRoughnessMipCount = RenderUtils12::CalcMipCount(metallicRoughnessImage.width, metallicRoughnessImage.height, true);
-	std::unique_ptr<FShaderSurface> normalmapFilterUav{ RenderBackend12::CreateNewShaderSurface(L"dest_normalmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount)};
-	std::unique_ptr<FShaderSurface> metallicRoughnessFilterUav{ RenderBackend12::CreateNewShaderSurface(L"dest_metallicRoughnessmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount) };
+	std::unique_ptr<FShaderSurface> normalmapFilterUav{ RenderBackend12::CreateNewShaderSurface(L"dest_normalmap", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount)};
+	std::unique_ptr<FShaderSurface> metallicRoughnessFilterUav{ RenderBackend12::CreateNewShaderSurface(L"dest_metallicRoughnessmap", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount) };
 
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "prefilter_normal_roughness", 0);
@@ -2165,8 +2165,8 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	const int numSHCoefficients = 9;
 	const int cubemapRes = Demo::s_globalConfig.EnvmapResolution;
 	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
-	std::shared_ptr<FShaderSurface> newEnvmap { RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_envmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
-	m_dynamicSkySH.reset(RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_SH", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1));
+	std::shared_ptr<FShaderSurface> newEnvmap { RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_envmap", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
+	m_dynamicSkySH.reset(RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_SH", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1));
 
 	{
 		//FScopedGpuCapture capture(cmdList);
@@ -2180,7 +2180,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Render dynamic sky to 2D surface using spherical/equirectangular projection
 		const int resX = 2 * cubemapRes, resY = cubemapRes;
-		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_tex", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips) };
+		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_tex", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips) };
 		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_descriptorIndices.UAVs[0], resX, resY, m_sunDir);
 
 		// Downsample to generate mips
@@ -2201,7 +2201,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Convert to cubemap
 		const size_t cubemapSize = cubemapRes;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6) };
 		Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_descriptorIndices.SRV, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// Prefilter the cubemap
@@ -2516,7 +2516,7 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 	else
 	{
-		m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture(name, TextureType::Tex2D, format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext));
+		m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture(name, FTexture::Type::Tex2D, FResourceAllocation::Committed(), format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext));
 		return m_cachedTextures[name]->m_srvIndex;
 	}
 }
@@ -2528,7 +2528,7 @@ uint32_t FTextureCache::CacheEmptyTexture2D(
 	const int height,
 	const size_t mipCount)
 {
-	m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture(name, TextureType::Tex2D, format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST));
+	m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture(name, FTexture::Type::Tex2D, FResourceAllocation::Committed(), format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST));
 	return m_cachedTextures[name]->m_srvIndex;
 }
 
@@ -2563,15 +2563,15 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		DirectX::ScratchImage mipchain = {};
 		AssertIfFailed(DirectX::GenerateMipMaps(*scratch.GetImage(0,0,0), DirectX::TEX_FILTER_LINEAR, numMips, mipchain));
 
-		// Create the equirectangular source texture
-		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
-		std::unique_ptr<FTexture> srcHdrTex{ RenderBackend12::CreateNewTexture(
-			name, TextureType::Tex2D, metadata.format, metadata.width, metadata.height, mipchain.GetImageCount(), 1,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, mipchain.GetImages(), &uploadContext) };
-
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::Sync::GpuFinish);
+
+		// Create the equirectangular source texture
+		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
+		std::unique_ptr<FTexture> srcHdrTex{ RenderBackend12::CreateNewTexture(
+			name, FTexture::Type::Tex2D, FResourceAllocation::Pooled(gpuFinishFence), metadata.format, metadata.width, metadata.height, mipchain.GetImageCount(), 1,
+			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, mipchain.GetImages(), &uploadContext) };
 
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "hdr_preprocess", 0);
@@ -2581,7 +2581,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// Generate environment cubemap
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t cubemapSize = metadata.height;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, cubemapSize, cubemapSize, numMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), metadata.format, cubemapSize, cubemapSize, numMips, 1, 6) };
 		Renderer::ConvertLatlong2Cubemap(cmdList, srcHdrTex->m_srvIndex, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -2589,14 +2589,14 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t filteredEnvmapSize = cubemapSize >> 1;
 		const int filteredEnvmapMips = numMips - 1;
-		std::unique_ptr<FShaderSurface> texFilteredEnvmapUav{ RenderBackend12::CreateNewShaderSurface(L"filtered_envmap", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texFilteredEnvmapUav{ RenderBackend12::CreateNewShaderSurface(L"filtered_envmap", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6) };
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, texFilteredEnvmapUav->m_descriptorIndices.UAVs, filteredEnvmapSize, 0, filteredEnvmapMips);
 
 
 		// Copy from UAV to destination cubemap texture
 		texFilteredEnvmapUav->m_resource->Transition(cmdList, texFilteredEnvmapUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		std::unique_ptr<FTexture> filteredEnvmapTex{ RenderBackend12::CreateNewTexture(envmapTextureName, TextureType::TexCube, metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST) };
+		std::unique_ptr<FTexture> filteredEnvmapTex{ RenderBackend12::CreateNewTexture(envmapTextureName, FTexture::Type::TexCube, FResourceAllocation::Committed(), metadata.format, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST) };
 		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
 		filteredEnvmapTex->m_resource->Transition(cmdList, filteredEnvmapTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
@@ -2606,7 +2606,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
 		constexpr uint32_t srcMipIndex = 2;
-		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewShaderSurface(L"ShProj_0", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, 1, numCoefficients) };
+		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewShaderSurface(L"ShProj_0", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, 1, numCoefficients) };
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
@@ -2657,7 +2657,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		}
 
 		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
-		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewShaderSurface(L"ShProj_1", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, 1, numCoefficients) };
+		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewShaderSurface(L"ShProj_1", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, 1, numCoefficients) };
 
 		// Ping-pong UAVs
 		FShaderSurface* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
@@ -2729,7 +2729,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			}
 		}
 
-		std::unique_ptr<FShaderSurface> shTexureUavAccum{ RenderBackend12::CreateNewShaderSurface(L"ShAccum", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), metadata.format, numCoefficients, 1) };
+		std::unique_ptr<FShaderSurface> shTexureUavAccum{ RenderBackend12::CreateNewShaderSurface(L"ShAccum", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), metadata.format, numCoefficients, 1) };
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
@@ -2775,7 +2775,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Copy from UAV to destination texture
 		shTexureUavAccum->m_resource->Transition(cmdList, shTexureUavAccum->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		std::unique_ptr<FTexture> shTex{ RenderBackend12::CreateNewTexture(shTextureName, TextureType::Tex2D, metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
+		std::unique_ptr<FTexture> shTex{ RenderBackend12::CreateNewTexture(shTextureName, FTexture::Type::Tex2D, FResourceAllocation::Committed(), metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
 		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
 		shTex->m_resource->Transition(cmdList, shTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);

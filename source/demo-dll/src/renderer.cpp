@@ -97,9 +97,9 @@ void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 	s_jobSync = std::make_unique<RenderJob::Sync>();
 	s_envBRDF = Renderer::GenerateEnvBrdfTexture(512, 512);
 
-	s_pathtraceHistoryBuffer.reset(RenderBackend12::CreateNewShaderSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, ResourceAllocation::Committed(), DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
-	s_taaAccumulationBuffer.reset(RenderBackend12::CreateNewShaderSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, ResourceAllocation::Committed(), DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
-	s_renderStatsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Committed(), sizeof(FRenderStats), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex));
+	s_pathtraceHistoryBuffer.reset(RenderBackend12::CreateNewShaderSurface(L"hdr_history_buffer_rt", SurfaceType::UAV, FResourceAllocation::Committed(), DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
+	s_taaAccumulationBuffer.reset(RenderBackend12::CreateNewShaderSurface(L"taa_accumulation_buffer_raster", SurfaceType::UAV, FResourceAllocation::Committed(), DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
+	s_renderStatsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"render_stats_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Committed(), sizeof(FRenderStats), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex));
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -150,7 +150,7 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", SurfaceType::UAV, ResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
+	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", SurfaceType::UAV, FResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
 
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
@@ -200,7 +200,7 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 
 	// Copy from UAV to destination texture
 	brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-	std::unique_ptr<FTexture> brdfTex{ RenderBackend12::CreateNewTexture(L"env_brdf_tex", TextureType::Tex2D, DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
+	std::unique_ptr<FTexture> brdfTex{ RenderBackend12::CreateNewTexture(L"env_brdf_tex", FTexture::Type::Tex2D, FResourceAllocation::Committed(), DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
 	d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
 	brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -234,7 +234,7 @@ std::unique_ptr<FTexture> Renderer::GenerateWhiteNoiseTextures(const uint32_t wi
 	}
 
 	FResourceUploadContext uploader{ numSamples };
-	std::unique_ptr<FTexture> noiseTexArray{ RenderBackend12::CreateNewTexture(L"white_noise_array", TextureType::Tex2DArray, DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader) };
+	std::unique_ptr<FTexture> noiseTexArray{ RenderBackend12::CreateNewTexture(L"white_noise_array", FTexture::Type::Tex2DArray, FResourceAllocation::Committed(), DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader) };
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_noise_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -485,7 +485,7 @@ void FDebugDraw::Initialize()
 			L"debug_primitives",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			primitives.size() * sizeof(FGpuPrimitive),
 			false,
 			(const uint8_t*)primitives.data(),
@@ -495,7 +495,7 @@ void FDebugDraw::Initialize()
 			L"debug_primitive_index_counts",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Committed(),
+			FResourceAllocation::Committed(),
 			primitiveIndexCounts.size() * sizeof(uint32_t),
 			false,
 			(const uint8_t*)primitiveIndexCounts.data(),
@@ -509,13 +509,13 @@ void FDebugDraw::Initialize()
 	}
 
 	// Buffer that contains queued debug draw commands
-	m_queuedCommandsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Committed(), MaxCommands * sizeof(FDebugDrawCmd)));
+	m_queuedCommandsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_commands", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Committed(), MaxCommands * sizeof(FDebugDrawCmd)));
 
 	// Indirect draw buffers
-	m_indirectPrimitiveArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Committed(), MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex));
-	m_indirectPrimitiveCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Committed(), sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex));
-	m_indirectLineArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Committed(), MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex));
-	m_indirectLineCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Committed(), sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex));
+	m_indirectPrimitiveArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_prim_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Committed(), MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex));
+	m_indirectPrimitiveCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_prim_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Committed(), sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex));
+	m_indirectLineArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_line_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Committed(), MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex));
+	m_indirectLineCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_line_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Committed(), sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex));
 }
 
 void FDebugDraw::DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
@@ -977,19 +977,19 @@ void Renderer::Render(const FRenderState& renderState)
 	FFenceMarker gpuFinishFence = RenderBackend12::GetCurrentFrameFence();
 	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-	std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), hdrFormat, resX, resY, 1, 1, 1, 1, true, true) };
-	std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
-	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_rt", SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
-	std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, ResourceAllocation::Pooled(gpuFinishFence), visBufferFormat, resX, resY) };
-	std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
-	std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1) };
-	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, ResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
-	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Pooled(gpuFinishFence), sizeof(FIndirectDrawWithRootConstants)) };
-	std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Pooled(gpuFinishFence), totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
-	std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Pooled(gpuFinishFence), sizeof(uint32_t), true) };
-	std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_count", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Pooled(gpuFinishFence), sizeof(uint32_t), true) };
-	std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Pooled(gpuFinishFence), c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true) };
-	std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewShaderBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, ResourceAllocation::Pooled(gpuFinishFence), 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)) }; // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
+	std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_raster", SurfaceType::RenderTarget | SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), hdrFormat, resX, resY, 1, 1, 1, 1, true, true) };
+	std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface(L"depth_buffer_raster", SurfaceType::DepthStencil, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
+	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_rt", SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
+	std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface(L"vis_buffer_raster", SurfaceType::RenderTarget, FResourceAllocation::Pooled(gpuFinishFence), visBufferFormat, resX, resY) };
+	std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", SurfaceType::RenderTarget | SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+	std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", SurfaceType::RenderTarget | SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1) };
+	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", SurfaceType::RenderTarget | SurfaceType::UAV, FResourceAllocation::Pooled(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer(L"mesh_highlight_indirect_args", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Pooled(gpuFinishFence), sizeof(FIndirectDrawWithRootConstants)) };
+	std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_args_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Pooled(gpuFinishFence), totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
+	std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_counts_buffer", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Pooled(gpuFinishFence), sizeof(uint32_t), true) };
+	std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_count", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Pooled(gpuFinishFence), sizeof(uint32_t), true) };
+	std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_lists", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Pooled(gpuFinishFence), c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true) };
+	std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewShaderBuffer(L"light_grid", BufferType::Raw, ResourceAccessMode::GpuReadWrite, FResourceAllocation::Pooled(gpuFinishFence), 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)) }; // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -1004,7 +1004,7 @@ void Renderer::Render(const FRenderState& renderState)
 			L"light_properties_buffer",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Pooled(gpuFinishFence),
+			FResourceAllocation::Pooled(gpuFinishFence),
 			bufferSize,
 			false,
 			(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
@@ -1026,7 +1026,7 @@ void Renderer::Render(const FRenderState& renderState)
 			L"scene_light_transforms",
 			BufferType::Raw,
 			ResourceAccessMode::GpuReadOnly,
-			ResourceAllocation::Pooled(gpuFinishFence),
+			FResourceAllocation::Pooled(gpuFinishFence),
 			bufferSize,
 			false,
 			(const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),

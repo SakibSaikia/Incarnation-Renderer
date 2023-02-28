@@ -69,7 +69,7 @@ namespace RenderJob
 				L"tlas_scratch",
 				BufferType::AccelerationStructure,
 				ResourceAccessMode::GpuWriteOnly,
-				ResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)),
+				FResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)),
 				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 			// Build TLAS

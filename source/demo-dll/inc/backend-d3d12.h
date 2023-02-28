@@ -53,12 +53,6 @@ enum class ResourceType
 	Count
 };
 
-enum class ResourceAllocationType
-{
-	Committed,
-	Pooled
-};
-
 enum class DescriptorType
 {
 	Buffer,
@@ -108,13 +102,6 @@ enum class BufferType
 	AccelerationStructure
 };
 
-enum class TextureType
-{
-	Tex2D,
-	Tex2DArray,
-	TexCube
-};
-
 enum class ResourceAccessMode
 {
 	GpuReadOnly,
@@ -143,22 +130,28 @@ private:
 	size_t m_value;
 };
 
-struct ResourceAllocation
+struct FResourceAllocation
 {
+	enum class Type
+	{
+		Committed,
+		Pooled
+	};
+
 	// Specifies pooled or committed resource type
-	ResourceAllocationType m_type;
+	Type m_type;
 
 	// Pooled resources must specify lifetime via fence marker
 	FFenceMarker m_lifetime;
 
-	static ResourceAllocation Committed()
+	static FResourceAllocation Committed()
 	{
-		return { ResourceAllocationType::Committed };
+		return { Type::Committed };
 	}
 
-	static ResourceAllocation Pooled(const FFenceMarker fence)
+	static FResourceAllocation Pooled(const FFenceMarker fence)
 	{
-		return { ResourceAllocationType::Pooled, fence };
+		return { Type::Pooled, fence };
 	}
 };
 
@@ -258,7 +251,15 @@ struct FResource
 
 struct FTexture
 {
+	enum class Type
+	{
+		Tex2D,
+		Tex2DArray,
+		TexCube
+	};
+
 	FResource* m_resource;
+	FResourceAllocation m_alloc;
 	uint32_t m_srvIndex = ~0u;
 
 	~FTexture();
@@ -286,7 +287,7 @@ struct FShaderSurface
 	};
 
 	uint32_t m_type;
-	ResourceAllocation m_alloc;
+	FResourceAllocation m_alloc;
 	FResource* m_resource;
 	FDescriptors m_descriptorIndices;
 	~FShaderSurface();
@@ -304,7 +305,7 @@ struct FShaderBuffer
 	};
 
 	ResourceAccessMode m_accessMode;
-	ResourceAllocation m_alloc;
+	FResourceAllocation m_alloc;
 	FResource* m_resource;
 	FDescriptors m_descriptorIndices;
 	
@@ -453,7 +454,7 @@ namespace RenderBackend12
 	FShaderSurface* CreateNewShaderSurface(
 		const std::wstring& name,
 		const uint32_t surfaceType,
-		const ResourceAllocation alloc,
+		const FResourceAllocation alloc,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -466,7 +467,8 @@ namespace RenderBackend12
 
 	FTexture* CreateNewTexture(
 		const std::wstring& name, 
-		const TextureType type,
+		const FTexture::Type type,
+		const FResourceAllocation alloc,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -486,7 +488,7 @@ namespace RenderBackend12
 		const std::wstring& name,
 		const BufferType type,
 		const ResourceAccessMode accessMode,
-		const ResourceAllocation alloc,
+		const FResourceAllocation alloc,
 		const size_t size,
 		const bool bCreateNonShaderVisibleDescriptor = false,
 		const uint8_t* pData = nullptr,
