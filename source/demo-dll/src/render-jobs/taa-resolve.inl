@@ -77,7 +77,7 @@ namespace RenderJob
 				L"taa_cb",
 				FResource::AccessMode::CpuWriteOnly,
 				sizeof(TaaConstants),
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<TaaConstants*>(pDest);

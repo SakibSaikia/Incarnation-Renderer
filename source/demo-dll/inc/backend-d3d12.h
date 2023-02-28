@@ -94,7 +94,7 @@ private:
 //--------------------------------------------------------------------
 struct FCommandList
 {
-	enum class Sync
+	enum class SyncPoint
 	{
 		CpuSubmission,
 		GpuBegin,
@@ -102,25 +102,25 @@ struct FCommandList
 		Count
 	};
 
-	struct SyncObj
+	struct Sync
 	{
-		FFenceMarker m_fenceMarkers[(uint32_t)Sync::Count];
+		FFenceMarker m_fenceMarkers[(uint32_t)SyncPoint::Count];
 	};
 
 	D3D12_COMMAND_LIST_TYPE m_type;
 	std::wstring m_name;
 	winrt::com_ptr<D3DCommandList_t> m_d3dCmdList;
 	winrt::com_ptr<D3DCommandAllocator_t> m_cmdAllocator;
-	winrt::com_ptr<D3DFence_t> m_fence[(uint32_t)Sync::Count];
-	size_t m_fenceValues[(uint32_t)Sync::Count];
+	winrt::com_ptr<D3DFence_t> m_fence[(uint32_t)SyncPoint::Count];
+	size_t m_fenceValues[(uint32_t)SyncPoint::Count];
 	std::vector<std::function<void(void)>> m_postExecuteCallbacks;
 
 	FCommandList() = default;
 	FCommandList(const D3D12_COMMAND_LIST_TYPE type);
 	void ResetFence(const size_t fenceValue);
 	void SetName(const std::wstring& name);
-	FFenceMarker GetFence(const FCommandList::Sync type) const;
-	SyncObj GetSync() const;
+	FFenceMarker GetFence(const SyncPoint type) const;
+	Sync GetSync() const;
 };
 
 //--------------------------------------------------------------------

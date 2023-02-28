@@ -66,6 +66,6 @@ namespace RenderJob
 	struct Result
 	{
 		concurrency::task<void> m_task;
-		FCommandList::SyncObj m_syncObj;
+		FCommandList::Sync m_syncObj;
 	};
 }

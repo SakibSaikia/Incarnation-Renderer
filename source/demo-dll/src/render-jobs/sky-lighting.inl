@@ -93,7 +93,7 @@ namespace RenderJob
 				L"sky_lighting_cb",
 				FResource::AccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);

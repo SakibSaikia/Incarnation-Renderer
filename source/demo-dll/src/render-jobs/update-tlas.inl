@@ -48,7 +48,7 @@ namespace RenderJob
 				L"instance_descs_buffer",
 				FResource::AccessMode::CpuWriteOnly,
 				instanceDescBufferSize,
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 				{
 					memcpy(pDest, pData, instanceDescBufferSize);
@@ -69,7 +69,7 @@ namespace RenderJob
 				L"tlas_scratch",
 				FShaderBuffer::Type::AccelerationStructure,
 				FResource::AccessMode::GpuWriteOnly,
-				FResource::Allocation::Transient(cmdList->GetFence(FCommandList::Sync::GpuFinish)),
+				FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
 				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 			// Build TLAS

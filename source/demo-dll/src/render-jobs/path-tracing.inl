@@ -83,7 +83,7 @@ namespace RenderJob
 				L"raygen_sbt",
 				FResource::AccessMode::CpuWriteOnly,
 				1 * raygenShaderRecordSize,
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -95,7 +95,7 @@ namespace RenderJob
 				L"miss_sbt",
 				FResource::AccessMode::CpuWriteOnly,
 				3 * missShaderRecordSize,
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -109,7 +109,7 @@ namespace RenderJob
 				L"hit_sbt",
 				FResource::AccessMode::CpuWriteOnly,
 				2 * hitGroupShaderRecordSize,
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
@@ -167,7 +167,7 @@ namespace RenderJob
 				L"global_cb",
 				FResource::AccessMode::CpuWriteOnly,
 				sizeof(GlobalCbLayout),
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();

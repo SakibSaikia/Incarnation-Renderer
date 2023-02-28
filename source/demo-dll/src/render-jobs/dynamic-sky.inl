@@ -138,7 +138,7 @@ namespace RenderJob
 				L"dynamic_sky_cb",
 				FResource::AccessMode::CpuWriteOnly,
 				sizeof(Constants),
-				cmdList->GetFence(FCommandList::Sync::GpuFinish),
+				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)
 				{
 					Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
