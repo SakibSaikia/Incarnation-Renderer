@@ -564,7 +564,7 @@ void Demo::UpdateUI(float deltaTime)
 						for (int i = 0; i < lightCount; ++i)
 						{
 							// Add indent
-							ImGui::TreePush();
+							ImGui::TreePush("Lights");
 
 							int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
 							const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
