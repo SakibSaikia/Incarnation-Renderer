@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::MSAAResolvePass
 {
-	struct MSAAResolveDesc
+	struct Desc
 	{
 		FShaderSurface* colorSource;
 		FShaderSurface* colorTarget;
@@ -9,7 +9,7 @@ namespace RenderJob
 		DXGI_FORMAT format;
 	};
 
-	Result MSAAResolve(RenderJob::Sync* jobSync, const MSAAResolveDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorSourceTransitionToken = passDesc.colorSource->m_resource->GetTransitionToken();

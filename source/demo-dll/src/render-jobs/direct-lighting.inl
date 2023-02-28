@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::DirectLightingPass
 {
-	struct DirectLightingDesc
+	struct Desc
 	{
 		int directionalLightIndex;
 		FShaderSurface* colorTarget;
@@ -15,7 +15,7 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	Result DirectLighting(RenderJob::Sync* jobSync, const DirectLightingDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();

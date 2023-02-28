@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::TonemapPass
 {
-	struct TonemapDesc
+	struct Desc
 	{
 		FShaderSurface* source;
 		FShaderSurface* target;
@@ -8,7 +8,7 @@ namespace RenderJob
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	Result Tonemap(RenderJob::Sync* jobSync, const TonemapDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t sourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();

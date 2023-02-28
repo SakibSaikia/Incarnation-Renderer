@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::SkyLightingPass
 {
-	struct SkyLightingDesc
+	struct Desc
 	{
 		FShaderSurface* colorTarget;
 		FShaderSurface* depthStencilTex;
@@ -16,7 +16,7 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	Result SkyLighting(RenderJob::Sync* jobSync, const SkyLightingDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();

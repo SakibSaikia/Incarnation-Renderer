@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::PathTracing
 {
-	struct PathTracingDesc
+	struct Desc
 	{
 		FShaderSurface* targetBuffer;
 		FShaderSurface* historyBuffer;
@@ -14,7 +14,7 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	Result PathTrace(RenderJob::Sync* jobSync, const PathTracingDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t uavTransitionToken = passDesc.targetBuffer->m_resource->GetTransitionToken();

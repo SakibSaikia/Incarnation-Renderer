@@ -1,12 +1,12 @@
-namespace RenderJob
+namespace RenderJob::UIPass
 {
-	struct UIPassDesc
+	struct Desc
 	{
 		FShaderSurface* colorTarget;
 		FConfig renderConfig;
 	};
 
-	Result UI(RenderJob::Sync* jobSync, const UIPassDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();

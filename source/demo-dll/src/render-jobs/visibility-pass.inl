@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::VisibilityPass
 {
-	struct VisibilityPassDesc
+	struct Desc
 	{
 		FShaderSurface* visBufferTarget;
 		FShaderSurface* depthStencilTarget;
@@ -14,7 +14,7 @@ namespace RenderJob
 		size_t scenePrimitiveCount;
 	};
 
-	Result VisibilityPass(RenderJob::Sync* jobSync, const VisibilityPassDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t visBufferTransitionToken = passDesc.visBufferTarget->m_resource->GetTransitionToken();

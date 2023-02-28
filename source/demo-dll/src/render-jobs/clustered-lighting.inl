@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::ClusteredLightingPass
 {
-	struct ClusteredLightingDesc
+	struct Desc
 	{
 		FShaderBuffer* lightListsBuffer;
 		FShaderBuffer* lightGridBuffer;
@@ -16,7 +16,7 @@ namespace RenderJob
 		uint32_t resY;
 	};
 
-	RenderJob::Result ClusteredLighting(RenderJob::Sync* jobSync, const ClusteredLightingDesc& passDesc, const bool bRequiresClear)
+	Result Execute(Sync* jobSync, const Desc& passDesc, const bool bRequiresClear)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t lightListsBufferTransitionToken = passDesc.lightListsBuffer->m_resource->GetTransitionToken();
@@ -28,7 +28,7 @@ namespace RenderJob
 		size_t gbufferMetallicRoughnessAoTransitionToken = passDesc.gbufferMetallicRoughnessAoTex->m_resource->GetTransitionToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"clustered_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		RenderJob::Result passResult;
+		Result passResult;
 		passResult.m_syncObj = cmdList->GetSync();
 		passResult.m_task = concurrency::create_task([=]
 		{

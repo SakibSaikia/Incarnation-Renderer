@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::HighlightPass
 {
-	struct HighlightPassDesc
+	struct Desc
 	{
 		FShaderSurface* colorTarget;
 		FShaderSurface* depthStencilTarget;
@@ -11,7 +11,7 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	Result HighlightPass(RenderJob::Sync* jobSync, const HighlightPassDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();

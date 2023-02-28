@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::DebugVizPass
 {
-	struct DebugVizDesc
+	struct Desc
 	{
 		FShaderSurface* visBuffer;
 		FShaderSurface* gbuffers[3];
@@ -16,7 +16,7 @@ namespace RenderJob
 	};
 
 	// Copy Data from input UAV to output RT while applying tonemapping
-	Result DebugViz(RenderJob::Sync* jobSync, const DebugVizDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t visBufferTransitionToken = passDesc.visBuffer->m_resource->GetTransitionToken();

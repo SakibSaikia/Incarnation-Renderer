@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::DynamicSkyPass
 {
-	struct DynamicSkyPassDesc
+	struct Desc
 	{
 		FShaderSurface* colorTarget;
 		FShaderSurface* depthStencilTarget;
@@ -13,7 +13,7 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	Result DynamicSkyPass(RenderJob::Sync* jobSync, const DynamicSkyPassDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorTargetTransitionToken = passDesc.colorTarget->m_resource->GetTransitionToken();

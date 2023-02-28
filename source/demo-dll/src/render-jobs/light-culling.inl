@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::LightCullingPass
 {
-	struct LightCullingDesc
+	struct Desc
 	{
 		FShaderBuffer* culledLightCountBuffer;
 		FShaderBuffer* culledLightListsBuffer;
@@ -13,7 +13,7 @@ namespace RenderJob
 		Vector2 jitter;
 	};
 
-	Result LightCulling(RenderJob::Sync* jobSync, const LightCullingDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t culledLightCountBufferTransitionToken = passDesc.culledLightCountBuffer->m_resource->GetTransitionToken();

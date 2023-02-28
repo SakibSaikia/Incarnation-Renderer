@@ -35,7 +35,8 @@ namespace Renderer
 #include "render-jobs/tonemap.inl"
 #include "render-jobs/update-tlas.inl"
 #include "render-jobs/visibility-pass.inl"
-#include "render-jobs/gbuffer-pass.inl"
+#include "render-jobs/gbuffer-compute-pass.inl"
+#include "render-jobs/gbuffer-raster-pass.inl"
 #include "render-jobs/debug-visualization.inl"
 #include "render-jobs/highlight-pass.inl"
 #include "render-jobs/batch-culling.inl"
@@ -1112,14 +1113,14 @@ void Renderer::Render(const FRenderState& renderState)
 
 
 	// Update acceleration structure. Can be used by both pathtracing and raster paths.
-	RenderJob::Result updateTLASJob = RenderJob::UpdateTLAS(s_jobSync.get(), renderState.m_scene);
+	RenderJob::Result updateTLASJob = RenderJob::UpdateTLASPass::Execute(s_jobSync.get(), renderState.m_scene);
 	sceneRenderJobs.push_back(updateTLASJob.m_task);
 
 	if (c.PathTrace)
 	{
 		if (s_pathtraceCurrentSampleIndex < c.MaxSampleCount)
 		{
-			RenderJob::PathTracingDesc pathtraceDesc = {};
+			RenderJob::PathTracing::Desc pathtraceDesc = {};
 			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
 			pathtraceDesc.historyBuffer = s_pathtraceHistoryBuffer.get();
 			pathtraceDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
@@ -1131,40 +1132,40 @@ void Renderer::Render(const FRenderState& renderState)
 			pathtraceDesc.view = &renderState.m_view;
 			pathtraceDesc.renderConfig = c;
 
-			RenderJob::Result pathTraceJob = RenderJob::PathTrace(s_jobSync.get(), pathtraceDesc);
+			RenderJob::Result pathTraceJob = RenderJob::PathTracing::Execute(s_jobSync.get(), pathtraceDesc);
 			sceneRenderJobs.push_back(pathTraceJob.m_task);
 
 			// Accumulate samples
 			s_pathtraceCurrentSampleIndex++;
 		}
 
-		RenderJob::TonemapDesc tonemapDesc = {};
+		RenderJob::TonemapPass::Desc tonemapDesc = {};
 		tonemapDesc.source = s_pathtraceHistoryBuffer.get();
 		tonemapDesc.target = RenderBackend12::GetBackBuffer();
 		tonemapDesc.renderConfig = c;
 
-		RenderJob::Result tonemapJob = RenderJob::Tonemap(s_jobSync.get(), tonemapDesc);
+		RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
 		sceneRenderJobs.push_back(tonemapJob.m_task);
 
 	}
 	else
 	{
 		// Cull Pass & Draw Call Generation
-		RenderJob::BatchCullingDesc batchCullDesc = {};
+		RenderJob::BatchCullingPass::Desc batchCullDesc = {};
 		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
 		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
 		batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
 		batchCullDesc.viewConstantBuffer = cbViewConstants.get();
 		batchCullDesc.primitiveCount = totalPrimitives;
 
-		RenderJob::Result batchCullJob = RenderJob::BatchCulling(s_jobSync.get(), batchCullDesc);
+		RenderJob::Result batchCullJob = RenderJob::BatchCullingPass::Execute(s_jobSync.get(), batchCullDesc);
 		sceneRenderJobs.push_back(batchCullJob.m_task);
 
 		// Light Culling
 		const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
 		if (punctualLightCount > 0 && c.EnableDirectLighting)
 		{
-			RenderJob::LightCullingDesc lightCullDesc = {};
+			RenderJob::LightCullingPass::Desc lightCullDesc = {};
 			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
 			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
 			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
@@ -1176,12 +1177,12 @@ void Renderer::Render(const FRenderState& renderState)
 			lightCullDesc.jitter = pixelJitter;
 			lightCullDesc.renderConfig = c;
 
-			RenderJob::Result lightCullJob = RenderJob::LightCulling(s_jobSync.get(), lightCullDesc);
+			RenderJob::Result lightCullJob = RenderJob::LightCullingPass::Execute(s_jobSync.get(), lightCullDesc);
 			sceneRenderJobs.push_back(lightCullJob.m_task);
 		}
 
 		// Visibility Pass
-		RenderJob::VisibilityPassDesc visDesc = {};
+		RenderJob::VisibilityPass::Desc visDesc = {};
 		visDesc.visBufferTarget = visBuffer.get();
 		visDesc.depthStencilTarget = depthBuffer.get();
 		visDesc.indirectArgsBuffer = batchArgsBuffer.get();
@@ -1193,32 +1194,46 @@ void Renderer::Render(const FRenderState& renderState)
 		visDesc.resY = resY;
 		visDesc.scenePrimitiveCount = totalPrimitives;
 
-		RenderJob::Result visibilityJob = RenderJob::VisibilityPass(s_jobSync.get(), visDesc);
+		RenderJob::Result visibilityJob = RenderJob::VisibilityPass::Execute(s_jobSync.get(), visDesc);
 		sceneRenderJobs.push_back(visibilityJob.m_task);
 		s_renderPassSync[VisibilityPass] = visibilityJob.m_syncObj;
 
-		// GBuffer Pass + Emissive
-		RenderJob::GBufferPassDesc gbufferDesc = {};
-		gbufferDesc.sourceVisBuffer = visBuffer.get();
-		gbufferDesc.colorTarget = hdrRasterSceneColor.get();
-		gbufferDesc.gbufferTargets[0] = gbuffer_basecolor.get();
-		gbufferDesc.gbufferTargets[1] = gbuffer_normals.get();
-		gbufferDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
-		gbufferDesc.depthStencilTarget = depthBuffer.get();
-		gbufferDesc.sceneConstantBuffer = cbSceneConstants.get();
-		gbufferDesc.viewConstantBuffer = cbViewConstants.get();
-		gbufferDesc.resX = resX;
-		gbufferDesc.resY = resY;
-		gbufferDesc.scene = renderState.m_scene;
+		// GBuffer Pass + Emissive (Compute)
+		RenderJob::GBufferComputePass::Desc gbufferComputeDesc = {};
+		gbufferComputeDesc.sourceVisBuffer = visBuffer.get();
+		gbufferComputeDesc.colorTarget = hdrRasterSceneColor.get();
+		gbufferComputeDesc.gbufferTargets[0] = gbuffer_basecolor.get();
+		gbufferComputeDesc.gbufferTargets[1] = gbuffer_normals.get();
+		gbufferComputeDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
+		gbufferComputeDesc.depthStencilTarget = depthBuffer.get();
+		gbufferComputeDesc.sceneConstantBuffer = cbSceneConstants.get();
+		gbufferComputeDesc.viewConstantBuffer = cbViewConstants.get();
+		gbufferComputeDesc.resX = resX;
+		gbufferComputeDesc.resY = resY;
+		gbufferComputeDesc.scene = renderState.m_scene;
 
-		RenderJob::Result gbufferJob = RenderJob::GBufferComputePass(s_jobSync.get(), gbufferDesc);
-		sceneRenderJobs.push_back(gbufferJob.m_task);
+		RenderJob::Result gbufferComputeJob = RenderJob::GBufferComputePass::Execute(s_jobSync.get(), gbufferComputeDesc);
+		sceneRenderJobs.push_back(gbufferComputeJob.m_task);
 
-		RenderJob::Result gbufferDecalsJob = RenderJob::GBufferDecalPass(s_jobSync.get(), gbufferDesc);
+		// GBuffer Raster Pass (for decals)
+		RenderJob::GBufferRasterPass::Desc gbufferRasterDesc = {};
+		gbufferRasterDesc.sourceVisBuffer = visBuffer.get();
+		gbufferRasterDesc.colorTarget = hdrRasterSceneColor.get();
+		gbufferRasterDesc.gbufferTargets[0] = gbuffer_basecolor.get();
+		gbufferRasterDesc.gbufferTargets[1] = gbuffer_normals.get();
+		gbufferRasterDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
+		gbufferRasterDesc.depthStencilTarget = depthBuffer.get();
+		gbufferRasterDesc.sceneConstantBuffer = cbSceneConstants.get();
+		gbufferRasterDesc.viewConstantBuffer = cbViewConstants.get();
+		gbufferRasterDesc.resX = resX;
+		gbufferRasterDesc.resY = resY;
+		gbufferRasterDesc.scene = renderState.m_scene;
+
+		RenderJob::Result gbufferDecalsJob = RenderJob::GBufferRasterPass::Execute(s_jobSync.get(), gbufferRasterDesc);
 		sceneRenderJobs.push_back(gbufferDecalsJob.m_task);
 
 		// Sky Lighting
-		RenderJob::SkyLightingDesc skyLightingDesc = {};
+		RenderJob::SkyLightingPass::Desc skyLightingDesc = {};
 		skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
 		skyLightingDesc.depthStencilTex = depthBuffer.get();
 		skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
@@ -1232,14 +1247,14 @@ void Renderer::Render(const FRenderState& renderState)
 		skyLightingDesc.resY = resY;
 		skyLightingDesc.envBRDFTex = s_envBRDF.get();
 
-		RenderJob::Result skylightJob = RenderJob::SkyLighting(s_jobSync.get(), skyLightingDesc);
+		RenderJob::Result skylightJob = RenderJob::SkyLightingPass::Execute(s_jobSync.get(), skyLightingDesc);
 		sceneRenderJobs.push_back(skylightJob.m_task);
 
 		// Direct Lighting
 		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
 		if (directionalLightIndex != -1 && c.EnableDirectLighting)
 		{
-			RenderJob::DirectLightingDesc directLightingDesc = {};
+			RenderJob::DirectLightingPass::Desc directLightingDesc = {};
 			directLightingDesc.directionalLightIndex = directionalLightIndex;
 			directLightingDesc.colorTarget = hdrRasterSceneColor.get();
 			directLightingDesc.depthStencilTex = depthBuffer.get();
@@ -1252,7 +1267,7 @@ void Renderer::Render(const FRenderState& renderState)
 			directLightingDesc.resX = resX;
 			directLightingDesc.resY = resY;
 
-			RenderJob::Result directLightingJob = RenderJob::DirectLighting(s_jobSync.get(), directLightingDesc);
+			RenderJob::Result directLightingJob = RenderJob::DirectLightingPass::Execute(s_jobSync.get(), directLightingDesc);
 			sceneRenderJobs.push_back(directLightingJob.m_task);
 		}
 
@@ -1260,7 +1275,7 @@ void Renderer::Render(const FRenderState& renderState)
 		const bool bRequiresClear = directionalLightIndex == -1;
 		if (punctualLightCount > 0 && c.EnableDirectLighting)
 		{
-			RenderJob::ClusteredLightingDesc clusteredLightingDesc = {};
+			RenderJob::ClusteredLightingPass::Desc clusteredLightingDesc = {};
 			clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
 			clusteredLightingDesc.lightGridBuffer = lightGridBuffer.get();
 			clusteredLightingDesc.colorTarget = hdrRasterSceneColor.get();
@@ -1274,14 +1289,14 @@ void Renderer::Render(const FRenderState& renderState)
 			clusteredLightingDesc.resX = resX;
 			clusteredLightingDesc.resY = resY;
 
-			RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLighting(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
+			RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLightingPass::Execute(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
 			sceneRenderJobs.push_back(clusteredLightingJob.m_task);
 		}
 
 		if (c.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
 		{
 			// Environmentmap pass
-			RenderJob::EnvmapPassDesc envmapDesc = {};
+			RenderJob::EnvironmentmapPass::Desc envmapDesc = {};
 			envmapDesc.colorTarget = hdrRasterSceneColor.get();
 			envmapDesc.depthStencilTarget = depthBuffer.get();
 			envmapDesc.format = hdrFormat;
@@ -1292,12 +1307,12 @@ void Renderer::Render(const FRenderState& renderState)
 			envmapDesc.jitter = pixelJitter;
 			envmapDesc.renderConfig = c;
 
-			RenderJob::Result envmapJob = RenderJob::EnvironmentmapPass(s_jobSync.get(), envmapDesc);
+			RenderJob::Result envmapJob = RenderJob::EnvironmentmapPass::Execute(s_jobSync.get(), envmapDesc);
 			sceneRenderJobs.push_back(envmapJob.m_task);
 		}
 		else
 		{
-			RenderJob::DynamicSkyPassDesc skyDesc = {};
+			RenderJob::DynamicSkyPass::Desc skyDesc = {};
 			skyDesc.colorTarget = hdrRasterSceneColor.get();
 			skyDesc.depthStencilTarget = depthBuffer.get();
 			skyDesc.format = hdrFormat;
@@ -1308,14 +1323,14 @@ void Renderer::Render(const FRenderState& renderState)
 			skyDesc.jitter = pixelJitter;
 			skyDesc.renderConfig = c;
 
-			RenderJob::Result dynamicSkyJob = RenderJob::DynamicSkyPass(s_jobSync.get(), skyDesc);
+			RenderJob::Result dynamicSkyJob = RenderJob::DynamicSkyPass::Execute(s_jobSync.get(), skyDesc);
 			sceneRenderJobs.push_back(dynamicSkyJob.m_task);
 		}
 
 		if (c.Viewmode != (int)Viewmode::Normal)
 		{
 			// Debug Viz
-			RenderJob::DebugVizDesc desc = {};
+			RenderJob::DebugVizPass::Desc desc = {};
 			desc.visBuffer = visBuffer.get();
 			desc.gbuffers[0] = gbuffer_basecolor.get();
 			desc.gbuffers[1] = gbuffer_normals.get();
@@ -1332,12 +1347,12 @@ void Renderer::Render(const FRenderState& renderState)
 			desc.scene = renderState.m_scene;
 			desc.view = &renderState.m_view;
 
-			RenderJob::Result debugVizJob = RenderJob::DebugViz(s_jobSync.get(), desc);
+			RenderJob::Result debugVizJob = RenderJob::DebugVizPass::Execute(s_jobSync.get(), desc);
 			sceneRenderJobs.push_back(debugVizJob.m_task);
 
 			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
 			{
-				RenderJob::HighlightPassDesc desc = {};
+				RenderJob::HighlightPass::Desc desc = {};
 				desc.colorTarget = RenderBackend12::GetBackBuffer();
 				desc.depthStencilTarget = depthBuffer.get();
 				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
@@ -1347,7 +1362,7 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.viewConstantBuffer = cbViewConstants.get();
 				desc.renderConfig = c;
 
-				RenderJob::Result highlightJob = RenderJob::HighlightPass(s_jobSync.get(), desc);
+				RenderJob::Result highlightJob = RenderJob::HighlightPass::Execute(s_jobSync.get(), desc);
 				sceneRenderJobs.push_back(highlightJob.m_task);
 			}
 		}
@@ -1359,7 +1374,7 @@ void Renderer::Render(const FRenderState& renderState)
 				Matrix viewProjectionTransform = view.m_viewTransform * view.m_projectionTransform;
 
 				// TAA Resolve
-				RenderJob::TAAResolveDesc resolveDesc = {};
+				RenderJob::TAAResolvePass::Desc resolveDesc = {};
 				resolveDesc.source = hdrRasterSceneColor.get();
 				resolveDesc.target = s_taaAccumulationBuffer.get();
 				resolveDesc.resX = resX;
@@ -1370,16 +1385,16 @@ void Renderer::Render(const FRenderState& renderState)
 				resolveDesc.depthTextureIndex = depthBuffer->m_descriptorIndices.SRV;
 				resolveDesc.renderConfig = c;
 
-				RenderJob::Result resolveJob = RenderJob::TAAResolve(s_jobSync.get(), resolveDesc);
+				RenderJob::Result resolveJob = RenderJob::TAAResolvePass::Execute(s_jobSync.get(), resolveDesc);
 				sceneRenderJobs.push_back(resolveJob.m_task);
 
 				// Tonemap
-				RenderJob::TonemapDesc tonemapDesc = {};
+				RenderJob::TonemapPass::Desc tonemapDesc = {};
 				tonemapDesc.source = s_taaAccumulationBuffer.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
 
-				RenderJob::Result tonemapJob = RenderJob::Tonemap(s_jobSync.get(), tonemapDesc);
+				RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
 				sceneRenderJobs.push_back(tonemapJob.m_task);
 
 				// Save view projection transform for next frame's reprojection
@@ -1388,12 +1403,12 @@ void Renderer::Render(const FRenderState& renderState)
 			else
 			{
 				// Tonemap
-				RenderJob::TonemapDesc tonemapDesc = {};
+				RenderJob::TonemapPass::Desc tonemapDesc = {};
 				tonemapDesc.source = hdrRasterSceneColor.get();
 				tonemapDesc.target = RenderBackend12::GetBackBuffer();
 				tonemapDesc.renderConfig = c;
 
-				RenderJob::Result tonemapJob = RenderJob::Tonemap(s_jobSync.get(), tonemapDesc);
+				RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
 				sceneRenderJobs.push_back(tonemapJob.m_task);
 			}
 		}
@@ -1415,11 +1430,11 @@ void Renderer::Render(const FRenderState& renderState)
 	s_debugDrawing.Flush(debugDesc);
 
 	// Render UI
-	RenderJob::UIPassDesc uiDesc = { RenderBackend12::GetBackBuffer(), c };
+	RenderJob::UIPass::Desc uiDesc = { RenderBackend12::GetBackBuffer(), c };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
-		RenderJob::Result uiJob = RenderJob::UI(s_jobSync.get(), uiDesc);
+		RenderJob::Result uiJob = RenderJob::UIPass::Execute(s_jobSync.get(), uiDesc);
 		uiJob.m_task.wait();
 	}
 

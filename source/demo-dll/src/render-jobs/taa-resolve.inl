@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::TAAResolvePass
 {
-	struct TAAResolveDesc
+	struct Desc
 	{
 		FShaderSurface* source;
 		FShaderSurface* target;
@@ -13,7 +13,7 @@ namespace RenderJob
 		FConfig renderConfig;
 	};
 
-	Result TAAResolve(RenderJob::Sync* jobSync, const TAAResolveDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t colorSourceTransitionToken = passDesc.source->m_resource->GetTransitionToken();

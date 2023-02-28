@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::UpdateTLASPass
 {
-	Result UpdateTLAS(RenderJob::Sync* jobSync, const FScene* scene)
+	Result Execute(Sync* jobSync, const FScene* scene)
 	{
 		size_t renderToken = jobSync->GetToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"tlas_update_job", D3D12_COMMAND_LIST_TYPE_DIRECT);

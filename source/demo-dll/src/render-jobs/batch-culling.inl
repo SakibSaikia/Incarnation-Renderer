@@ -1,6 +1,6 @@
-namespace RenderJob
+namespace RenderJob::BatchCullingPass
 {
-	struct BatchCullingDesc
+	struct Desc
 	{
 		FShaderBuffer* batchArgsBuffer;
 		FShaderBuffer* batchCountsBuffer;
@@ -9,7 +9,7 @@ namespace RenderJob
 		size_t primitiveCount;
 	};
 
-	Result BatchCulling(RenderJob::Sync* jobSync, const BatchCullingDesc& passDesc)
+	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
 		size_t batchArgsBufferTransitionToken = passDesc.batchArgsBuffer->m_resource->GetTransitionToken();
