@@ -81,7 +81,7 @@ namespace RenderJob
 			const size_t raygenShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FSystemBuffer> raygenShaderTable{ RenderBackend12::CreateNewSystemBuffer(
 				L"raygen_sbt",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				1 * raygenShaderRecordSize,
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
@@ -93,7 +93,7 @@ namespace RenderJob
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FSystemBuffer> missShaderTable{ RenderBackend12::CreateNewSystemBuffer(
 				L"miss_sbt",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				3 * missShaderRecordSize,
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
@@ -107,7 +107,7 @@ namespace RenderJob
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
 			std::unique_ptr<FSystemBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewSystemBuffer(
 				L"hit_sbt",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				2 * hitGroupShaderRecordSize,
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[&psoInfo](uint8_t* pDest)
@@ -165,7 +165,7 @@ namespace RenderJob
 
 			std::unique_ptr<FSystemBuffer> globalCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"global_cb",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				sizeof(GlobalCbLayout),
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)
@@ -242,7 +242,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"pathtrace_integrate_rootsig",
 				cmdList,
-				FRootsigDesc { L"raytracing/pathtrace-integrate.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc { L"raytracing/pathtrace-integrate.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({

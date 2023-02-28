@@ -48,7 +48,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"gbuffer_rootsig",
 				cmdList,
-				FRootsigDesc { L"geo-raster/gbuffer-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc { L"geo-raster/gbuffer-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
@@ -147,7 +147,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"gbuffer_geo_rootsig",
 				cmdList,
-				FRootsigDesc{ L"geo-raster/gbuffer-geo.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"geo-raster/gbuffer-geo.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());

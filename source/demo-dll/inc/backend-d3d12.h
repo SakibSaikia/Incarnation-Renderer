@@ -39,20 +39,6 @@ struct IDxcBlob;
 struct FResource;
 struct FConfig;
 
-enum class ResourceType
-{
-	Buffer,
-	Texture2D,
-	Texture2DMultisample,
-	Texture2DArray,
-	TextureCube,
-	Texture3D,
-	RWTexture2D,
-	RWTexture2DArray,
-	AccelerationStructure,
-	Count
-};
-
 enum class DescriptorType
 {
 	Buffer,
@@ -87,30 +73,6 @@ enum class DescriptorRange : uint32_t
 	TotalCount
 };
 
-// Not using enum class here so that we can easily pass in OR'd values from call sites to create surfaces
-enum SurfaceType : uint32_t
-{
-	RenderTarget	= (1 << 0),
-	DepthStencil	= (1 << 1),
-	SwapChain		= (1 << 2),
-	UAV				= (1 << 3)
-};
-
-enum class BufferType
-{
-	Raw,
-	AccelerationStructure
-};
-
-enum class ResourceAccessMode
-{
-	GpuReadOnly,
-	GpuReadWrite,
-	GpuWriteOnly,	// Used for acceleration structure scratch buffers
-	CpuWriteOnly,	// Upload resources
-	CpuReadOnly,	// Readback resources
-};
-
 struct FFenceMarker
 {
 	FFenceMarker() = default;
@@ -128,31 +90,6 @@ struct FFenceMarker
 private:
 	D3DFence_t* m_fence;
 	size_t m_value;
-};
-
-struct FResourceAllocation
-{
-	enum class Type
-	{
-		Committed,
-		Pooled
-	};
-
-	// Specifies pooled or committed resource type
-	Type m_type;
-
-	// Pooled resources must specify lifetime via fence marker
-	FFenceMarker m_lifetime;
-
-	static FResourceAllocation Committed()
-	{
-		return { Type::Committed };
-	}
-
-	static FResourceAllocation Pooled(const FFenceMarker fence)
-	{
-		return { Type::Pooled, fence };
-	}
 };
 
 struct FCommandList
@@ -203,15 +140,15 @@ struct FShaderDesc
 	std::wstring m_profile;
 };
 
-struct FRootsigDesc
-{
-	std::wstring m_relativepath;
-	std::wstring m_entrypoint;
-	std::wstring m_profile;
-};
-
 struct FRootSignature
 {
+	struct Desc
+	{
+		std::wstring m_relativepath;
+		std::wstring m_entrypoint;
+		std::wstring m_profile;
+	};
+
 	D3DRootSignature_t* m_rootsig;
 	FFenceMarker m_fenceMarker;
 	~FRootSignature();
@@ -219,6 +156,44 @@ struct FRootSignature
 
 struct FResource
 {
+	enum class Type
+	{
+		Buffer,
+		Texture2D,
+		Texture2DMultisample,
+		Texture2DArray,
+		TextureCube,
+		Texture3D,
+		RWTexture2D,
+		RWTexture2DArray,
+		AccelerationStructure,
+		Count
+	};
+
+	enum class AccessMode
+	{
+		GpuReadOnly,
+		GpuReadWrite,
+		GpuWriteOnly,	// Used for acceleration structure scratch buffers
+		CpuWriteOnly,	// Upload resources
+		CpuReadOnly,	// Readback resources
+	};
+
+	struct Allocation
+	{
+		enum class Type
+		{
+			Persistent,
+			Transient
+		};
+		
+		Type m_type;				// Persistent or Transient
+		FFenceMarker m_lifetime;	// Transient resources must specify lifetime via fence marker
+
+		static Allocation Persistent() { return { Type::Persistent }; }
+		static Allocation Transient(const FFenceMarker fence) { return { Type::Transient, fence }; }
+	};
+
 	D3DResource_t* m_d3dResource;
 	std::wstring m_name;
 	concurrency::concurrent_vector<D3D12_RESOURCE_STATES> m_subresourceStates;
@@ -259,7 +234,7 @@ struct FTexture
 	};
 
 	FResource* m_resource;
-	FResourceAllocation m_alloc;
+	FResource::Allocation m_alloc;
 	uint32_t m_srvIndex = ~0u;
 
 	~FTexture();
@@ -277,6 +252,15 @@ struct FTexture
 
 struct FShaderSurface
 {
+	// Not using enum class here so that we can easily pass in OR'd values from call sites to create surfaces
+	enum Type : uint32_t
+	{
+		RenderTarget = (1 << 0),
+		DepthStencil = (1 << 1),
+		SwapChain = (1 << 2),
+		UAV = (1 << 3)
+	};
+
 	struct FDescriptors
 	{
 		uint32_t SRV;
@@ -287,7 +271,7 @@ struct FShaderSurface
 	};
 
 	uint32_t m_type;
-	FResourceAllocation m_alloc;
+	FResource::Allocation m_alloc;
 	FResource* m_resource;
 	FDescriptors m_descriptorIndices;
 	~FShaderSurface();
@@ -296,6 +280,12 @@ struct FShaderSurface
 
 struct FShaderBuffer
 {
+	enum class Type
+	{
+		Raw,
+		AccelerationStructure
+	};
+
 	struct FDescriptors
 	{
 		uint32_t UAV;
@@ -304,8 +294,8 @@ struct FShaderBuffer
 		void Release();
 	};
 
-	ResourceAccessMode m_accessMode;
-	FResourceAllocation m_alloc;
+	FResource::AccessMode m_accessMode;
+	FResource::Allocation m_alloc;
 	FResource* m_resource;
 	FDescriptors m_descriptorIndices;
 	
@@ -316,7 +306,7 @@ struct FShaderBuffer
 struct FSystemBuffer
 {
 	FResource* m_resource;
-	ResourceAccessMode m_accessMode;
+	FResource::AccessMode m_accessMode;
 	FFenceMarker m_fenceMarker;
 	~FSystemBuffer();
 };
@@ -420,7 +410,7 @@ namespace RenderBackend12
 	D3DCommandQueue_t* GetCommandQueue(D3D12_COMMAND_LIST_TYPE type);
 
 	// Root Signatures
-	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& rootsig);
+	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootSignature::Desc& rootsig);
 	std::unique_ptr<FRootSignature> FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, IDxcBlob* blob);
 
 	// Pipeline States
@@ -436,7 +426,7 @@ namespace RenderBackend12
 	// Shaders
 	typedef void (*ShadersDirtiedCallback)();
 	IDxcBlob* CacheShader(const FShaderDesc& shaderDesc);
-	IDxcBlob* CacheRootsignature(const FRootsigDesc& rootsigDesc);
+	IDxcBlob* CacheRootsignature(const FRootSignature::Desc& rootsigDesc);
 	void RecompileModifiedShaders(ShadersDirtiedCallback);
 
 	// Descriptor Management
@@ -454,7 +444,7 @@ namespace RenderBackend12
 	FShaderSurface* CreateNewShaderSurface(
 		const std::wstring& name,
 		const uint32_t surfaceType,
-		const FResourceAllocation alloc,
+		const FResource::Allocation alloc,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -468,7 +458,7 @@ namespace RenderBackend12
 	FTexture* CreateNewTexture(
 		const std::wstring& name, 
 		const FTexture::Type type,
-		const FResourceAllocation alloc,
+		const FResource::Allocation alloc,
 		const DXGI_FORMAT format,
 		const size_t width,
 		const size_t height,
@@ -486,9 +476,9 @@ namespace RenderBackend12
 
 	FShaderBuffer* CreateNewShaderBuffer(
 		const std::wstring& name,
-		const BufferType type,
-		const ResourceAccessMode accessMode,
-		const FResourceAllocation alloc,
+		const FShaderBuffer::Type type,
+		const FResource::AccessMode accessMode,
+		const FResource::Allocation alloc,
 		const size_t size,
 		const bool bCreateNonShaderVisibleDescriptor = false,
 		const uint8_t* pData = nullptr,
@@ -499,7 +489,7 @@ namespace RenderBackend12
 
 	FSystemBuffer* CreateNewSystemBuffer(
 		const std::wstring& name,
-		const ResourceAccessMode accessMode,
+		const FResource::AccessMode accessMode,
 		const size_t size,
 		const FFenceMarker retireFence,								// Fence marker that decides whether the buffer is ready to be released. This is usually the fence for the associated command list that uses this buffer.
 		std::function<void(uint8_t*)> uploadFunc = nullptr);

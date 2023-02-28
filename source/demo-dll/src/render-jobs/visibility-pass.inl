@@ -46,7 +46,7 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(2, descriptorHeaps);
 
 			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"visbuffer_rootsig", cmdList, FRootsigDesc{ L"geo-raster/visibility-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"visbuffer_rootsig", cmdList, FRootSignature::Desc{ L"geo-raster/visibility-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());

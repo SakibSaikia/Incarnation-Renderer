@@ -34,7 +34,7 @@ namespace RenderJob
 			{
 				std::unique_ptr<FSystemBuffer> vtxBuffer{ RenderBackend12::CreateNewSystemBuffer(
 					L"imgui_vb",
-					ResourceAccessMode::CpuWriteOnly,
+					FResource::AccessMode::CpuWriteOnly,
 					vtxBufferSize,
 					cmdList->GetFence(FCommandList::Sync::GpuFinish),
 					[drawData](uint8_t* pDest)
@@ -59,7 +59,7 @@ namespace RenderJob
 			{
 				std::unique_ptr<FSystemBuffer> idxBuffer{ RenderBackend12::CreateNewSystemBuffer(
 					L"imgui_ib",
-					ResourceAccessMode::CpuWriteOnly,
+					FResource::AccessMode::CpuWriteOnly,
 					idxBufferSize,
 					cmdList->GetFence(FCommandList::Sync::GpuFinish),
 					[drawData](uint8_t* pDest)
@@ -85,7 +85,7 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"imgui_rootsig", cmdList, FRootsigDesc{L"imgui.hlsl", L"rootsig", L"rootsig_1_1"});
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"imgui_rootsig", cmdList, FRootSignature::Desc{L"imgui.hlsl", L"rootsig", L"rootsig_1_1"});
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Vertex Constant Buffer

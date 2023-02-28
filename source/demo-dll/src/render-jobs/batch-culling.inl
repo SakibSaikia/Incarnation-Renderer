@@ -36,7 +36,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"batch_cull_rootsig",
 				cmdList,
-				FRootsigDesc{ L"culling/batch-culling.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"culling/batch-culling.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 

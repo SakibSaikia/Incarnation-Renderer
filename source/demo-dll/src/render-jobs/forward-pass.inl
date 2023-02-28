@@ -44,7 +44,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"forward_pass_rootsig",
 				cmdList,
-				FRootsigDesc{ L"geo-raster/forward-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"geo-raster/forward-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Frame constant buffer
@@ -65,7 +65,7 @@ namespace RenderJob
 
 			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"frame_cb",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				sizeof(FrameCbLayout),
 				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)
@@ -99,7 +99,7 @@ namespace RenderJob
 
 			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
 				L"view_cb",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				sizeof(ViewCbLayout),
 				cmdList->GetFence(),
 				[passDesc](uint8_t* pDest)

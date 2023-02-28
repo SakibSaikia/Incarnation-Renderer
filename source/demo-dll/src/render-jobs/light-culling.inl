@@ -42,7 +42,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"light_cull_rootsig",
 				cmdList,
-				FRootsigDesc{ L"culling/light-culling.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"culling/light-culling.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
@@ -90,7 +90,7 @@ namespace RenderJob
 
 			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
 				L"light_cull_cb",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				sizeof(Constants),
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc](uint8_t* pDest)

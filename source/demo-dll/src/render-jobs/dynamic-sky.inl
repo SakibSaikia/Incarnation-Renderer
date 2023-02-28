@@ -39,7 +39,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"dynamicsky_rootsig",
 				cmdList,
-				FRootsigDesc{ L"environment-sky/dynamic-sky.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"environment-sky/dynamic-sky.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO
@@ -136,7 +136,7 @@ namespace RenderJob
 
 			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
 				L"dynamic_sky_cb",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				sizeof(Constants),
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[passDesc, perezConstants](uint8_t* pDest)

@@ -326,9 +326,9 @@ struct std::hash<FShaderDesc>
 };
 
 template<>
-struct std::hash<FRootsigDesc>
+struct std::hash<FRootSignature::Desc>
 {
-	std::size_t operator()(const FRootsigDesc& key) const
+	std::size_t operator()(const FRootSignature::Desc& key) const
 	{
 		uint64_t seed1{}, seed2{};
 		spookyhash_context context;
@@ -360,7 +360,7 @@ bool operator==(const FShaderDesc& lhs, const FShaderDesc& rhs)
 		lhs.m_profile == rhs.m_profile;
 }
 
-bool operator==(const FRootsigDesc& lhs, const FRootsigDesc& rhs)
+bool operator==(const FRootSignature::Desc& lhs, const FRootSignature::Desc& rhs)
 {
 	return lhs.m_relativepath == rhs.m_relativepath &&
 		lhs.m_entrypoint == rhs.m_entrypoint &&
@@ -801,7 +801,7 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 
 	m_copyCommandlist = FetchCommandlist(L"upload_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 
-	m_uploadBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"upload_context_buffer", ResourceAccessMode::CpuWriteOnly, m_sizeInBytes, m_copyCommandlist->GetFence(FCommandList::Sync::GpuFinish)));
+	m_uploadBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"upload_context_buffer", FResource::AccessMode::CpuWriteOnly, m_sizeInBytes, m_copyCommandlist->GetFence(FCommandList::Sync::GpuFinish)));
 	m_uploadBuffer->m_resource->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
 }
 
@@ -931,7 +931,7 @@ FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
 	readbackSizeInBytes = std::max<size_t>(readbackSizeInBytes, 256);
 
 	m_copyCommandlist = FetchCommandlist(L"readback_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
-	m_readbackBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"readback_context_buffer", ResourceAccessMode::CpuReadOnly, readbackSizeInBytes, m_copyCommandlist->GetFence(FCommandList::Sync::GpuFinish)));
+	m_readbackBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"readback_context_buffer", FResource::AccessMode::CpuReadOnly, readbackSizeInBytes, m_copyCommandlist->GetFence(FCommandList::Sync::GpuFinish)));
 }
 
 FFenceMarker FResourceReadbackContext::StageSubresources(const FFenceMarker sourceReadyMarker)
@@ -1201,11 +1201,11 @@ void FResource::UavBarrier(FCommandList* cmdList)
 
 FSystemBuffer::~FSystemBuffer()
 {
-	if (m_accessMode == ResourceAccessMode::CpuWriteOnly)
+	if (m_accessMode == FResource::AccessMode::CpuWriteOnly)
 	{
 		GetUploadResourcePool()->Retire(this);
 	}
-	else if (m_accessMode == ResourceAccessMode::CpuReadOnly)
+	else if (m_accessMode == FResource::AccessMode::CpuReadOnly)
 	{
 		GetReadbackResourcePool()->Retire(this);
 	}
@@ -1229,7 +1229,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, srv);
-			m_indices[(uint32_t)ResourceType::Buffer].push(i);
+			m_indices[(uint32_t)FResource::Type::Buffer].push(i);
 		}
 
 		// Texture2D
@@ -1238,7 +1238,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, srv);
-			m_indices[(uint32_t)ResourceType::Texture2D].push(i);
+			m_indices[(uint32_t)FResource::Type::Texture2D].push(i);
 		}
 
 		// Texture2DMultisample
@@ -1247,7 +1247,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, srv);
-			m_indices[(uint32_t)ResourceType::Texture2DMultisample].push(i);
+			m_indices[(uint32_t)FResource::Type::Texture2DMultisample].push(i);
 		}
 
 		// Texture2DArray
@@ -1256,7 +1256,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, srv);
-			m_indices[(uint32_t)ResourceType::Texture2DArray].push(i);
+			m_indices[(uint32_t)FResource::Type::Texture2DArray].push(i);
 		}
 
 		// Texture Cube
@@ -1265,7 +1265,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, srv);
-			m_indices[(uint32_t)ResourceType::TextureCube].push(i);
+			m_indices[(uint32_t)FResource::Type::TextureCube].push(i);
 		}
 
 		// RWTexture2D
@@ -1274,7 +1274,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, uav);
-			m_indices[(uint32_t)ResourceType::RWTexture2D].push(i);
+			m_indices[(uint32_t)FResource::Type::RWTexture2D].push(i);
 		}
 
 		// RWTexture2DArray
@@ -1283,7 +1283,7 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, uav);
-			m_indices[(uint32_t)ResourceType::RWTexture2DArray].push(i);
+			m_indices[(uint32_t)FResource::Type::RWTexture2DArray].push(i);
 		}
 
 		// AccelerationStructure
@@ -1292,11 +1292,11 @@ public:
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, i);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, srv);
-			m_indices[(uint32_t)ResourceType::AccelerationStructure].push(i);
+			m_indices[(uint32_t)FResource::Type::AccelerationStructure].push(i);
 		}
 	}
 
-	uint32_t FetchIndex(ResourceType type)
+	uint32_t FetchIndex(FResource::Type type)
 	{
 		uint32_t index;
 		bool ok = m_indices[(uint32_t)type].try_pop(index);
@@ -1313,49 +1313,49 @@ public:
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullBufferDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_BUFFER);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullBufferDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::Buffer].push(index);
+			m_indices[(uint32_t)FResource::Type::Buffer].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::Texture2DEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::Texture2D].push(index);
+			m_indices[(uint32_t)FResource::Type::Texture2D].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::Texture2DMultisampleEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DMultisampleDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DMS);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DMultisampleDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::Texture2DMultisample].push(index);
+			m_indices[(uint32_t)FResource::Type::Texture2DMultisample].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::Texture2DArrayEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTex2DArrayDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURE2DARRAY);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTex2DArrayDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::Texture2DArray].push(index);
+			m_indices[(uint32_t)FResource::Type::Texture2DArray].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::TextureCubeEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullTexCubeDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_TEXTURECUBE);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullTexCubeDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::TextureCube].push(index);
+			m_indices[(uint32_t)FResource::Type::TextureCube].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::RWTexture2DEnd)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2D);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::RWTexture2D].push(index);
+			m_indices[(uint32_t)FResource::Type::RWTexture2D].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::RWTexture2DArrayEnd)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC nullUav2DArrayDesc = GetNullUavDesc(D3D12_UAV_DIMENSION_TEXTURE2DARRAY);
 			GetDevice()->CreateUnorderedAccessView(nullptr, nullptr, &nullUav2DArrayDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::RWTexture2DArray].push(index);
+			m_indices[(uint32_t)FResource::Type::RWTexture2DArray].push(index);
 		}
 		else if (index <= (uint32_t)DescriptorRange::AccelerationStructureEnd)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC nullASDesc = GetNullSRVDesc(D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE);
 			GetDevice()->CreateShaderResourceView(nullptr, &nullASDesc, descriptor);
-			m_indices[(uint32_t)ResourceType::AccelerationStructure].push(index);
+			m_indices[(uint32_t)FResource::Type::AccelerationStructure].push(index);
 		}
 		else
 		{
@@ -1365,14 +1365,14 @@ public:
 
 	void Clear()
 	{
-		for (int i = 0; i < (uint32_t)ResourceType::Count; ++i)
+		for (int i = 0; i < (uint32_t)FResource::Type::Count; ++i)
 		{
 			m_indices[i].clear();
 		}
 	}
 
 private:
-	concurrency::concurrent_queue<uint32_t> m_indices[(uint32_t)ResourceType::Count];
+	concurrency::concurrent_queue<uint32_t> m_indices[(uint32_t)FResource::Type::Count];
 };
 #pragma endregion
 #pragma region Resource_Definitions
@@ -1381,7 +1381,7 @@ private:
 //-----------------------------------------------------------------------------------------------------------------------------------------------
 FTexture::~FTexture()
 {
-	if (m_alloc.m_type == FResourceAllocation::Type::Committed)
+	if (m_alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		if (m_srvIndex != ~0u)
 		{
@@ -1390,7 +1390,7 @@ FTexture::~FTexture()
 
 		delete m_resource;
 	}
-	else if (m_alloc.m_type == FResourceAllocation::Type::Pooled)
+	else if (m_alloc.m_type == FResource::Allocation::Type::Transient)
 	{
 		GetDefaultResourcePool()->Retire(this);
 	}
@@ -1399,14 +1399,14 @@ FTexture::~FTexture()
 void FShaderSurface::FDescriptors::Release(const uint32_t surfaceType)
 {
 	// Return surface descriptor indices
-	if (surfaceType & SurfaceType::RenderTarget)
+	if (surfaceType & FShaderSurface::Type::RenderTarget)
 	{
 		for (uint32_t id : RTVorDSVs)
 		{
 			GetRTVIndexPool().push(id);
 		}
 	}
-	else if (surfaceType & SurfaceType::DepthStencil)
+	else if (surfaceType & FShaderSurface::Type::DepthStencil)
 	{
 		for (uint32_t id : RTVorDSVs)
 		{
@@ -1415,7 +1415,7 @@ void FShaderSurface::FDescriptors::Release(const uint32_t surfaceType)
 	}
 
 	// This is not `else if` because a surface can be a render texture and also an UAV
-	if (surfaceType & SurfaceType::UAV)
+	if (surfaceType & FShaderSurface::Type::UAV)
 	{
 		for (uint32_t id : UAVs)
 		{
@@ -1450,12 +1450,12 @@ FShaderSurface& FShaderSurface::operator=(FShaderSurface&& other)
 
 FShaderSurface::~FShaderSurface()
 {
-	if (m_type & SurfaceType::SwapChain || m_alloc.m_type == FResourceAllocation::Type::Committed)
+	if (m_type & FShaderSurface::Type::SwapChain || m_alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		m_descriptorIndices.Release(m_type);
 		delete m_resource;
 	}
-	else if(m_alloc.m_type == FResourceAllocation::Type::Pooled)
+	else if(m_alloc.m_type == FResource::Allocation::Type::Transient)
 	{
 		GetDefaultResourcePool()->Retire(this);
 	}
@@ -1497,11 +1497,11 @@ FShaderBuffer& FShaderBuffer::operator=(FShaderBuffer&& other)
 
 FShaderBuffer::~FShaderBuffer()
 {
-	if (m_alloc.m_type == FResourceAllocation::Type::Pooled)
+	if (m_alloc.m_type == FResource::Allocation::Type::Transient)
 	{
 		GetDefaultResourcePool()->Retire(this);
 	}
-	else if(m_alloc.m_type == FResourceAllocation::Type::Committed)
+	else if(m_alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		m_descriptorIndices.Release();
 		delete m_resource;
@@ -1558,7 +1558,7 @@ namespace RenderBackend12
 	FBindlessIndexPool s_bindlessPool;
 
 	concurrency::concurrent_unordered_map<FShaderDesc, FHashedBlob> s_shaderCache;
-	concurrency::concurrent_unordered_map<FRootsigDesc, FHashedBlob> s_rootsigCache;
+	concurrency::concurrent_unordered_map<FRootSignature::Desc, FHashedBlob> s_rootsigCache;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_graphicsPSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DPipelineState_t>> s_computePSOPool;
 	concurrency::concurrent_unordered_map<size_t, winrt::com_ptr<D3DStateObject_t>> s_raytracePSOPool;
@@ -1861,7 +1861,7 @@ bool RenderBackend12::Initialize(const HWND& windowHandle, const uint32_t resX, 
 		s_backBuffers[bufferIdx] = std::make_unique<FShaderSurface>();
 		FShaderSurface* backBuffer = s_backBuffers[bufferIdx].get();
 		backBuffer->m_resource = new FResource;
-		backBuffer->m_type = SurfaceType::SwapChain;
+		backBuffer->m_type = FShaderSurface::Type::SwapChain;
 		AssertIfFailed(s_swapChain->GetBuffer(bufferIdx, IID_PPV_ARGS(&backBuffer->m_resource->m_d3dResource)));
 
 		backBuffer->m_resource->SetName(PrintString(L"back_buffer_%d", bufferIdx));
@@ -1998,7 +1998,7 @@ IDxcBlob* RenderBackend12::CacheShader(const FShaderDesc& shaderDesc)
 	}
 }
 
-IDxcBlob* RenderBackend12::CacheRootsignature(const FRootsigDesc& rootsigDesc)
+IDxcBlob* RenderBackend12::CacheRootsignature(const FRootSignature::Desc& rootsigDesc)
 {
 	SCOPED_CPU_EVENT("cache_rootsig", PIX_COLOR_DEFAULT);
 	auto search = s_rootsigCache.find(rootsigDesc);
@@ -2099,7 +2099,7 @@ void RenderBackend12::RecompileModifiedShaders(ShadersDirtiedCallback callback)
 	}
 }
 
-std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootsigDesc& desc)
+std::unique_ptr<FRootSignature> RenderBackend12::FetchRootSignature(const std::wstring& name, const FCommandList* dependentCL, const FRootSignature::Desc& desc)
 {
 	SCOPED_CPU_EVENT("fetch_rootsig", PIX_COLOR_DEFAULT);
 	auto rs = std::make_unique<FRootSignature>();
@@ -2359,7 +2359,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 
 FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 	const std::wstring& name,
-	const ResourceAccessMode accessMode,
+	const FResource::AccessMode accessMode,
 	const size_t sizeInBytes,
 	const FFenceMarker retireFence,
 	std::function<void(uint8_t*)> uploadFunc)
@@ -2383,7 +2383,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 
 	FResource* buffer;
 	
-	if (accessMode == ResourceAccessMode::CpuWriteOnly)
+	if (accessMode == FResource::AccessMode::CpuWriteOnly)
 	{
 		// Upload Buffer
 		buffer = s_uploadResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ);
@@ -2398,7 +2398,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 			buffer->m_d3dResource->Unmap(0, nullptr);
 		}
 	}
-	else if (accessMode == ResourceAccessMode::CpuReadOnly)
+	else if (accessMode == FResource::AccessMode::CpuReadOnly)
 	{
 		// Readback Buffer
 		buffer = s_readbackResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -2415,7 +2415,7 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	const std::wstring& name,
 	const uint32_t surfaceType,
-	const FResourceAllocation alloc,
+	const FResource::Allocation alloc,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
@@ -2448,7 +2448,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	std::vector<uint32_t> uavDescriptorIndices;
 	std::vector<uint32_t> nonShaderVisibleUavIndices;
 
-	if (surfaceType & SurfaceType::RenderTarget)
+	if (surfaceType & FShaderSurface::Type::RenderTarget)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		clearValue = &defaultClearColor;
@@ -2462,7 +2462,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 			renderTextureDescriptorIndices.push_back(id);
 		}
 	}
-	else if (surfaceType & SurfaceType::DepthStencil)
+	else if (surfaceType & FShaderSurface::Type::DepthStencil)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 		surfaceFormat = GetTypelessDepthStencilFormat(format);
@@ -2478,12 +2478,12 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 		}
 	}
 
-	if (surfaceType & SurfaceType::UAV)
+	if (surfaceType & FShaderSurface::Type::UAV)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 		initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-		ResourceType descriptorType = arraySize > 1 ? ResourceType::RWTexture2DArray : ResourceType::RWTexture2D;
+		FResource::Type descriptorType = arraySize > 1 ? FResource::Type::RWTexture2DArray : FResource::Type::RWTexture2D;
 		for (int mip = 0; mip < mipLevels; ++mip)
 		{
 			uint32_t id = GetBindlessPool()->FetchIndex(descriptorType);
@@ -2512,11 +2512,11 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	surfaceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	surfaceDesc.Flags = surfaceFlags;
 
-	if (alloc.m_type == FResourceAllocation::Type::Pooled)
+	if (alloc.m_type == FResource::Allocation::Type::Transient)
 	{
 		resource = s_defaultResourcePool.GetOrCreate(name, surfaceDesc, initialState);
 	}
-	else if (alloc.m_type == FResourceAllocation::Type::Committed)
+	else if (alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2528,7 +2528,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	}
 
 	// Create render texture descriptors
-	if (surfaceType & SurfaceType::RenderTarget)
+	if (surfaceType & FShaderSurface::Type::RenderTarget)
 	{
 		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
 		{
@@ -2556,7 +2556,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 			GetDevice()->CreateRenderTargetView(resource->m_d3dResource, &rtvDesc, rtv);
 		}
 	}
-	else if (surfaceType & SurfaceType::DepthStencil)
+	else if (surfaceType & FShaderSurface::Type::DepthStencil)
 	{
 		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
 		{
@@ -2579,7 +2579,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	}
 
 	// Create UAV descriptors
-	if (surfaceType & SurfaceType::UAV)
+	if (surfaceType & FShaderSurface::Type::UAV)
 	{
 		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
 		{
@@ -2619,9 +2619,9 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	if(bCreateSRV)
 	{
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = (surfaceType & SurfaceType::DepthStencil) ? GetSrvDepthFormat(format) : format;
+		srvDesc.Format = (surfaceType & FShaderSurface::Type::DepthStencil) ? GetSrvDepthFormat(format) : format;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		ResourceType resourceType;
+		FResource::Type resourceType;
 
 		if (depth == 1)
 		{
@@ -2630,7 +2630,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
 				srvDesc.TextureCube.MipLevels = mipLevels;
 				srvDesc.TextureCube.MostDetailedMip = 0;
-				resourceType = ResourceType::TextureCube;
+				resourceType = FResource::Type::TextureCube;
 			}
 			else if (arraySize > 1)
 			{
@@ -2640,21 +2640,21 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 				srvDesc.Texture2DArray.ArraySize = arraySize;
 				srvDesc.Texture2DArray.MostDetailedMip = 0;
 				srvDesc.Texture2DArray.PlaneSlice = 0;
-				resourceType = ResourceType::Texture2DArray;
+				resourceType = FResource::Type::Texture2DArray;
 			}
 			else
 			{
 				if (sampleCount > 1)
 				{
 					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
-					resourceType = ResourceType::Texture2DMultisample;
+					resourceType = FResource::Type::Texture2DMultisample;
 				}
 				else
 				{
 					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 					srvDesc.Texture2D.MipLevels = mipLevels;
 					srvDesc.Texture2D.MostDetailedMip = 0;
-					resourceType = ResourceType::Texture2D;
+					resourceType = FResource::Type::Texture2D;
 				}
 			}
 		}
@@ -2663,7 +2663,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
 			srvDesc.Texture3D.MipLevels = mipLevels;
 			srvDesc.Texture3D.MostDetailedMip = 0;
-			resourceType = ResourceType::Texture3D;
+			resourceType = FResource::Type::Texture3D;
 		}
 
 		srvIndex = GetBindlessPool()->FetchIndex(resourceType);
@@ -2686,7 +2686,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 FTexture* RenderBackend12::CreateNewTexture(
 	const std::wstring& name,
 	const FTexture::Type type,
-	const FResourceAllocation alloc,
+	const FResource::Allocation alloc,
 	const DXGI_FORMAT format,
 	const size_t width,
 	const size_t height,
@@ -2717,11 +2717,11 @@ FTexture* RenderBackend12::CreateNewTexture(
 	// The resource will decay back to COMMON state after the commandlist is submitted and will be ready for reuse.
 	const D3D12_RESOURCE_STATES initialState = images && uploadContext ? D3D12_RESOURCE_STATE_COMMON : resourceState;
 
-	if (alloc.m_type == FResourceAllocation::Type::Pooled)
+	if (alloc.m_type == FResource::Allocation::Type::Transient)
 	{
 		resource = s_defaultResourcePool.GetOrCreate(name, desc, initialState);
 	}
-	else if (alloc.m_type == FResourceAllocation::Type::Committed)
+	else if (alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2760,7 +2760,7 @@ FTexture* RenderBackend12::CreateNewTexture(
 	uint32_t srvIndex;
 	if (type == FTexture::Type::Tex2D)
 	{
-		srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2D);
+		srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::Texture2D);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
@@ -2772,7 +2772,7 @@ FTexture* RenderBackend12::CreateNewTexture(
 	}
 	else if (type == FTexture::Type::TexCube)
 	{
-		srvIndex = GetBindlessPool()->FetchIndex(ResourceType::TextureCube);
+		srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::TextureCube);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
@@ -2784,7 +2784,7 @@ FTexture* RenderBackend12::CreateNewTexture(
 	}
 	else if (type == FTexture::Type::Tex2DArray)
 	{
-		srvIndex = GetBindlessPool()->FetchIndex(ResourceType::Texture2DArray);
+		srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::Texture2DArray);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Format = format;
@@ -2810,9 +2810,9 @@ FTexture* RenderBackend12::CreateNewTexture(
 
 FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 	const std::wstring& name,
-	const BufferType type,
-	const ResourceAccessMode accessMode,
-	const FResourceAllocation alloc,
+	const FShaderBuffer::Type type,
+	const FResource::AccessMode accessMode,
+	const FResource::Allocation alloc,
 	const size_t size,
 	const bool bCreateNonShaderVisibleDescriptor,
 	const uint8_t* pData,
@@ -2825,9 +2825,9 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 	// Resource Flags & State
 	D3D12_RESOURCE_FLAGS resourceFlags = {};
 	D3D12_RESOURCE_STATES resourceState = {};
-	if (accessMode == ResourceAccessMode::GpuReadWrite)
+	if (accessMode == FResource::AccessMode::GpuReadWrite)
 	{
-		if (type == BufferType::AccelerationStructure)
+		if (type == FShaderBuffer::Type::AccelerationStructure)
 		{
 			resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			resourceState = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
@@ -2838,7 +2838,7 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 			resourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		}
 	}
-	else if (accessMode == ResourceAccessMode::GpuReadOnly)
+	else if (accessMode == FResource::AccessMode::GpuReadOnly)
 	{
 		resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 		resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
@@ -2860,11 +2860,11 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 
 	// Create Resource
 	FResource* resource = {};
-	if (alloc.m_type == FResourceAllocation::Type::Pooled)
+	if (alloc.m_type == FResource::Allocation::Type::Transient)
 	{
 		resource = s_defaultResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState);
 	}
-	else if (alloc.m_type == FResourceAllocation::Type::Committed)
+	else if (alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2894,9 +2894,9 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 	// UAV Descriptor
 	uint32_t uavIndex = ~0u;
 	uint32_t nonShaderVisibleUavIndex = ~0u;
-	if (accessMode != ResourceAccessMode::GpuReadOnly)
+	if (accessMode != FResource::AccessMode::GpuReadOnly)
 	{
-		if (type == BufferType::Raw)
+		if (type == FShaderBuffer::Type::Raw)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 			uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
@@ -2906,7 +2906,7 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 			uavDesc.Buffer.StructureByteStride = 0;
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 
-			uavIndex = (fixedUavIndex == -1 ? GetBindlessPool()->FetchIndex(ResourceType::Buffer) : fixedUavIndex);
+			uavIndex = (fixedUavIndex == -1 ? GetBindlessPool()->FetchIndex(FResource::Type::Buffer) : fixedUavIndex);
 			D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, descriptor);
 
@@ -2923,9 +2923,9 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 
 	// SRV Descriptor
 	uint32_t srvIndex = ~0u;
-	if (accessMode != ResourceAccessMode::GpuWriteOnly)
+	if (accessMode != FResource::AccessMode::GpuWriteOnly)
 	{
-		if (type == BufferType::AccelerationStructure)
+		if (type == FShaderBuffer::Type::AccelerationStructure)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -2933,7 +2933,7 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			srvDesc.RaytracingAccelerationStructure.Location = resource->m_d3dResource->GetGPUVirtualAddress();
 
-			srvIndex = GetBindlessPool()->FetchIndex(ResourceType::AccelerationStructure);
+			srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::AccelerationStructure);
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 			GetDevice()->CreateShaderResourceView(nullptr, &srvDesc, srv);
 		}
@@ -2948,7 +2948,7 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 			srvDesc.Buffer.StructureByteStride = 0;
 			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 
-			srvIndex = (fixedSrvIndex == -1 ? GetBindlessPool()->FetchIndex(ResourceType::Buffer) : fixedSrvIndex);
+			srvIndex = (fixedSrvIndex == -1 ? GetBindlessPool()->FetchIndex(FResource::Type::Buffer) : fixedSrvIndex);
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 			GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 		}

@@ -48,7 +48,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"direct_lighting_rootsig",
 				cmdList,
-				FRootsigDesc{ L"lighting/direct-lighting.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"lighting/direct-lighting.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 

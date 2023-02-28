@@ -44,7 +44,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"highlight_rootsig",
 				cmdList,
-				FRootsigDesc { L"geo-raster/highlight-pass.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc { L"geo-raster/highlight-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 

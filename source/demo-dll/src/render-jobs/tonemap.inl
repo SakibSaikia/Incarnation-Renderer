@@ -28,7 +28,7 @@ namespace RenderJob
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 			
 			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"tonemap_rootsig", cmdList, FRootsigDesc{L"postprocess/tonemap.hlsl", L"rootsig", L"rootsig_1_1"});
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"tonemap_rootsig", cmdList, FRootSignature::Desc{L"postprocess/tonemap.hlsl", L"rootsig", L"rootsig_1_1"});
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO

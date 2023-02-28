@@ -46,7 +46,7 @@ namespace RenderJob
 			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
 			std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer(
 				L"instance_descs_buffer",
-				ResourceAccessMode::CpuWriteOnly,
+				FResource::AccessMode::CpuWriteOnly,
 				instanceDescBufferSize,
 				cmdList->GetFence(FCommandList::Sync::GpuFinish),
 				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
@@ -67,9 +67,9 @@ namespace RenderJob
 			// TLAS scratch buffer
 			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer(
 				L"tlas_scratch",
-				BufferType::AccelerationStructure,
-				ResourceAccessMode::GpuWriteOnly,
-				FResourceAllocation::Pooled(cmdList->GetFence(FCommandList::Sync::GpuFinish)),
+				FShaderBuffer::Type::AccelerationStructure,
+				FResource::AccessMode::GpuWriteOnly,
+				FResource::Allocation::Transient(cmdList->GetFence(FCommandList::Sync::GpuFinish)),
 				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
 
 			// Build TLAS

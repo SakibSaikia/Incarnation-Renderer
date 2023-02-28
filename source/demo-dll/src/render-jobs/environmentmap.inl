@@ -39,7 +39,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"envmap_rootsig",
 				cmdList,
-				FRootsigDesc{ L"environment-sky/envmap.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"environment-sky/envmap.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO

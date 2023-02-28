@@ -44,7 +44,7 @@ namespace RenderJob
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"debugviz_rootsig",
 				cmdList,
-				FRootsigDesc{ L"postprocess/debug-visualization.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"postprocess/debug-visualization.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// PSO
