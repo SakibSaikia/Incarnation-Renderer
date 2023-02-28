@@ -39,7 +39,7 @@ include_directories(
     "${project_ext_dir}/winpixeventruntime.1.0.210818001/Include/WinPixEventRuntime"
     "${project_ext_dir}/directXTex/inc"
     "${project_ext_dir}/d3d12.1.602.0/include"
-    "${project_ext_dir}/tracy")
+    "${project_ext_dir}/tracy/public/tracy")
 
 # Macro defines
 add_compile_definitions(

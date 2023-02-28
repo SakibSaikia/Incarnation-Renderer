@@ -6,7 +6,7 @@ set_property(TARGET demo PROPERTY CXX_STANDARD 20)
 
 include_directories(
 	"${project_src_dir}/demo-dll/inc"
-	"${project_ext_dir}/tracy")
+	"${project_ext_dir}/tracy/public/tracy")
 
 add_compile_definitions(
 	UNICODE 

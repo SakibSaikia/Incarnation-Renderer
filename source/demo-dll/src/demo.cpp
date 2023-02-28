@@ -70,7 +70,6 @@ struct std::hash<tinygltf::Sampler>
 		spookyhash_update(&context, &key.magFilter, sizeof(key.magFilter));
 		spookyhash_update(&context, &key.wrapS, sizeof(key.wrapS));
 		spookyhash_update(&context, &key.wrapT, sizeof(key.wrapT));
-		spookyhash_update(&context, &key.wrapR, sizeof(key.wrapR));
 		spookyhash_final(&context, &seed1, &seed2);
 
 		return seed1 ^ (seed2 << 1);
@@ -546,7 +545,7 @@ void Demo::UpdateUI(float deltaTime)
 						for (int i = 0; i < lightCount; ++i)
 						{
 							// Add indent
-							ImGui::TreePush();
+							ImGui::TreePush("Lights");
 
 							int lightIndex = GetScene()->m_sceneLights.m_entityList[i];
 							const std::string& lightName = GetScene()->m_sceneLights.m_entityNames[i];
@@ -2836,7 +2835,7 @@ uint32_t FSamplerCache::CacheSampler(const tinygltf::Sampler& s)
 		const D3D12_FILTER filter = FilterModeConversion(s.minFilter);
 		const D3D12_TEXTURE_ADDRESS_MODE addressU = AddressModeConversion(s.wrapS);
 		const D3D12_TEXTURE_ADDRESS_MODE addressV = AddressModeConversion(s.wrapT);
-		const D3D12_TEXTURE_ADDRESS_MODE addressW = AddressModeConversion(s.wrapR);
+		const D3D12_TEXTURE_ADDRESS_MODE addressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
 
 		m_cachedSamplers[s] = RenderBackend12::CreateSampler(filter, addressU, addressV, addressW);
 		return m_cachedSamplers[s];
