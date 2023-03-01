@@ -55,7 +55,7 @@ namespace RenderJob::DirectLightingPass
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 			L"lighting/direct-lighting.hlsl",
 			L"cs_main",
-			L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16",
+			PrintString(L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 LIGHTING_ONLY=%d", passDesc.renderConfig.Viewmode == (int)Viewmode::LightingOnly ? 1 : 0),
 			L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};

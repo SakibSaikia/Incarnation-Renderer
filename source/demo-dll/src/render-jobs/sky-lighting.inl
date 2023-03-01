@@ -52,9 +52,10 @@ namespace RenderJob::SkyLightingPass
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			std::wstring shaderMacros = PrintString(
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 DIFFUSE_IBL=%d SPECULAR_IBL=%d",
+				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 DIFFUSE_IBL=%d SPECULAR_IBL=%d LIGHTING_ONLY=%d",
 				passDesc.renderConfig.EnableDiffuseIBL ? 1 : 0,
-				passDesc.renderConfig.EnableSpecularIBL ? 1 : 0);
+				passDesc.renderConfig.EnableSpecularIBL ? 1 : 0,
+				passDesc.renderConfig.Viewmode == (int)Viewmode::LightingOnly ? 1 : 0);
 
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 			L"lighting/sky-lighting.hlsl",

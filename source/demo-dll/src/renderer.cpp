@@ -1327,7 +1327,8 @@ void Renderer::Render(const FRenderState& renderState)
 			sceneRenderJobs.push_back(dynamicSkyJob.m_task);
 		}
 
-		if (c.Viewmode != (int)Viewmode::Normal)
+		if (c.Viewmode != (int)Viewmode::Normal && 
+			c.Viewmode != (int)Viewmode::LightingOnly)
 		{
 			// Debug Viz
 			RenderJob::DebugVizPass::Desc desc = {};

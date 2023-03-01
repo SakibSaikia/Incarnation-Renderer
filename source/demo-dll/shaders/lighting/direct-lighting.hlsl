@@ -41,9 +41,13 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             ResourceDescriptorHeap[g_passCb.m_gbufferMetallicRoughnessAoSrvIndex]
         };
 
-        const float3 basecolor = gbuffer[0][dispatchThreadId.xy].rgb;
+        float3 basecolor = gbuffer[0][dispatchThreadId.xy].rgb;
         const float3 normal = OctDecode(gbuffer[1][dispatchThreadId.xy].rg);
         const float4 misc = gbuffer[2][dispatchThreadId.xy].rgba;
+
+    #if LIGHTING_ONLY
+        basecolor = 0.5.xxx;
+    #endif
 
         #define metallic  (misc.r)
         #define roughness (misc.g)
