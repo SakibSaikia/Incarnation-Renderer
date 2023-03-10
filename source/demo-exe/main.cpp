@@ -1,4 +1,4 @@
-#include <Demo.h>
+#include <demo-interface.h>
 #include <time.h>
 #include <strsafe.h>
 #include <sstream>

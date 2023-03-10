@@ -5,26 +5,10 @@
 #include <MikkTSpace/mikktspace.h>
 #include <ppl.h>
 #include <profiling.h>
+#include <common.h>
 
 namespace
 {
-	inline void DebugAssert(bool success, const char* msg = nullptr)
-	{
-#if defined _DEBUG
-		if (!success)
-		{
-			if (msg)
-			{
-				OutputDebugStringA("\n*****\n");
-				OutputDebugStringA(msg);
-				OutputDebugStringA("\n*****\n");
-			}
-
-			_CrtDbgBreak();
-		}
-#endif
-	}
-
 	struct PrimitiveIdentifier
 	{
 		tinygltf::Model* m_model;

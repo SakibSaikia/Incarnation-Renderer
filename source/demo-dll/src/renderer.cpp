@@ -243,6 +243,128 @@ std::unique_ptr<FTexture> Renderer::GenerateWhiteNoiseTextures(const uint32_t wi
 	return std::move(noiseTexArray);
 }
 
+// Generate a lat-long sky texutre (spherical projection) using Preetham sky model
+void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const uint32_t outputUavIndex, const int resX, const int resY, Vector3 sunDir)
+{
+	SCOPED_COMMAND_LIST_EVENT(cmdList, "gen_dynamic_sky_tex", 0);
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+	// Descriptor Heaps
+	D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+	d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+	// Root Signature
+	std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+		L"gen_dynamic_sky_rootsig",
+		cmdList,
+		FRootSignature::Desc{ L"environment-sky/dynamic-sky-spherical-projection.hlsl", L"rootsig", L"rootsig_1_1" });
+
+	d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+	// PSO
+	IDxcBlob* csBlob = RenderBackend12::CacheShader({
+		L"environment-sky/dynamic-sky-spherical-projection.hlsl",
+		L"cs_main",
+		L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+		L"cs_6_6" });
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.pRootSignature = rootsig->m_rootsig;
+	psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+	psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+	psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+	D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+	d3dCmdList->SetPipelineState(pso);
+
+	FPerezDistribution perezConstants;
+	const float t = Demo::GetConfig().Turbidity;
+	perezConstants.A = Vector4(0.1787 * t - 1.4630, -0.0193 * t - 0.2592, -0.0167 * t - 0.2608, 0.f);
+	perezConstants.B = Vector4(-0.3554 * t + 0.4275, -0.0665 * t + 0.0008, -0.0950 * t + 0.0092, 0.f);
+	perezConstants.C = Vector4(-0.0227 * t + 5.3251, -0.0004 * t + 0.2125, -0.0079 * t + 0.2102, 0.f);
+	perezConstants.D = Vector4(0.1206 * t - 2.5771, -0.0641 * t - 0.8989, -0.0441 * t - 1.6537, 0.f);
+	perezConstants.E = Vector4(-0.0670 * t + 0.3703, -0.0033 * t + 0.0452, -0.0109 * t + 0.0529, 0.f);
+
+	Vector3 L = sunDir;
+	L.Normalize();
+
+	struct FConstants
+	{
+		FPerezDistribution m_perezConstants;
+		float m_turbidity;
+		Vector3 m_sunDir;
+		uint32_t m_texSize[2];
+		uint32_t m_uavIndex;
+	};
+
+	FConstants cb{};
+	cb.m_perezConstants = perezConstants;
+	cb.m_turbidity = t;
+	cb.m_sunDir = L;
+	cb.m_texSize[0] = resX;
+	cb.m_texSize[1] = resY;
+	cb.m_uavIndex = outputUavIndex;
+	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
+
+	size_t threadGroupCountX = std::max<size_t>(std::ceil(resX / 16), 1);
+	size_t threadGroupCountY = std::max<size_t>(std::ceil(resY / 16), 1);
+	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+}
+
+// Downsample an UAV to half resolution
+void Renderer::DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY)
+{
+	SCOPED_COMMAND_LIST_EVENT(cmdList, "downsample", 0);
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+	// Descriptor Heaps
+	D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+	d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+	// Root Signature
+	std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+		L"downsample_rootsig",
+		cmdList,
+		FRootSignature::Desc{ L"postprocess/downsample.hlsl", L"rootsig", L"rootsig_1_1" });
+
+	d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+	// PSO
+	IDxcBlob* csBlob = RenderBackend12::CacheShader({
+		L"postprocess/downsample.hlsl",
+		L"cs_main",
+		L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+		L"cs_6_6" });
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.pRootSignature = rootsig->m_rootsig;
+	psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+	psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+	psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+	D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+	d3dCmdList->SetPipelineState(pso);
+
+	struct FConstants
+	{
+		uint32_t m_resX;
+		uint32_t m_resY;
+		uint32_t m_srcUavIndex;
+		uint32_t m_dstUavIndex;
+	};
+
+	FConstants cb{};
+	cb.m_resX = dstResX;
+	cb.m_resY = dstResY;
+	cb.m_srcUavIndex = srvUavIndex;
+	cb.m_dstUavIndex = dstUavIndex;
+	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
+
+	size_t threadGroupCountX = std::max<size_t>(std::ceil(dstResX / 16), 1);
+	size_t threadGroupCountY = std::max<size_t>(std::ceil(dstResY / 16), 1);
+	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+}
+
 // Convert a lat-long (spherical projection) texture into a cubemap
 void Renderer::ConvertLatlong2Cubemap(FCommandList* cmdList, const uint32_t srcSrvIndex, const std::vector<uint32_t>& outputUavIndices, const int cubemapRes, const uint32_t numMips)
 {

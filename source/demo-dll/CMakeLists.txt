@@ -20,7 +20,10 @@ add_library(
     "src/shadercompiler.cpp"
     "src/renderer.cpp" 
     "src/profiling.cpp" 
-    "src/mesh-utils.cpp")
+    "src/mesh-utils.cpp"
+    "src/ui.cpp"
+    "src/demo-app.cpp" 
+    "src/scene.cpp")
 
 target_compile_options(${module_name} PUBLIC /await)
 
