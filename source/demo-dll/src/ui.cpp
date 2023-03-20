@@ -4,6 +4,24 @@
 #include <Renderer.h>
 #include <backends/imgui_impl_win32.h>
 
+namespace
+{
+	void EditCondition(bool predicate, std::function<void()> code)
+	{
+		if (!predicate)
+		{
+			ImGui::BeginDisabled();
+		}
+
+		code();
+
+		if (!predicate)
+		{
+			ImGui::EndDisabled();
+		}
+	}
+}
+
 void UI::Initialize(const HWND& windowHandle)
 {
 	IMGUI_CHECKVERSION();
@@ -100,19 +118,16 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 		// Pathtracing Options
-
-		if (!settings->PathTrace)
-			ImGui::BeginDisabled();
-
-		if (ImGui::CollapsingHeader("Path Tracing"))
-		{
-			bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*)&settings->MaxSampleCount, 1, 1024);
-			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &settings->Pathtracing_CameraAperture, 0.f, 0.1f);
-			bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &settings->Pathtracing_CameraFocalLength, 1.f, 15.f);
-		}
-
-		if (!settings->PathTrace)
-			ImGui::EndDisabled();
+		EditCondition(settings->PathTrace,
+			[&]()
+			{
+				if (ImGui::CollapsingHeader("Path Tracing"))
+				{
+					bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*)&settings->MaxSampleCount, 1, 1024);
+					bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &settings->Pathtracing_CameraAperture, 0.f, 0.1f);
+					bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &settings->Pathtracing_CameraFocalLength, 1.f, 15.f);
+				}
+			});
 
 		// -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -132,47 +147,43 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 					// ----------------------------------------------------------
 					// Environment map
-					if (settings->EnvSkyMode != (int)EnvSkyMode::Environmentmap)
-						ImGui::BeginDisabled();
-
-					static int curHdriIndex = std::find(hdris.begin(), hdris.end(), settings->EnvironmentFilename) - hdris.begin();
-					comboLabel = ws2s(hdris[curHdriIndex]);
-					if (ImGui::BeginCombo("Environment map", comboLabel.c_str(), ImGuiComboFlags_None))
-					{
-						for (int n = 0; n < hdris.size(); n++)
+					EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::Environmentmap,
+						[&]()
 						{
-							const bool bSelected = (curHdriIndex == n);
-							if (ImGui::Selectable(ws2s(hdris[n]).c_str(), bSelected))
+							int curHdriIndex = std::find(hdris.begin(), hdris.end(), settings->EnvironmentFilename) - hdris.begin();
+							comboLabel = ws2s(hdris[curHdriIndex]);
+							if (ImGui::BeginCombo("Environment map", comboLabel.c_str(), ImGuiComboFlags_None))
 							{
-								curHdriIndex = n;
-								settings->EnvironmentFilename = hdris[n];
-								bResetPathtracelAccumulation = true;
+								for (int n = 0; n < hdris.size(); n++)
+								{
+									const bool bSelected = (curHdriIndex == n);
+									if (ImGui::Selectable(ws2s(hdris[n]).c_str(), bSelected))
+									{
+										curHdriIndex = n;
+										settings->EnvironmentFilename = hdris[n];
+										bResetPathtracelAccumulation = true;
+									}
+
+									if (bSelected)
+									{
+										ImGui::SetItemDefaultFocus();
+									}
+								}
+
+								ImGui::EndCombo();
 							}
-
-							if (bSelected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-						}
-
-						ImGui::EndCombo();
-					}
-
-					if (settings->EnvSkyMode != (int)EnvSkyMode::Environmentmap)
-						ImGui::EndDisabled();
+						});
 
 					// ----------------------------------------------------------
 					// Dynamic Sky
-					if (settings->EnvSkyMode != (int)EnvSkyMode::DynamicSky)
-						ImGui::BeginDisabled();
-
-					if (ImGui::SliderFloat("Turbidity", &settings->Turbidity, 2.f, 10.f))
-					{
-						bResetPathtracelAccumulation = true;
-					}
-
-					if (settings->EnvSkyMode != (int)EnvSkyMode::DynamicSky)
-						ImGui::EndDisabled();
+					EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky,
+						[&]()
+						{
+							if (ImGui::SliderFloat("Turbidity", &settings->Turbidity, 2.f, 10.f))
+							{
+								bResetPathtracelAccumulation = true;
+							}
+						});
 
 					ImGui::EndTabItem();
 				}
@@ -332,13 +343,11 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float)scene->m_primitiveCount);
 
 		const size_t numLights = scene->m_sceneLights.GetCount();
-		if (numLights == 0)
-			ImGui::BeginDisabled();
-
-		ImGui::Text("Light Culling			%.2f%%", numLights == 0 ? 0.f : 100.f * stats.m_culledLights / (float)(numLights * settings->LightClusterDimX * settings->LightClusterDimY * settings->LightClusterDimZ));
-
-		if (numLights == 0)
-			ImGui::EndDisabled();
+		EditCondition(numLights > 0,
+			[&]()
+			{
+				ImGui::Text("Light Culling			%.2f%%", numLights == 0 ? 0.f : 100.f * stats.m_culledLights / (float)(numLights * settings->LightClusterDimX * settings->LightClusterDimY * settings->LightClusterDimZ));
+			});
 	}
 	ImGui::End();
 
