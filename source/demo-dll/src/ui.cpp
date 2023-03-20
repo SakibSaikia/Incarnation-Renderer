@@ -133,7 +133,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 		if (ImGui::CollapsingHeader("Scene"))
 		{
-			if (ImGui::BeginTabBar("ScaneTabs", ImGuiTabBarFlags_None))
+			if (ImGui::BeginTabBar("SceneTabs", ImGuiTabBarFlags_None))
 			{
 				if (ImGui::BeginTabItem("Environment/Sky"))
 				{
