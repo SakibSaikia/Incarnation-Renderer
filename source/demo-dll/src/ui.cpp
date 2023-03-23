@@ -20,6 +20,29 @@ namespace
 			ImGui::EndDisabled();
 		}
 	}
+
+	void LoadFontTexture()
+	{
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		FResourceUploadContext uploader{ 32 * 1024 * 1024 };
+
+		uint8_t* pixels;
+		int bpp, width, height;
+		ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
+
+		DirectX::Image img;
+		img.width = width;
+		img.height = height;
+		img.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		img.pixels = pixels;
+
+		AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
+
+		uint32_t fontSrvIndex = Demo::GetTextureCache().CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, &img, 1);
+		ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
+		uploader.SubmitUploads(cmdList);
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+	}
 }
 
 void UI::Initialize(const HWND& windowHandle)
@@ -28,6 +51,8 @@ void UI::Initialize(const HWND& windowHandle)
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
 	ImGui_ImplWin32_Init(windowHandle);
+	LoadFontTexture();
+	
 }
 
 void UI::Teardown()
@@ -54,26 +79,6 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 	const std::vector<std::wstring>& hdris = demoApp->m_hdriList;;
 
 	SCOPED_CPU_EVENT("ui_update", PIX_COLOR_DEFAULT);
-
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui", D3D12_COMMAND_LIST_TYPE_DIRECT);
-	FResourceUploadContext uploader{ 32 * 1024 * 1024 };
-
-	uint8_t* pixels;
-	int bpp, width, height;
-	ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&pixels, &width, &height, &bpp);
-
-	DirectX::Image img;
-	img.width = width;
-	img.height = height;
-	img.format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	img.pixels = pixels;
-
-	AssertIfFailed(DirectX::ComputePitch(DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, img.rowPitch, img.slicePitch));
-
-	uint32_t fontSrvIndex = Demo::GetTextureCache().CacheTexture2D(&uploader, L"imgui_fonts", DXGI_FORMAT_R8G8B8A8_UNORM, img.width, img.height, &img, 1);
-	ImGui::GetIO().Fonts->TexID = (ImTextureID)fontSrvIndex;
-	uploader.SubmitUploads(cmdList);
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
