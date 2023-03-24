@@ -85,7 +85,7 @@ namespace RenderJob::UIPass
 			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// Root Signature
-			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"imgui_rootsig", cmdList, FRootSignature::Desc{L"imgui.hlsl", L"rootsig", L"rootsig_1_1"});
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(L"imgui_rootsig", cmdList, FRootSignature::Desc{L"ui/imgui.hlsl", L"rootsig", L"rootsig_1_1"});
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
 			// Vertex Constant Buffer
@@ -127,8 +127,8 @@ namespace RenderJob::UIPass
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"imgui.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"ui/imgui.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"ui/imgui.hlsl", L"ps_main", L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();

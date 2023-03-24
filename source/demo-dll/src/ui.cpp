@@ -1,11 +1,18 @@
 #include <ui.h>
+#include <imgui_internal.h>
 #include <demo.h>
 #include <profiling.h>
 #include <Renderer.h>
 #include <backends/imgui_impl_win32.h>
+#include <dxcapi.h>
 
 namespace
 {
+	ImVec2 operator-(ImVec2 lhs, ImVec2 rhs)
+	{
+		return ImVec2{ lhs.x - rhs.x, lhs.y - rhs.y };
+	}
+
 	void EditCondition(bool predicate, std::function<void()> code)
 	{
 		if (!predicate)
@@ -43,6 +50,78 @@ namespace
 		uploader.SubmitUploads(cmdList);
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
+
+	ImTextureID RenderEnvironmentMapPreview(const FScene* scene, ImVec2 texSize)
+	{
+		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
+		std::unique_ptr<FShaderSurface> targetSurface { RenderBackend12::CreateNewShaderSurface(
+			L"envmap_preview", 
+			FShaderSurface::Type::UAV, 
+			FResource::Allocation::Transient(endOfFrameFence), 
+			DXGI_FORMAT_R8G8B8A8_UNORM, 
+			texSize.x, 
+			texSize.y) };
+
+		// Render preview envmap
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"envmap_preview", D3D12_COMMAND_LIST_TYPE_DIRECT);
+		{
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "envmap_preview", 0);
+			D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+
+			// Descriptor Heaps
+			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+			d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			// Root Signature
+			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+				L"envmap_preview_rootsig",
+				cmdList,
+				FRootSignature::Desc{ L"ui/envmap-preview.hlsl", L"rootsig", L"rootsig_1_1" });
+
+			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+			// PSO
+			IDxcBlob* csBlob = RenderBackend12::CacheShader({
+				L"ui/envmap-preview.hlsl",
+				L"cs_main",
+				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+				L"cs_6_6" });
+
+			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+			psoDesc.pRootSignature = rootsig->m_rootsig;
+			psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+			psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+			d3dCmdList->SetPipelineState(pso);
+
+			struct FConstants
+			{
+				uint32_t m_texSize[2];
+				uint32_t m_envmapTextureIndex;
+				uint32_t m_uavIndex;
+			};
+
+			FConstants cb{};
+			cb.m_texSize[0] = texSize.x;
+			cb.m_texSize[1] = texSize.y;
+			cb.m_envmapTextureIndex = scene->m_skylight.m_envmapTextureIndex;
+			cb.m_uavIndex = targetSurface->m_descriptorIndices.UAVs[0];
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
+
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(texSize.x / 16), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(texSize.y / 16), 1);
+			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+		}
+
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
+
+
+		//const uint32_t targetSurfaceSrvIndex = targetSurface->m_descriptorIndices.SRV;
+		//D3D12_GPU_DESCRIPTOR_HANDLE targetSurfaceSrv = RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, targetSurfaceSrvIndex);
+		return (ImTextureID)targetSurface->m_descriptorIndices.SRV;
+	}
 }
 
 void UI::Initialize(const HWND& windowHandle)
@@ -52,7 +131,6 @@ void UI::Initialize(const HWND& windowHandle)
 	ImGui::StyleColorsDark();
 	ImGui_ImplWin32_Init(windowHandle);
 	LoadFontTexture();
-	
 }
 
 void UI::Teardown()
@@ -88,8 +166,9 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 	bool bResetPathtracelAccumulation = false;
 	bool bUpdateSkylight = false;
 
-	ImGui::SetNextWindowPos(ImVec2(0.8f * viewport->WorkSize.x, 0), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(0.2f * viewport->WorkSize.x, viewport->WorkSize.y), ImGuiCond_Always);
+	const ImVec2 optionsWindowSize = { 0.2f * viewport->WorkSize.x, viewport->WorkSize.y };
+	ImGui::SetNextWindowPos(viewport->WorkSize -  optionsWindowSize, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(optionsWindowSize, ImGuiCond_Always);
 
 	ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 	{
@@ -189,6 +268,10 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 								bResetPathtracelAccumulation = true;
 							}
 						});
+
+					ImVec2 previewTexSize = { 0.45f * optionsWindowSize.x, 0.09f * optionsWindowSize.y };
+					ImTextureID previewEnvmapTex = RenderEnvironmentMapPreview(scene, previewTexSize);
+					ImGui::Image(previewEnvmapTex, previewTexSize);
 
 					ImGui::EndTabItem();
 				}
