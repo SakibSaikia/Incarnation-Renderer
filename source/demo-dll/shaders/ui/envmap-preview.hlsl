@@ -35,8 +35,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		ndc.y = -2.f * dispatchThreadId.y / (float)g_texSize.y + 1.f;
 
 		// Convert to polar angles
-		float theta = ndc.y * k_Pi * 0.5f;
-		float phi = ndc.x * k_Pi;
+		float theta = k_Pi * 0.5f * (ndc.y - 1);
+		float phi = k_Pi * (1.5f - ndc.x);
 
 		// Get direction from polar angles
 		float3 dir = Polar2Rect(theta, phi, true);
