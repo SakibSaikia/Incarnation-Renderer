@@ -13,21 +13,6 @@ namespace
 		return ImVec2{ lhs.x - rhs.x, lhs.y - rhs.y };
 	}
 
-	void EditCondition(bool predicate, std::function<void()> code)
-	{
-		if (!predicate)
-		{
-			ImGui::BeginDisabled();
-		}
-
-		code();
-
-		if (!predicate)
-		{
-			ImGui::EndDisabled();
-		}
-	}
-
 	void LoadFontTexture()
 	{
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"imgui", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -124,6 +109,63 @@ namespace
 	}
 }
 
+namespace ImGuiExt
+{
+	void EditCondition(bool predicate, std::function<void()> code)
+	{
+		if (!predicate)
+		{
+			ImGui::BeginDisabled();
+		}
+
+		code();
+
+		if (!predicate)
+		{
+			ImGui::EndDisabled();
+		}
+	}
+
+	void ImageZoom(ImTextureID texture, ImVec2 size)
+	{
+		ImVec2 pos = ImGui::GetCursorScreenPos();
+		ImGui::Image(texture, size);
+		if (ImGui::IsItemHovered())
+		{
+			ImGuiIO& io = ImGui::GetIO();
+
+			ImGui::BeginTooltip();
+			float region_sz = 32.0f;
+			float region_x = io.MousePos.x - pos.x - region_sz * 0.5f;
+			float region_y = io.MousePos.y - pos.y - region_sz * 0.5f;
+			float zoom = 4.0f;
+
+			if (region_x < 0.0f)
+			{
+				region_x = 0.0f;
+			}
+			else if (region_x > size.x - region_sz)
+			{
+				region_x = size.x - region_sz;
+			}
+
+			if (region_y < 0.0f)
+			{
+				region_y = 0.0f;
+			}
+			else if (region_y > size.y - region_sz)
+			{
+				region_y = size.y - region_sz;
+			}
+
+			ImVec2 uv0 = ImVec2((region_x) / size.x, (region_y) / size.y);
+			ImVec2 uv1 = ImVec2((region_x + region_sz) / size.x, (region_y + region_sz) / size.y);
+			ImGui::Image(texture, ImVec2(region_sz * zoom, region_sz * zoom), uv0, uv1);
+			ImGui::EndTooltip();
+		}
+	}
+}
+
 void UI::Initialize(const HWND& windowHandle)
 {
 	IMGUI_CHECKVERSION();
@@ -202,7 +244,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 		// Pathtracing Options
-		EditCondition(settings->PathTrace,
+		ImGuiExt::EditCondition(settings->PathTrace,
 			[&]()
 			{
 				if (ImGui::CollapsingHeader("Path Tracing"))
@@ -231,7 +273,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 					// ----------------------------------------------------------
 					// Environment map
-					EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::Environmentmap,
+					ImGuiExt::EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::Environmentmap,
 						[&]()
 						{
 							int curHdriIndex = std::find(hdris.begin(), hdris.end(), settings->EnvironmentFilename) - hdris.begin();
@@ -260,7 +302,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 					// ----------------------------------------------------------
 					// Dynamic Sky
-					EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky,
+					ImGuiExt::EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky,
 						[&]()
 						{
 							if (ImGui::SliderFloat("Turbidity", &settings->Turbidity, 2.f, 10.f))
@@ -271,7 +313,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 					ImVec2 previewTexSize = { 0.45f * optionsWindowSize.x, 0.09f * optionsWindowSize.y };
 					ImTextureID previewEnvmapTex = RenderEnvironmentMapPreview(scene, previewTexSize);
-					ImGui::Image(previewEnvmapTex, previewTexSize);
+					ImGuiExt::ImageZoom(previewEnvmapTex, previewTexSize);
 
 					ImGui::EndTabItem();
 				}
@@ -431,7 +473,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float)scene->m_primitiveCount);
 
 		const size_t numLights = scene->m_sceneLights.GetCount();
-		EditCondition(numLights > 0,
+		ImGuiExt::EditCondition(numLights > 0,
 			[&]()
 			{
 				ImGui::Text("Light Culling			%.2f%%", numLights == 0 ? 0.f : 100.f * stats.m_culledLights / (float)(numLights * settings->LightClusterDimX * settings->LightClusterDimY * settings->LightClusterDimZ));
