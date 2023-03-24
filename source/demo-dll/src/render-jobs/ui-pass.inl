@@ -110,13 +110,6 @@ namespace RenderJob::UIPass
 				d3dCmdList->SetGraphicsRoot32BitConstants(0, 16, &vtxConstantBuffer, 0);
 			}
 
-			// Pixel Constant Buffer
-			{
-				uint32_t fontSrvIndex = (uint32_t)ImGui::GetIO().Fonts->TexID;
-				d3dCmdList->SetGraphicsRoot32BitConstants(1, 1, &fontSrvIndex, 0);
-			}
-
-
 			// PSO
 			D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 			psoDesc.NodeMask = 1;
@@ -226,6 +219,10 @@ namespace RenderJob::UIPass
 				for (int cmdIndex = 0; cmdIndex < imguiCmdList->CmdBuffer.Size; ++cmdIndex)
 				{
 					const ImDrawCmd* pcmd = &imguiCmdList->CmdBuffer[cmdIndex];
+
+					ImTextureID textureIndex = pcmd->GetTexID();
+					d3dCmdList->SetGraphicsRoot32BitConstants(1, 1, &textureIndex, 0);
+
 					if (pcmd->UserCallback != NULL)
 					{
 						// User callback, registered via ImDrawList::AddCallback()
