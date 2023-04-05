@@ -16,6 +16,7 @@ struct FConfig
 	float CameraNearPlane = 1.f;
 	int Viewmode = 0;
 	int EnvSkyMode = 1;
+	float SkyBrightness = 25000.f;
 	bool EnableDirectLighting = true;
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = true;

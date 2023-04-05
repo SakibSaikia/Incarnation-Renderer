@@ -161,6 +161,7 @@ namespace RenderJob::PathTracing
 				FPerezDistribution perez;
 				float turbidity;
 				Vector3 sunDir;
+				float skyBrightness;
 			};
 
 			std::unique_ptr<FSystemBuffer> globalCb{ RenderBackend12::CreateNewSystemBuffer(
@@ -206,6 +207,7 @@ namespace RenderJob::PathTracing
 					cbDest->perez = perezConstants;
 					cbDest->turbidity = passDesc.renderConfig.Turbidity;
 					cbDest->sunDir = Vector3(L);
+					cbDest->skyBrightness = passDesc.renderConfig.SkyBrightness;
 				}) };
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());

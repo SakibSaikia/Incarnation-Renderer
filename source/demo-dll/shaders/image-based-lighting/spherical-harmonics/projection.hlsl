@@ -3,7 +3,7 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "RootConstants(b0, num32BitConstants=6, visibility = SHADER_VISIBILITY_ALL),"
+    "RootConstants(b0, num32BitConstants=5, visibility = SHADER_VISIBILITY_ALL),"
 
 struct CbLayout
 {
@@ -12,7 +12,6 @@ struct CbLayout
     uint hdriWidth;
     uint hdriHeight;
     uint hdriMip;
-    float radianceScale;
 };
 
 ConstantBuffer<CbLayout> g_constants : register(b0);
@@ -39,6 +38,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
     [unroll]
     for (int i = 0; i < SH_COEFFICIENTS; ++i)
     {
-        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = g_constants.radianceScale * radiance * sh.c[i];
+        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = radiance * sh.c[i];
     }
 }

@@ -122,7 +122,7 @@ namespace RenderJob::EnvironmentmapPass
 			{
 				Matrix invParallaxViewProjMatrix;
 				int envmapTextureIndex;
-				float exposure;
+				float skyBrightness;
 			};
 
 			Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
@@ -131,7 +131,7 @@ namespace RenderJob::EnvironmentmapPass
 			CbLayout constants{};
 			constants.envmapTextureIndex = passDesc.scene->m_skylight.m_envmapTextureIndex;
 			constants.invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
-			constants.exposure = passDesc.renderConfig.Exposure;
+			constants.skyBrightness = passDesc.renderConfig.SkyBrightness;
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(CbLayout) / 4, &constants, 0);
 
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);

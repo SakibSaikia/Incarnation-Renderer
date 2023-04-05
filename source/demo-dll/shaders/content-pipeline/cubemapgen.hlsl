@@ -110,7 +110,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             uv.x = 0.5f * uv.x + 0.5f;
             uv.y = 0.5f * uv.y + 0.5f;
 
-            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = 25000.f * src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex);
+            dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = src.SampleLevel(g_bilinearSampler, uv, g_computeConstants.mipIndex);
         }
     }
     else

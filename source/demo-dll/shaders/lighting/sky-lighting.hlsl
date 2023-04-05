@@ -26,7 +26,8 @@ cbuffer cb : register(b0)
     uint g_gbufferMetallicRoughnessAoSrvIndex;
     uint g_resX;
     uint g_resY;
-    uint3 __pad;
+    float g_skyBrightness;
+    uint2 __pad;
     float3 g_eyePos;
     int g_envBrdfTextureIndex;
     float4x4 g_invViewProjTransform;
@@ -93,7 +94,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             float3 albedo = (1.f - metallic) * basecolor;
             float3 shDiffuse = /*(1.f - F) **/ albedo * Fd_Lambert() * ShIrradiance(N, shRadiance) * 5.f;
-            radiance += lerp(shDiffuse, ao * shDiffuse, aoBlend);
+            radiance += g_skyBrightness * lerp(shDiffuse, ao * shDiffuse, aoBlend);
         }
 #endif
 
@@ -114,7 +115,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             float3 prefilteredColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, roughness * (mipCount - 1)).rgb;
             float2 envBrdf = envBrdfTex.SampleLevel(g_trilinearSampler, float2(NoV, roughness), 0.f).rg;
             float3 specularIBL = prefilteredColor * (F0 * envBrdf.x + envBrdf.y);
-            radiance += lerp(specularIBL, ao * specularIBL, aoBlend);
+            radiance += g_skyBrightness * lerp(specularIBL, ao * specularIBL, aoBlend);
         }
 #endif
 

@@ -36,7 +36,7 @@ namespace
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
 
-	ImTextureID RenderEnvironmentMapPreview(const FScene* scene, ImVec2 texSize)
+	ImTextureID RenderEnvironmentMapPreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
 	{
 		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
 		std::unique_ptr<FShaderSurface> targetSurface { RenderBackend12::CreateNewShaderSurface(
@@ -86,6 +86,8 @@ namespace
 				uint32_t m_texSize[2];
 				uint32_t m_envmapTextureIndex;
 				uint32_t m_uavIndex;
+				float m_skyBrightness;
+				float m_exposure;
 			};
 
 			FConstants cb{};
@@ -93,6 +95,8 @@ namespace
 			cb.m_texSize[1] = texSize.y;
 			cb.m_envmapTextureIndex = scene->m_skylight.m_envmapTextureIndex;
 			cb.m_uavIndex = targetSurface->m_descriptorIndices.UAVs[0];
+			cb.m_skyBrightness = settings->SkyBrightness;
+			cb.m_exposure = settings->Exposure;
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(texSize.x / 16), 1);
@@ -108,7 +112,7 @@ namespace
 		return (ImTextureID)targetSurface->m_descriptorIndices.SRV;
 	}
 
-	ImTextureID RenderShPreview(const FScene* scene, ImVec2 texSize)
+	ImTextureID RenderShPreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
 	{
 		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
 		std::unique_ptr<FShaderSurface> targetSurface{ RenderBackend12::CreateNewShaderSurface(
@@ -158,6 +162,8 @@ namespace
 				uint32_t m_texSize[2];
 				uint32_t m_shTextureIndex;
 				uint32_t m_uavIndex;
+				float m_skyBrightness;
+				float m_exposure;
 			};
 
 			FConstants cb{};
@@ -165,6 +171,8 @@ namespace
 			cb.m_texSize[1] = texSize.y;
 			cb.m_shTextureIndex = scene->m_skylight.m_shTextureIndex;
 			cb.m_uavIndex = targetSurface->m_descriptorIndices.UAVs[0];
+			cb.m_skyBrightness = settings->SkyBrightness;
+			cb.m_exposure = settings->Exposure;
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
 			size_t threadGroupCountX = std::max<size_t>(std::ceil(texSize.x / 16), 1);
@@ -372,6 +380,11 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 							}
 						});
 
+					if (ImGui::SliderFloat("Sky Brightness", &settings->SkyBrightness, 1000.f, 25000.f))
+					{
+						bResetPathtracelAccumulation = true;
+					}
+
 					// ----------------------------------------------------------
 					// Dynamic Sky
 					ImGuiExt::EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky,
@@ -384,8 +397,8 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 						});
 
 					ImVec2 previewTexSize = { 0.45f * optionsWindowSize.x, 0.09f * optionsWindowSize.y };
-					ImTextureID previewEnvmapTex = RenderEnvironmentMapPreview(scene, previewTexSize);
-					ImTextureID previewShTex = RenderShPreview(scene, previewTexSize);
+					ImTextureID previewEnvmapTex = RenderEnvironmentMapPreview(scene, settings, previewTexSize);
+					ImTextureID previewShTex = RenderShPreview(scene, settings, previewTexSize);
 					ImGuiExt::ImageZoom(previewEnvmapTex, previewTexSize);
 					ImGui::SameLine();
 					ImGuiExt::ImageZoom(previewShTex, previewTexSize);

@@ -84,7 +84,8 @@ namespace RenderJob::SkyLightingPass
 				uint32_t gbufferMetallicRoughnessAoSrvIndex;
 				uint32_t resX;
 				uint32_t resY;
-				uint32_t __pad[3];
+				float skyBrightness;
+				uint32_t __pad[2];
 				Vector3 eyePos;
 				int envBrdfTextureIndex;
 				Matrix invViewProjTransform;
@@ -107,6 +108,7 @@ namespace RenderJob::SkyLightingPass
 					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_descriptorIndices.SRV;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
+					cb->skyBrightness = passDesc.renderConfig.SkyBrightness;
 					cb->eyePos = passDesc.view->m_position;
 					cb->envBrdfTextureIndex = passDesc.envBRDFTex->m_srvIndex;
 					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();

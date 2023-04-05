@@ -10,7 +10,7 @@ cbuffer cb : register(b0)
 {
 	float4x4 g_invParallaxViewProjMatrix;
 	uint g_envmapTextureIndex;
-	float g_exposure;
+	float g_skyBrightness;
 }
 
 struct vs_to_ps
@@ -45,7 +45,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	worldPos /= worldPos.w;
 
 	TextureCube envmap = ResourceDescriptorHeap[g_envmapTextureIndex];
-	float3 luminance = envmap.Sample(g_anisoSampler, worldPos.xyz).rgb;
+	float3 luminance = g_skyBrightness * envmap.Sample(g_anisoSampler, worldPos.xyz).rgb;
 
 	return float4(luminance, 0.f);
 }

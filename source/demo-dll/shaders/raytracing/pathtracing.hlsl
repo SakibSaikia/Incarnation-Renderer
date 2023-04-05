@@ -77,6 +77,7 @@ struct GlobalCbLayout
     FPerezDistribution perezConstants;
     float turbidity;
     float3 sunDir;
+    float skyBrightness;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -236,7 +237,7 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
     float2 u = SamplePoint(payload.pixelIndex, g_globalConstants.currentSampleIndex, payload.sampleSetIndex, g_globalConstants.sqrtSampleCount);
     float3 sampleDir = CosineSampleHemisphere(u);
-    float3 radianceIn = envmap.SampleLevel(g_envmapSampler, sampleDir, 0).rgb;
+    float3 radianceIn = g_globalConstants.skyBrightness * envmap.SampleLevel(g_envmapSampler, sampleDir, 0).rgb;
     payload.color.rgb += payload.attenuation * GetSkyRadiance(radianceIn, sampleDir, hitPosition, matInfo, N, V, g_sceneBvh);
 
     if (payload.pathLength < MAX_RECURSION_DEPTH)
@@ -301,7 +302,7 @@ void ahsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 void msEnvmap(inout RayPayload payload)
 {
     TextureCube envmap = ResourceDescriptorHeap[g_globalConstants.envmapTextureIndex];
-    payload.color.rgb += payload.attenuation * envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb;
+    payload.color.rgb += payload.attenuation * g_globalConstants.skyBrightness * envmap.SampleLevel(g_envmapSampler, WorldRayDirection(), 0).rgb;
 }
 
 [shader("miss")]

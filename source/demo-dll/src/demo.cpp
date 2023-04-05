@@ -300,6 +300,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::SyncPoint::GpuFinish);
+		FScopedGpuCapture pixCapture{ cmdList };
 
 		// Create the equirectangular source texture
 		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
@@ -380,8 +381,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t hdriWidth;
 				uint32_t hdriHeight;
 				uint32_t srcMip;
-				float radianceScale;
-			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_descriptorIndices.UAVs[0], (uint32_t)metadata.width, (uint32_t)metadata.height, srcMipIndex, 25000.f };
+			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_descriptorIndices.UAVs[0], (uint32_t)metadata.width, (uint32_t)metadata.height, srcMipIndex };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
