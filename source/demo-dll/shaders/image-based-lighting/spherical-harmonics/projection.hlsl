@@ -26,7 +26,10 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
     // Convert from UV to polar angle
     float2 polarAngles = UV2Polar(uv);
 
-    SH9 sh = ShEvaluate(polarAngles.x, polarAngles.y);
+    // Get direction from polar angles
+    float3 dir = Polar2Rect(polarAngles.x, polarAngles.y, false);
+
+    SH9 sh = ShEvaluate(dir);
 
     // Sample radiance from the HDRI
     Texture2D inputHdriTex = ResourceDescriptorHeap[g_constants.inputHdriIndex];

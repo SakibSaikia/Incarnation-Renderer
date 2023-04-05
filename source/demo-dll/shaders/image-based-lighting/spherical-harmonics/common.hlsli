@@ -65,58 +65,9 @@ SH9 ShEvaluate(float3 dir)
 	return sh;
 }
 
-SH9 ShEvaluate(float theta, float phi)
-{
-	float sint = sin(theta);
-	float cost = cos(theta);
-	float sinp = sin(phi);
-	float cosp = cos(phi);
-
-	SH9 sh;
-
-	// Band 0
-	sh.c[0] = shConst[0];
-
-	// Band 1
-	sh.c[1] = shConst[1] * sinp * sint;
-	sh.c[2] = shConst[2] * cost;
-	sh.c[3] = shConst[3] * cosp * sint;
-
-	// Band 2
-	sh.c[4] = shConst[4] * sinp * cosp * sint * sint;
-	sh.c[5] = shConst[5] * sinp * sint * cost;
-	sh.c[6] = shConst[6] * (3.f * cost * cost - 1.f);
-	sh.c[7] = shConst[7] * cosp * sint * cost;
-	sh.c[8] = shConst[8] * (cosp * cosp - sinp * sinp) * sint * sint;
-
-	return sh;
-}
-
 SH9 ShCosineLobe(float3 dir)
 {
 	SH9 sh = ShEvaluate(dir);
-
-	// Band 0
-	sh.c[0] *= cosineZonalHarmonicCoefficients[0];
-
-	// Band 1
-	sh.c[1] *= cosineZonalHarmonicCoefficients[1];
-	sh.c[2] *= cosineZonalHarmonicCoefficients[1];
-	sh.c[3] *= cosineZonalHarmonicCoefficients[1];
-
-	// Band 2
-	sh.c[4] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[5] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[6] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[7] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[8] *= cosineZonalHarmonicCoefficients[2];
-
-	return sh;
-}
-
-SH9 ShCosineLobe(float theta, float phi)
-{
-	SH9 sh = ShEvaluate(theta, phi);
 
 	// Band 0
 	sh.c[0] *= cosineZonalHarmonicCoefficients[0];
