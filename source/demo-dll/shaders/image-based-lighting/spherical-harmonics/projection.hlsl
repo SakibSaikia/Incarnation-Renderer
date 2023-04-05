@@ -20,11 +20,14 @@ ConstantBuffer<CbLayout> g_constants : register(b0);
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID)
 {
-    // Polar angles
-    float elevation = k_Pi * dispatchThreadId.y / (float)g_constants.hdriHeight;
-    float azimuth = 2.f * k_Pi * dispatchThreadId.x / (float)g_constants.hdriWidth;
+    float2 uv = float2(
+        dispatchThreadId.x / (float)g_constants.hdriWidth,
+        dispatchThreadId.y / (float)g_constants.hdriHeight);
 
-    SH9 sh = ShEvaluate(elevation, azimuth);
+    // Convert from UV to polar angle
+    float2 polarAngles = UV2Polar(uv);
+
+    SH9 sh = ShEvaluate(polarAngles.x, polarAngles.y);
 
     // Sample radiance from the HDRI
     Texture2D inputHdriTex = ResourceDescriptorHeap[g_constants.inputHdriIndex];

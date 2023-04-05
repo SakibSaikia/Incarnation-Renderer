@@ -56,6 +56,22 @@ float3 Polar2Rect(float theta, float phi, bool bWorldSpace)
     return bWorldSpace ? p.xzy : p;
 }
 
+// For a lat-long texture, this converts a given uv to polar coordinates
+// which represent a direction about the sphere
+float2 UV2Polar(float2 uv)
+{
+    // Normalized coordinates
+    float2 ndc;
+    ndc.x = 2.f * uv.x - 1.f;
+    ndc.y = -2.f * uv.y + 1.f;
+
+    // Convert to polar angles
+    float theta = k_Pi * 0.5f * (ndc.y - 1.f);
+    float phi = k_Pi * (1.5f - ndc.x);
+
+    return float2(theta, phi);
+}
+
 // Returns tangent basis around world normal direction N
 float3x3 TangentToWorld(float3 N)
 {

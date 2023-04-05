@@ -29,17 +29,15 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 	if (dispatchThreadId.x < g_texSize.x &&
 		dispatchThreadId.y < g_texSize.y)
 	{
-		// Normalized coordinates
-		float2 ndc;
-		ndc.x = 2.f * dispatchThreadId.x / (float)g_texSize.x - 1.f;
-		ndc.y = -2.f * dispatchThreadId.y / (float)g_texSize.y + 1.f;
+		float2 uv = float2(
+			dispatchThreadId.x / (float)g_texSize.x, 
+			dispatchThreadId.y / (float)g_texSize.y);
 
-		// Convert to polar angles
-		float theta = k_Pi * 0.5f * (ndc.y - 1);
-		float phi = k_Pi * (1.5f - ndc.x);
+		// Convert from UV to polar angle
+		float2 polarAngles = UV2Polar(uv);
 
 		// Get direction from polar angles
-		float3 dir = Polar2Rect(theta, phi, true);
+		float3 dir = Polar2Rect(polarAngles.x, polarAngles.y, true);
 
 		// HDR color
 		TextureCube envMapTexture = ResourceDescriptorHeap[g_envmapTextureIndex];
