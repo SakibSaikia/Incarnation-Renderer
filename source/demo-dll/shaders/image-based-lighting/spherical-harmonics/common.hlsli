@@ -51,8 +51,8 @@ SH9 ShEvaluate(float3 dir)
 	sh.c[0] = shConst[0];
 
 	// Band 1
-	sh.c[1] = shConst[1] * dir.z;
-	sh.c[2] = shConst[2] * dir.y;
+	sh.c[1] = shConst[1] * dir.y;
+	sh.c[2] = shConst[2] * dir.z;
 	sh.c[3] = shConst[3] * dir.x;
 
 	// Band 2
