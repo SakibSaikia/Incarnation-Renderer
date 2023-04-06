@@ -341,7 +341,9 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
 		constexpr uint32_t srcMipIndex = 2;
-		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewShaderSurface(L"ShProj_0", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, metadata.width >> srcMipIndex, metadata.height >> srcMipIndex, 1, 1, numCoefficients) };
+		const uint32_t mipWidth = metadata.width >> srcMipIndex;
+		const uint32_t mipHeight = metadata.height >> srcMipIndex;
+		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewShaderSurface(L"ShProj_0", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, mipWidth, mipHeight, 1, 1, numCoefficients) };
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
@@ -381,17 +383,17 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t hdriWidth;
 				uint32_t hdriHeight;
 				uint32_t srcMip;
-			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_descriptorIndices.UAVs[0], (uint32_t)metadata.width, (uint32_t)metadata.height, srcMipIndex };
+			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_descriptorIndices.UAVs[0], mipWidth, mipHeight, srcMipIndex };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(metadata.width / 16), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(metadata.height / 16), 1);
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(mipWidth / 16), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(mipHeight / 16), 1);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 		}
 
 		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
-		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewShaderSurface(L"ShProj_1", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, (metadata.width >> srcMipIndex) / 16, (metadata.height >> srcMipIndex) / 16, 1, 1, numCoefficients) };
+		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewShaderSurface(L"ShProj_1", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, mipWidth / 16, mipHeight / 16, 1, 1, numCoefficients) };
 
 		// Ping-pong UAVs
 		FShaderSurface* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
@@ -435,7 +437,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetPipelineState(pso);
 
 			// Dispatch (Reduction)
-			width = metadata.width >> srcMipIndex, height = metadata.height >> srcMipIndex;
+			width = mipWidth, height = mipHeight;
 			uavs[src]->m_resource->UavBarrier(cmdList);
 
 			while (width >= (threadGroupSizeX * threadGroupSizeZ) ||
@@ -501,7 +503,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t srcIndex;
 				uint32_t destIndex;
 				float normalizationFactor;
-			} rootConstants = { uavs[src]->m_descriptorIndices.UAVs[0], shTexureUavAccum->m_descriptorIndices.UAVs[0], 1.f / (float)((metadata.width >> srcMipIndex) * (metadata.height >> srcMipIndex)) };
+			} rootConstants = { uavs[src]->m_descriptorIndices.UAVs[0], shTexureUavAccum->m_descriptorIndices.UAVs[0], 1.f / (float)(mipWidth * mipHeight) };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 			d3dCmdList->Dispatch(1, 1, 1);
