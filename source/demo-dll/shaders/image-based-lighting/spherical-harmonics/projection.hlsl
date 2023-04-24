@@ -40,6 +40,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
 
     [unroll]
     for (int i = 0; i < SH_COEFFICIENTS; ++i)
+    for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
     {
         dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = radiance * sh.c[i];
     }

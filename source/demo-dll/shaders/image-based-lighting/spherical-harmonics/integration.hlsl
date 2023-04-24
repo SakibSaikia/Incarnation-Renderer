@@ -15,7 +15,7 @@ struct CbLayout
 ConstantBuffer<CbLayout> g_constants : register(b0);
 
 #define NUM_SLICES THREAD_GROUP_SIZE_Z
-groupshared SH9Color g_sum[NUM_SLICES];
+groupshared SH9ColorCoefficient g_sum[NUM_SLICES];
 
 // For parallel reduction, see https://gpuopen.com/wp-content/uploads/2017/07/GDC2017-Wave-Programming-D3D12-Vulkan.pdf
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
@@ -28,10 +28,10 @@ void cs_main(
     RWTexture2DArray<float4> dest = ResourceDescriptorHeap[g_constants.destUavIndex];
 
     // Sum SH coefficients for all threads in the wave
-    SH9Color sum;
+    SH9ColorCoefficient sum;
     int i;
     [unroll]
-    for (i = 0; i < SH_COEFFICIENTS; ++i)
+    for (i = 0; i < SH_NUM_COEFFICIENTS; ++i)
     {
         float3 coeff = src[uint3(dispatchThreadId.x * dispatchThreadId.z, dispatchThreadId.y, i)].rgb;
         sum.c[i] = WaveActiveSum(coeff);
@@ -41,7 +41,7 @@ void cs_main(
     if (WaveGetLaneIndex() == 0)
     {
         [unroll]
-        for (int i = 0; i < SH_COEFFICIENTS; ++i)
+        for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
         {
             g_sum[groupThreadId.z].c[i] = sum.c[i];
         }
@@ -51,9 +51,9 @@ void cs_main(
     GroupMemoryBarrierWithGroupSync();
 
     // Compute for all waves in the thread group
-    SH9Color result = { {0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx} };
+    SH9ColorCoefficient result = { {0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx, 0.f.xxx} };
     [unroll]
-    for (int k = 0; k < SH_COEFFICIENTS; ++k)
+    for (int k = 0; k < SH_NUM_COEFFICIENTS; ++k)
     {
         [unroll]
         for (int i = 0; i < NUM_SLICES; ++i)
@@ -64,7 +64,7 @@ void cs_main(
 
     // Write results to the UAV
     [unroll]
-    for (i = 0; i < SH_COEFFICIENTS; ++i)
+    for (i = 0; i < SH_NUM_COEFFICIENTS; ++i)
     {
         dest[uint3(groupId.x, groupId.y, i)] = float4(result.c[i], 1.f);
     }

@@ -22,10 +22,10 @@ void cs_main(
     RWTexture2DArray<float4> src = ResourceDescriptorHeap[g_constants.srcUavIndex];
     RWTexture2D<float4> dest = ResourceDescriptorHeap[g_constants.destUavIndex];
 
-    SH9Color sum;
+    SH9ColorCoefficient sum;
     int i;
     [unroll]
-    for (i = 0; i < SH_COEFFICIENTS; ++i)
+    for (i = 0; i < SH_NUM_COEFFICIENTS; ++i)
     {
         float3 coeff = src[uint3(dispatchThreadId.x, dispatchThreadId.y, i)].rgb;
         sum.c[i] = WaveActiveSum(coeff);
@@ -37,6 +37,7 @@ void cs_main(
     {
         [unroll]
         for (i = 0; i < SH_COEFFICIENTS; ++i)
+        for (i = 0; i < SH_NUM_COEFFICIENTS; ++i)
         {
             dest[uint2(i, 0)] = float4(g_constants.normalizationFactor * sum.c[i], 1.f);
         }

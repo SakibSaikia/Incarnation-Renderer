@@ -83,11 +83,11 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 #if DIFFUSE_IBL
         if (g_skylightProbeIndex != -1)
         {
-            SH9Color shRadiance;
+            SH9ColorCoefficient shRadiance;
             Texture2D shTex = ResourceDescriptorHeap[g_skylightProbeIndex];
 
             [UNROLL]
-            for (int i = 0; i < SH_COEFFICIENTS; ++i)
+            for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
             {
                 shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
             }
