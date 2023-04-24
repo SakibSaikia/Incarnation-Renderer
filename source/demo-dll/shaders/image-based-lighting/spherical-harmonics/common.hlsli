@@ -37,7 +37,8 @@ static const float shConst[SH_COEFFICIENTS] = {
 	0.546274f
 };
 
-static const float cosineZonalHarmonicCoefficients[SH_BANDS] = {
+// Cosine Zonal Harmonic Coefficients
+static const float A[SH_BANDS] = {
 	SH_PI,
 	(2.f * SH_PI) / 3.f,
 	0.25f * SH_PI
@@ -70,19 +71,19 @@ SH9 ShCosineLobe(float3 dir)
 	SH9 sh = ShEvaluate(dir);
 
 	// Band 0
-	sh.c[0] *= cosineZonalHarmonicCoefficients[0];
+	sh.c[0] *= A[0];
 
 	// Band 1
-	sh.c[1] *= cosineZonalHarmonicCoefficients[1];
-	sh.c[2] *= cosineZonalHarmonicCoefficients[1];
-	sh.c[3] *= cosineZonalHarmonicCoefficients[1];
+	sh.c[1] *= A[1];
+	sh.c[2] *= A[1];
+	sh.c[3] *= A[1];
 
 	// Band 2
-	sh.c[4] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[5] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[6] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[7] *= cosineZonalHarmonicCoefficients[2];
-	sh.c[8] *= cosineZonalHarmonicCoefficients[2];
+	sh.c[4] *= A[2];
+	sh.c[5] *= A[2];
+	sh.c[6] *= A[2];
+	sh.c[7] *= A[2];
+	sh.c[8] *= A[2];
 
 	return sh;
 }
