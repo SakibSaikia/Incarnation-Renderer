@@ -36,6 +36,21 @@ enum CoordinateSpace
     Tangent
 };
 
+// For a lat-long texture, this converts a given uv to polar coordinates which represent a direction about the sphere.
+// 
+// A latlong image maps a direction's azimuth to the horizontal coordinate and its elevation to the vertical coordinate of the image. 
+// The top edge of the image corresponds to straight up, and the bottom edge corresponds to straight down. The center of the image corresponds to the Z (forward) axis.
+// For example, an elevation of 0 degrees points straight up (World Y Axis), and an azimuth of 0 degrees points straight forward (World Z Axis).
+// 
+// See: https://vgl.ict.usc.edu/Data/HighResProbes/
+float2 LatlongUV2Polar(float2 uv)
+{
+    float theta = k_Pi * uv.y;
+    float phi = k_Pi * (uv.x * 2.f - 1.f);
+
+    return float2(theta, phi);
+}
+
 // Conversion from polar angles to rectangular coordinates. 
 // World space coordinates are swizzled to make y-up
 float3 Polar2Cartesian(float sint, float cost, float phi, CoordinateSpace type)
@@ -49,7 +64,6 @@ float3 Polar2Cartesian(float sint, float cost, float phi, CoordinateSpace type)
 
 // Conversion from polar angles to rectangular coordinates. 
 // World space coordinates are swizzled to make y-up
-float3 Polar2Rect(float theta, float phi, bool bWorldSpace)
 float3 Polar2Cartesian(float theta, float phi, CoordinateSpace type)
 {
     float sint = sin(theta);
@@ -58,41 +72,10 @@ float3 Polar2Cartesian(float theta, float phi, CoordinateSpace type)
     float cosp = cos(phi);
 
     float3 p;
-    p.x = sint * cosp;
-    p.y = sint * sinp;
     p.x = sint * sinp;
     p.y = sint * cosp;
     p.z = cost;
-    return bWorldSpace ? p.xzy : p;
     return type == CoordinateSpace::World ? p.xzy : p;
-}
-}
-
-// For a lat-long texture, this converts a given uv to polar coordinates
-// which represent a direction about the sphere
-float2 UV2Polar(float2 uv)
-// For a lat-long texture, this converts a given uv to polar coordinates which represent a direction about the sphere
-// For a lat-long texture, this converts a given uv to polar coordinates which represent a direction about the sphere.
-// 
-// A latlong image maps a direction's azimuth to the horizontal coordinate and its elevation to the vertical coordinate of the image. 
-// The top edge of the image corresponds to straight up, and the bottom edge corresponds to straight down. The center of the image corresponds to the Z (forward) axis.
-// For example, an elevation of 0 degrees points straight up (World Y Axis), and an azimuth of 0 degrees points straight forward (World Z Axis).
-// 
-// See: https://vgl.ict.usc.edu/Data/HighResProbes/
-float2 LatlongUV2Polar(float2 uv)
-{
-    // Normalized coordinates
-    float2 ndc;
-    ndc.x = 2.f * uv.x - 1.f;
-    ndc.y = -2.f * uv.y + 1.f;
-
-    // Convert to polar angles
-    float theta = k_Pi * 0.5f * (ndc.y - 1.f);
-    float phi = k_Pi * (1.5f - ndc.x);
-    float theta = k_Pi * uv.y;
-    float phi = k_Pi * (uv.x * 2.f - 1.f);
-
-    return float2(theta, phi);
 }
 
 // Returns tangent basis around world normal direction N

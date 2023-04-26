@@ -32,27 +32,25 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 	if (dispatchThreadId.x < g_texSize.x &&
 		dispatchThreadId.y < g_texSize.y)
 	{
-		float2 uv = float2(
-			dispatchThreadId.x / (float)g_texSize.x, 
-			dispatchThreadId.y / (float)g_texSize.y);
+		 float2 uv = float2(
+			(dispatchThreadId.x + 0.5f) / (float)g_texSize.x,
+			(dispatchThreadId.y + 0.5f) / (float)g_texSize.y);
 
-		// Convert from UV to polar angle
-		float2 polarAngles = UV2Polar(uv);
+		 float2 polarAngles = LatlongUV2Polar(uv);
+		 float3 dir = Polar2Cartesian(polarAngles.x, polarAngles.y, CoordinateSpace::World);
 
-		// Get direction from polar angles
-		float3 dir = Polar2Rect(polarAngles.x, polarAngles.y, true);
-
-		SH9Color shRadiance;
-		SH9ColorCoefficient shRadiance;
+		float3 radiance = 0.f;
+		SH9 basis = ShEvaluate(dir);
 		Texture2D shTex = ResourceDescriptorHeap[g_shTextureIndex];
 
 		[UNROLL]
 		for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
 		{
-			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
+			float3 coeff = shTex.Load(int3(i, 0, 0)).rgb;
+			radiance += coeff * basis.value[i];
 		}
 
-		float3 hdrColor = g_skyBrightness * ShIrradiance(dir, shRadiance);
+		float3 hdrColor = g_skyBrightness * radiance;
 
 		// Exposure correction and tonemapping
 		float e = Exposure(g_exposure);
