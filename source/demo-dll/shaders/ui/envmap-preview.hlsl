@@ -32,14 +32,14 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		dispatchThreadId.y < g_texSize.y)
 	{
 		float2 uv = float2(
-			dispatchThreadId.x / (float)g_texSize.x, 
-			dispatchThreadId.y / (float)g_texSize.y);
+			(dispatchThreadId.x + 0.5f) / (float)g_texSize.x, 
+			(dispatchThreadId.y  + 0.5f) / (float)g_texSize.y);
 
 		// Convert from UV to polar angle
-		float2 polarAngles = UV2Polar(uv);
+		float2 polarAngles = LatlongUV2Polar(uv);
 
 		// Get direction from polar angles
-		float3 dir = Polar2Rect(polarAngles.x, polarAngles.y, true);
+		float3 dir = Polar2Cartesian(polarAngles.x, polarAngles.y, CoordinateSpace::World);
 
 		// HDR color
 		TextureCube envMapTexture = ResourceDescriptorHeap[g_envmapTextureIndex];

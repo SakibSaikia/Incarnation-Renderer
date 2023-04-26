@@ -35,10 +35,10 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 			dispatchThreadId.y / (float)g_texSize.y);
 
 		// Convert from UV to polar angle
-		float2 polarAngles = UV2Polar(uv);
+		float2 polarAngles = LatlongUV2Polar(uv);
 
 		// Get direction from polar angles
-		float3 dir = Polar2Rect(polarAngles.x, polarAngles.y, true);
+		float3 dir = Polar2Cartesian(polarAngles.x, polarAngles.y, CoordinateSpace::World);
 
 		RWTexture2D<float4> dest = ResourceDescriptorHeap[g_uavIndex];
 		dest[dispatchThreadId.xy].rgb = 0.04f * CalculateSkyRadianceRGB(g_sunDir, normalize(dir), g_turbidity, g_perezConstants);
