@@ -36,10 +36,9 @@ void cs_main(
     if (globalIndex == 0)
     {
         [unroll]
-        for (i = 0; i < SH_COEFFICIENTS; ++i)
         for (i = 0; i < SH_NUM_COEFFICIENTS; ++i)
         {
-            dest[uint2(i, 0)] = float4(g_constants.normalizationFactor * sum.c[i], 1.f);
+            dest[uint2(i, 0)] = float4(sum.c[i], 1.f);
         }
     }
 }
