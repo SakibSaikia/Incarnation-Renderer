@@ -31,8 +31,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		dispatchThreadId.y < g_texSize.y)
 	{
 		float2 uv = float2(
-			dispatchThreadId.x / (float)g_texSize.x,
-			dispatchThreadId.y / (float)g_texSize.y);
+			(dispatchThreadId.x + 0.5f)/ (float)g_texSize.x,
+			(dispatchThreadId.y +0.5f) / (float)g_texSize.y);
 
 		// Convert from UV to polar angle
 		float2 polarAngles = LatlongUV2Polar(uv);
