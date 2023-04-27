@@ -340,10 +340,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// Project radiance to SH basis
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9; 
-		constexpr uint32_t srcMipIndex = 2;
-		const uint32_t mipWidth = metadata.width >> srcMipIndex;
-		const uint32_t mipHeight = metadata.height >> srcMipIndex;
-		std::unique_ptr<FShaderSurface> shTexureUav0{ RenderBackend12::CreateNewShaderSurface(L"ShProj_0", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, mipWidth, mipHeight, 1, 1, numCoefficients) };
+		constexpr uint32_t baseMipIndex = 0;
+		const uint32_t baseMipWidth = metadata.width >> baseMipIndex;
+		const uint32_t baseMipHeight = metadata.height >> baseMipIndex;
+		const size_t shMips = RenderUtils12::CalcMipCount(baseMipWidth, baseMipHeight, false);
+		std::unique_ptr<FShaderSurface> shTexureUav{ RenderBackend12::CreateNewShaderSurface(L"ShProj", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, baseMipWidth, baseMipHeight, shMips, 1, numCoefficients) };
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
@@ -383,21 +384,14 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				uint32_t hdriWidth;
 				uint32_t hdriHeight;
 				uint32_t srcMip;
-			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav0->m_descriptorIndices.UAVs[0], mipWidth, mipHeight, srcMipIndex };
+			} rootConstants = { srcHdrTex->m_srvIndex, shTexureUav->m_descriptorIndices.UAVs[0], baseMipWidth, baseMipHeight, baseMipIndex };
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(mipWidth / 16), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(mipHeight / 16), 1);
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(baseMipWidth / 16), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(baseMipHeight / 16), 1);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 		}
-
-		// Each iteration will reduce by 16 x 16 (threadGroupSizeX * threadGroupSizeZ x threadGroupSizeY)
-		std::unique_ptr<FShaderSurface> shTexureUav1{ RenderBackend12::CreateNewShaderSurface(L"ShProj_1", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, mipWidth / 16, mipHeight / 16, 1, 1, numCoefficients) };
-
-		// Ping-pong UAVs
-		FShaderSurface* uavs[2] = { shTexureUav0.get(), shTexureUav1.get() };
-		int src = 0, dest = 1;
 
 		{
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_integration", 0);
@@ -410,19 +404,17 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
 				L"sh_integration_rootsig",
 				cmdList,
-				FRootSignature::Desc{ L"image-based-lighting/spherical-harmonics/integration.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc{ L"image-based-lighting/spherical-harmonics/parallel-reduction.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
-			// See https://gpuopen.com/wp-content/uploads/2017/07/GDC2017-Wave-Programming-D3D12-Vulkan.pdf
-			const uint32_t laneCount = RenderBackend12::GetLaneCount();
-			uint32_t threadGroupSizeX = 4 / (64 / laneCount);
-			uint32_t threadGroupSizeY = 16;
-			uint32_t threadGroupSizeZ = 4 * (64 / laneCount);
+			uint32_t threadGroupSizeX = 8;
+			uint32_t threadGroupSizeY = 8;
+			uint32_t threadGroupSizeZ = 1;
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
-				L"image-based-lighting/spherical-harmonics/integration.hlsl", 
+				L"image-based-lighting/spherical-harmonics/parallel-reduction.hlsl", 
 				L"cs_main", 
 				PrintString(L"THREAD_GROUP_SIZE_X=%u THREAD_GROUP_SIZE_Y=%u THREAD_GROUP_SIZE_Z=%u", threadGroupSizeX, threadGroupSizeY, threadGroupSizeZ),
 				L"cs_6_6" });
@@ -436,39 +428,50 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
 			d3dCmdList->SetPipelineState(pso);
 
-			// Dispatch (Reduction)
-			width = mipWidth, height = mipHeight;
-			uavs[src]->m_resource->UavBarrier(cmdList);
-
-			while (width >= (threadGroupSizeX * threadGroupSizeZ) ||
-				height >= threadGroupSizeY)
+			// Reduction - Each thread will read 4 neighboring texel values and write the result out to the next mip
+			for(uint32_t srcMip = 0; srcMip < shMips -1; ++srcMip)
 			{
-				struct
+				uint32_t destMip = srcMip + 1;
+				uint32_t srcMipWidth = std::max<uint32_t>(baseMipWidth >> srcMip, 1), srcMipHeight = std::max<uint32_t>(baseMipHeight >> srcMip, 1);
+				uint32_t destMipWidth = std::max<uint32_t>(baseMipWidth >> destMip, 1), destMipHeight = std::max<uint32_t>(baseMipHeight >> destMip, 1);
+				float uvScale[2] = {
+					srcMipWidth / (float)destMipWidth,
+					srcMipHeight / (float)destMipHeight
+				};
+
+				struct CbLayout
 				{
 					uint32_t srcUavIndex;
 					uint32_t destUavIndex;
-				} rootConstants = { uavs[src]->m_descriptorIndices.UAVs[0], uavs[dest]->m_descriptorIndices.UAVs[0] };
+					uint32_t srcMipIndex;
+					uint32_t destMipIndex;
+					float uvScale[2];
+				};
+				
+				CbLayout cb{};
+				cb.srcUavIndex = shTexureUav->m_descriptorIndices.UAVs[srcMip];
+				cb.destUavIndex = shTexureUav->m_descriptorIndices.UAVs[destMip];
+				cb.srcMipIndex = srcMip;
+				cb.destMipIndex = destMip;
+				cb.uvScale[0] = uvScale[0];
+				cb.uvScale[1] = uvScale[1];
 
-				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+				SCOPED_COMMAND_LIST_EVENT(cmdList, PrintString("Parallel Reduction (%dx%d)", destMipWidth, destMipHeight).c_str(), 0);
 
-				// Reduce by 16 x 16 on each iteration
-				size_t threadGroupCountX = std::max<size_t>(std::ceil(width / (threadGroupSizeX * threadGroupSizeZ)), 1);
-				size_t threadGroupCountY = std::max<size_t>(std::ceil(height / threadGroupSizeY), 1);
+				shTexureUav->m_resource->UavBarrier(cmdList);
+				d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
 
-				d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
-
-				uavs[dest]->m_resource->UavBarrier(cmdList);
-
-				width = threadGroupCountX;
-				height = threadGroupCountY;
-				std::swap(src, dest);
+				// Reduce by 2 x 2 on each iteration
+				size_t threadGroupCountX = std::max<size_t>(std::ceil(destMipWidth / threadGroupSizeX), 1);
+				size_t threadGroupCountY = std::max<size_t>(std::ceil(destMipHeight / threadGroupSizeY), 1);
+				d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, numCoefficients);
 			}
 		}
 
-		std::unique_ptr<FShaderSurface> shTexureUavAccum{ RenderBackend12::CreateNewShaderSurface(L"ShAccum", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, numCoefficients, 1) };
+		std::unique_ptr<FShaderSurface> shExportTexureUav{ RenderBackend12::CreateNewShaderSurface(L"ShExport", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metadata.format, numCoefficients, 1) };
 
 		{
-			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_accum", 0);
+			SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_export", 0);
 
 			// Descriptor Heaps
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
@@ -476,17 +479,17 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 			// Root Signature
 			std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
-				L"sh_accum_rootsig",
+				L"sh_export_rootsig",
 				cmdList,
-				FRootSignature::Desc { L"image-based-lighting/spherical-harmonics/accumulation.hlsl", L"rootsig", L"rootsig_1_1" });
+				FRootSignature::Desc { L"image-based-lighting/spherical-harmonics/export.hlsl", L"rootsig", L"rootsig_1_1" });
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({ 
-				L"image-based-lighting/spherical-harmonics/accumulation.hlsl", 
+				L"image-based-lighting/spherical-harmonics/export.hlsl", 
 				L"cs_main", 
-				PrintString(L"THREAD_GROUP_SIZE_X=%u THREAD_GROUP_SIZE_Y=%u", width, height),
+				L"",
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
@@ -500,19 +503,22 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 			struct
 			{
-				uint32_t srcIndex;
-				uint32_t destIndex;
-				float normalizationFactor;
-			} rootConstants = { uavs[src]->m_descriptorIndices.UAVs[0], shTexureUavAccum->m_descriptorIndices.UAVs[0], 1.f / (float)(mipWidth * mipHeight) };
+				uint32_t srcUavIndex;
+				uint32_t destUavIndex;
+			} rootConstants = {
+					shTexureUav->m_descriptorIndices.UAVs[shMips - 1],
+					shExportTexureUav->m_descriptorIndices.UAVs[0]
+			};
 
+			uint32_t mipUavIndex = shTexureUav->m_descriptorIndices.UAVs[shMips - 1];
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 			d3dCmdList->Dispatch(1, 1, 1);
 		}
 
 		// Copy from UAV to destination texture
-		shTexureUavAccum->m_resource->Transition(cmdList, shTexureUavAccum->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		shExportTexureUav->m_resource->Transition(cmdList, shExportTexureUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
 		std::unique_ptr<FTexture> shTex{ RenderBackend12::CreateNewTexture(shTextureName, FTexture::Type::Tex2D, FResource::Allocation::Persistent(), metadata.format, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
-		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shTexureUavAccum->m_resource->m_d3dResource);
+		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shExportTexureUav->m_resource->m_d3dResource);
 		shTex->m_resource->Transition(cmdList, shTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);
 
