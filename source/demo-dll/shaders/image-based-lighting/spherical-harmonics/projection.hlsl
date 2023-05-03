@@ -30,7 +30,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
     float3 dir = Polar2Cartesian(polarAngles.x, polarAngles.y, CoordinateSpace::World);
 
     // Evaluate SH basis at given direction
-    SH9 basis = ShEvaluate(dir);
+    SH9 shBasis = ShEvaluate(dir);
 
     // Sample radiance from the HDRI
     Texture2D inputHdriTex = ResourceDescriptorHeap[g_constants.inputHdriIndex];
@@ -46,6 +46,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId :
     [unroll]
     for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
     {
-        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = radiance * basis.value[i] * sint * dTheta * dPhi;
+        dest[uint3(dispatchThreadId.x, dispatchThreadId.y, i)] = radiance * shBasis.value[i] * sint * dTheta * dPhi;
     }
 }

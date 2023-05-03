@@ -39,18 +39,18 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 		 float2 polarAngles = LatlongUV2Polar(uv);
 		 float3 dir = Polar2Cartesian(polarAngles.x, polarAngles.y, CoordinateSpace::World);
 
-		float3 radiance = 0.f;
-		SH9 basis = ShEvaluate(dir);
 		Texture2D shTex = ResourceDescriptorHeap[g_shTextureIndex];
+		SH9ColorCoefficient shRadiance;
 
 		[UNROLL]
 		for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
 		{
-			float3 coeff = shTex.Load(int3(i, 0, 0)).rgb;
-			radiance += coeff * basis.value[i];
+			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
+
 		}
 
-		float3 hdrColor = g_skyBrightness * radiance;
+		float3 hdrColor = g_skyBrightness * max(0.f, ShIrradiance(dir, shRadiance) * Fd_Lambert());
+
 
 		// Exposure correction and tonemapping
 		float e = Exposure(g_exposure);

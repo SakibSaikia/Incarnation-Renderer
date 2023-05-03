@@ -102,23 +102,23 @@ SH9 ShEvaluate(float3 dir)
 // SH coefficients of the cosine lobe computed analytically
 SH9Coefficient ShCosineLobe(float3 dir)
 {
-	SH9 sh = ShEvaluate(dir);
+	SH9 shBasis = ShEvaluate(dir);
 	SH9Coefficient result;
 
 	// L0
-	result.c[0] = sh.value[0] * A[0];
+	result.c[0] = shBasis.value[0] * A[0];
 
 	// L1
-	result.c[1] = sh.value[1] * A[1];
-	result.c[2] = sh.value[2] * A[1];
-	result.c[3] = sh.value[3] * A[1];
+	result.c[1] = shBasis.value[1] * A[1];
+	result.c[2] = shBasis.value[2] * A[1];
+	result.c[3] = shBasis.value[3] * A[1];
 
 	// L2
-	result.c[4] = sh.value[4] * A[2];
-	result.c[5] = sh.value[5] * A[2];
-	result.c[6] = sh.value[6] * A[2];
-	result.c[7] = sh.value[7] * A[2];
-	result.c[8] = sh.value[8] * A[2];
+	result.c[4] = shBasis.value[4] * A[2];
+	result.c[5] = shBasis.value[5] * A[2];
+	result.c[6] = shBasis.value[6] * A[2];
+	result.c[7] = shBasis.value[7] * A[2];
+	result.c[8] = shBasis.value[8] * A[2];
 
 	return result;
 }
