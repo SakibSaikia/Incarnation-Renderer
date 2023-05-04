@@ -300,7 +300,7 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// Compute CL
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::SyncPoint::GpuFinish);
-		FScopedGpuCapture pixCapture{ cmdList };
+		//FScopedGpuCapture pixCapture{ cmdList };
 
 		// Create the equirectangular source texture
 		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
