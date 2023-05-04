@@ -78,7 +78,11 @@ void Demo::App::Tick(const float deltaTime)
 		concurrency::task<void> loadSceneTask = concurrency::create_task([this, newScene]()
 		{
 			newScene->ReloadModel(m_config.ModelFilename);
-			newScene->ReloadEnvironment(m_config.EnvironmentFilename);
+
+			if (m_config.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
+			{
+				newScene->ReloadEnvironment(m_config.EnvironmentFilename);
+			}
 		}).then([this, newScene]()
 		{
 			Renderer::Status::Pause();
