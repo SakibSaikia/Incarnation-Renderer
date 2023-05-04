@@ -1495,6 +1495,10 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 		// SH Encode
 		Renderer::ShEncode(cmdList, newSH.get(), dynamicSkySurface->m_descriptorIndices.SRV, shFormat, resX, resY);
 
+		// Transition to read state
+		newEnvmap->m_resource->Transition(cmdList, newEnvmap->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		newSH->m_resource->Transition(cmdList, newSH->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
 		RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
 	}
 
