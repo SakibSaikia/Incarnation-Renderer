@@ -128,4 +128,7 @@ namespace Renderer
 
 	// Downsample an UAV to half resolution
 	void DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const int dstUavIndex, const int dstResX, const int dstResY);
+
+	// Encode the SH coefficients of a given latlong HDR texture/surface. Optional mip offset to specify which mip to read the source radiance from.
+	void ShEncode(FCommandList* cmdList, FShaderSurface* destSurface, const uint32_t srcSrvIndex, const DXGI_FORMAT srcFormat, const uint32_t srcWidth, const uint32_t srcHeight, const uint32_t srcMipOffset = 0);
 }

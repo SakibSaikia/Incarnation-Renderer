@@ -106,9 +106,6 @@ namespace
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
-
-		//const uint32_t targetSurfaceSrvIndex = targetSurface->m_descriptorIndices.SRV;
-		//D3D12_GPU_DESCRIPTOR_HANDLE targetSurfaceSrv = RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, targetSurfaceSrvIndex);
 		return (ImTextureID)targetSurface->m_descriptorIndices.SRV;
 	}
 
@@ -182,9 +179,6 @@ namespace
 
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
-
-		//const uint32_t targetSurfaceSrvIndex = targetSurface->m_descriptorIndices.SRV;
-		//D3D12_GPU_DESCRIPTOR_HANDLE targetSurfaceSrv = RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, targetSurfaceSrvIndex);
 		return (ImTextureID)targetSurface->m_descriptorIndices.SRV;
 	}
 }

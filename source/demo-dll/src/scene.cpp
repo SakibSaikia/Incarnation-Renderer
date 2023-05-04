@@ -1353,7 +1353,7 @@ void FScene::Clear()
 	m_packedMaterials.reset(nullptr);
 	m_tlas.reset(nullptr);
 	m_dynamicSkyEnvmap.reset();
-	m_dynamicSkySH.reset(nullptr);
+	m_dynamicSkySH.reset();
 }
 
 int FScene::GetDirectionalLight() const
@@ -1439,10 +1439,11 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::SyncPoint::GpuFinish);
 
 	const int numSHCoefficients = 9;
+	const DXGI_FORMAT shFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	const int cubemapRes = Demo::GetConfig().EnvmapResolution;
 	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
 	std::shared_ptr<FShaderSurface> newEnvmap{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_envmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
-	m_dynamicSkySH.reset(RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_SH", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, numSHCoefficients, 1));
+	std::shared_ptr<FShaderSurface> newSH{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_sh", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), shFormat, numSHCoefficients, 1) };
 
 	{
 		//FScopedGpuCapture capture(cmdList);
@@ -1484,6 +1485,9 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, newEnvmap->m_descriptorIndices.UAVs, cubemapRes, 1, numMips);
 
+		// SH Encode
+		Renderer::ShEncode(cmdList, newSH.get(), dynamicSkySurface->m_descriptorIndices.SRV, shFormat, resX, resY);
+
 		RenderBackend12::ExecuteCommandlists(cmdListType, { cmdList });
 	}
 
@@ -1499,12 +1503,14 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 			{
 				RenderBackend12::GetCurrentFrameFence().Wait();
 			}
-		}).then([this, newEnvmap]() mutable
+		}).then([this, newEnvmap, newSH]() mutable
 		{
 			// Swap with new envmap
 			Renderer::Status::Pause();
 			m_dynamicSkyEnvmap = newEnvmap;
+			m_dynamicSkySH = newSH;
 			m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_descriptorIndices.SRV;
+			m_skylight.m_shTextureIndex = m_dynamicSkySH->m_descriptorIndices.SRV;
 			Renderer::Status::Resume();
 		});
 }

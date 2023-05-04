@@ -481,6 +481,191 @@ void Renderer::PrefilterCubemap(FCommandList* cmdList, const uint32_t srcCubemap
 	}
 }
 
+// Encode the SH coefficients of a given latlong HDR texture/surface. 
+// Optional mip offset to specify which mip to read the source radiance from.
+void Renderer::ShEncode(FCommandList* cmdList, FShaderSurface* destSurface, const uint32_t srcSrvIndex, const DXGI_FORMAT srcFormat, const uint32_t srcWidth, const uint32_t srcHeight, const uint32_t srcMipOffset)
+{
+	constexpr int numCoefficients = 9;
+	const uint32_t baseMipWidth = srcWidth >> srcMipOffset;
+	const uint32_t baseMipHeight = srcHeight >> srcMipOffset;
+	const size_t shMips = RenderUtils12::CalcMipCount(baseMipWidth, baseMipHeight, false);
+
+	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
+	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::SyncPoint::GpuFinish);
+
+	// ---------------------------------------------------------------------------------------------------------
+	// Project radiance to SH basis
+	// ---------------------------------------------------------------------------------------------------------
+	std::unique_ptr<FShaderSurface> shTexureUav{ RenderBackend12::CreateNewShaderSurface(L"ShProj", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), srcFormat, baseMipWidth, baseMipHeight, shMips, 1, numCoefficients) };
+	{
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
+
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		// Root Signature
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+			L"sh_projection_rootsig",
+			cmdList,
+			FRootSignature::Desc{ L"image-based-lighting/spherical-harmonics/projection.hlsl", L"rootsig", L"rootsig_1_1" });
+
+		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({
+			L"image-based-lighting/spherical-harmonics/projection.hlsl",
+			L"cs_main",
+			L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16" ,
+			L"cs_6_6" });
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig->m_rootsig;
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		struct
+		{
+			uint32_t inputHdriIndex;
+			uint32_t outputUavIndex;
+			uint32_t hdriWidth;
+			uint32_t hdriHeight;
+			uint32_t srcMip;
+		} rootConstants = { srcSrvIndex, shTexureUav->m_descriptorIndices.UAVs[0], baseMipWidth, baseMipHeight, srcMipOffset };
+
+		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+
+		size_t threadGroupCountX = std::max<size_t>(std::ceil(baseMipWidth / 16), 1);
+		size_t threadGroupCountY = std::max<size_t>(std::ceil(baseMipHeight / 16), 1);
+		d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// Integration. Sum up all the projected SH values.
+	// ---------------------------------------------------------------------------------------------------------
+
+	{
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_integration", 0);
+
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		// Root Signature
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+			L"sh_integration_rootsig",
+			cmdList,
+			FRootSignature::Desc{ L"image-based-lighting/spherical-harmonics/parallel-reduction.hlsl", L"rootsig", L"rootsig_1_1" });
+
+		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+		uint32_t threadGroupSizeX = 8;
+		uint32_t threadGroupSizeY = 8;
+		uint32_t threadGroupSizeZ = 1;
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({
+			L"image-based-lighting/spherical-harmonics/parallel-reduction.hlsl",
+			L"cs_main",
+			PrintString(L"THREAD_GROUP_SIZE_X=%u THREAD_GROUP_SIZE_Y=%u THREAD_GROUP_SIZE_Z=%u", threadGroupSizeX, threadGroupSizeY, threadGroupSizeZ),
+			L"cs_6_6" });
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig->m_rootsig;
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		// Reduction - Each thread will read 4 neighboring texel values and write the result out to the next mip
+		for (uint32_t srcMip = 0; srcMip < shMips - 1; ++srcMip)
+		{
+			uint32_t destMip = srcMip + 1;
+			uint32_t srcMipWidth = std::max<uint32_t>(baseMipWidth >> srcMip, 1), srcMipHeight = std::max<uint32_t>(baseMipHeight >> srcMip, 1);
+			uint32_t destMipWidth = std::max<uint32_t>(baseMipWidth >> destMip, 1), destMipHeight = std::max<uint32_t>(baseMipHeight >> destMip, 1);
+
+			struct CbLayout
+			{
+				uint32_t srcUavIndex;
+				uint32_t destUavIndex;
+				uint32_t srcMipIndex;
+				uint32_t destMipIndex;
+			};
+
+			CbLayout cb{};
+			cb.srcUavIndex = shTexureUav->m_descriptorIndices.UAVs[srcMip];
+			cb.destUavIndex = shTexureUav->m_descriptorIndices.UAVs[destMip];
+			cb.srcMipIndex = srcMip;
+			cb.destMipIndex = destMip;
+
+			SCOPED_COMMAND_LIST_EVENT(cmdList, PrintString("Parallel Reduction (%dx%d)", destMipWidth, destMipHeight).c_str(), 0);
+
+			shTexureUav->m_resource->UavBarrier(cmdList);
+			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
+
+			// Reduce by 2 x 2 on each iteration
+			size_t threadGroupCountX = std::max<size_t>(std::ceil(destMipWidth / threadGroupSizeX), 1);
+			size_t threadGroupCountY = std::max<size_t>(std::ceil(destMipHeight / threadGroupSizeY), 1);
+			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, numCoefficients);
+		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------
+	// Export the integration results from the texture array to a 9x1 texture 
+	// ---------------------------------------------------------------------------------------------------------
+
+	{
+		SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_export", 0);
+
+		// Descriptor Heaps
+		D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+		d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+
+		// Root Signature
+		std::unique_ptr<FRootSignature> rootsig = RenderBackend12::FetchRootSignature(
+			L"sh_export_rootsig",
+			cmdList,
+			FRootSignature::Desc{ L"image-based-lighting/spherical-harmonics/export.hlsl", L"rootsig", L"rootsig_1_1" });
+
+		d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
+
+		// PSO
+		IDxcBlob* csBlob = RenderBackend12::CacheShader({
+			L"image-based-lighting/spherical-harmonics/export.hlsl",
+			L"cs_main",
+			L"",
+			L"cs_6_6" });
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.pRootSignature = rootsig->m_rootsig;
+		psoDesc.CS.pShaderBytecode = csBlob->GetBufferPointer();
+		psoDesc.CS.BytecodeLength = csBlob->GetBufferSize();
+		psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		D3DPipelineState_t* pso = RenderBackend12::FetchComputePipelineState(psoDesc);
+		d3dCmdList->SetPipelineState(pso);
+
+		struct
+		{
+			uint32_t srcUavIndex;
+			uint32_t destUavIndex;
+		} rootConstants = {
+				shTexureUav->m_descriptorIndices.UAVs[shMips - 1],
+				destSurface->m_descriptorIndices.UAVs[0]
+		};
+
+		uint32_t mipUavIndex = shTexureUav->m_descriptorIndices.UAVs[shMips - 1];
+		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+		d3dCmdList->Dispatch(1, 1, 1);
+	}
+}
+
 void FDebugDraw::Initialize()
 {
 	std::unordered_map<std::string, DebugShape::Type> primitiveNameMapping =
