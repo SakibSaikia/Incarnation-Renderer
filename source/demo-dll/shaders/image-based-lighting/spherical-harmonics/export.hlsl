@@ -24,6 +24,8 @@ void cs_main(
     [unroll]
     for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
     {
-        dest[uint2(i, 0)] = src[uint3(0, 0, i)];
+        // Assuming a latlong texture of aspect ratio 2.0, the integration of the SH coefficients
+        // results in a 2x1 mip. Both texels are summed here before exporting to the destination.
+        dest[uint2(i, 0)] = src[uint3(0, 0, i)] + src[uint3(1, 0, i)];
     }
 }

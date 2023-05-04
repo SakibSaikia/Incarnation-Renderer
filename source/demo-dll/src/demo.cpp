@@ -429,15 +429,11 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 			d3dCmdList->SetPipelineState(pso);
 
 			// Reduction - Each thread will read 4 neighboring texel values and write the result out to the next mip
-			for(uint32_t srcMip = 0; srcMip < shMips -1; ++srcMip)
+			for(uint32_t srcMip = 0; srcMip < shMips - 1; ++srcMip)
 			{
 				uint32_t destMip = srcMip + 1;
 				uint32_t srcMipWidth = std::max<uint32_t>(baseMipWidth >> srcMip, 1), srcMipHeight = std::max<uint32_t>(baseMipHeight >> srcMip, 1);
 				uint32_t destMipWidth = std::max<uint32_t>(baseMipWidth >> destMip, 1), destMipHeight = std::max<uint32_t>(baseMipHeight >> destMip, 1);
-				float uvScale[2] = {
-					srcMipWidth / (float)destMipWidth,
-					srcMipHeight / (float)destMipHeight
-				};
 
 				struct CbLayout
 				{
@@ -445,7 +441,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 					uint32_t destUavIndex;
 					uint32_t srcMipIndex;
 					uint32_t destMipIndex;
-					float uvScale[2];
 				};
 				
 				CbLayout cb{};
@@ -453,8 +448,6 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 				cb.destUavIndex = shTexureUav->m_descriptorIndices.UAVs[destMip];
 				cb.srcMipIndex = srcMip;
 				cb.destMipIndex = destMip;
-				cb.uvScale[0] = uvScale[0];
-				cb.uvScale[1] = uvScale[1];
 
 				SCOPED_COMMAND_LIST_EVENT(cmdList, PrintString("Parallel Reduction (%dx%d)", destMipWidth, destMipHeight).c_str(), 0);
 
