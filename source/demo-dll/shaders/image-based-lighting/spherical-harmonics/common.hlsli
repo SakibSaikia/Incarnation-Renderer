@@ -138,4 +138,11 @@ float3 ShIrradiance(float3 normal, SH9ColorCoefficient shRadiance)
 	return irradiance;
 }
 
+// Sinc function 
+float ShWindowingFn(int l, float w)
+{
+	float x = SH_PI * l / w;
+	return sin(x) / x;
+}
+
 #endif 
