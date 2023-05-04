@@ -76,7 +76,6 @@ void Renderer::Status::Pause()
 
 void Renderer::Status::Resume()
 {
-	RenderBackend12::FlushGPU();
 	m_fence->Signal(++m_fenceVal);
 }
 
