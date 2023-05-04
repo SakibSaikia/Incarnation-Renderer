@@ -1434,6 +1434,13 @@ void FScene::UpdateSunDirection()
 
 void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 {
+	// This can be called several times when the TimeOfDay slider is adjusted.
+	// So, add a cooldown so that a new update is not queued until the previous one has finished.
+	static bool bReady = true;
+	if (!bReady)
+		return;
+
+	bReady = false;
 	D3D12_COMMAND_LIST_TYPE cmdListType = bUseAsyncCompute ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT;
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"update_dynamic_sky", cmdListType);
 	FFenceMarker gpuFinishFence = cmdList->GetFence(FCommandList::SyncPoint::GpuFinish);
@@ -1493,26 +1500,27 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 	// Update reference when the update is complete on the GPU
 	concurrency::create_task([gpuFinishFence]()
+	{
+		// Wait for the update to finish
+		gpuFinishFence.Wait();
+	}).then([bUseAsyncCompute]()
+	{
+		// Wait till the end of the frame before we flush and swap the envmap
+		if (bUseAsyncCompute)
 		{
-			// Wait for the update to finish
-			gpuFinishFence.Wait();
-		}).then([bUseAsyncCompute]()
-		{
-			// Wait till the end of the frame before we flush and swap the envmap
-			if (bUseAsyncCompute)
-			{
-				RenderBackend12::GetCurrentFrameFence().Wait();
-			}
-		}).then([this, newEnvmap, newSH]() mutable
-		{
-			// Swap with new envmap
-			Renderer::Status::Pause();
-			m_dynamicSkyEnvmap = newEnvmap;
-			m_dynamicSkySH = newSH;
-			m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_descriptorIndices.SRV;
-			m_skylight.m_shTextureIndex = m_dynamicSkySH->m_descriptorIndices.SRV;
-			Renderer::Status::Resume();
-		});
+			RenderBackend12::GetCurrentFrameFence().Wait();
+		}
+	}).then([this, newEnvmap, newSH]() mutable
+	{
+		// Swap with new envmap
+		Renderer::Status::Pause();
+		m_dynamicSkyEnvmap = newEnvmap;
+		m_dynamicSkySH = newSH;
+		m_skylight.m_envmapTextureIndex = m_dynamicSkyEnvmap->m_descriptorIndices.SRV;
+		m_skylight.m_shTextureIndex = m_dynamicSkySH->m_descriptorIndices.SRV;
+		bReady = true;
+		Renderer::Status::Resume();
+	});
 }
 
 size_t FScene::GetPunctualLightCount() const
