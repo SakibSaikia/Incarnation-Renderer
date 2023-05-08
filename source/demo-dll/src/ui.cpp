@@ -273,6 +273,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 	const std::vector<std::wstring>& hdris = demoApp->m_hdriList;;
 
 	SCOPED_CPU_EVENT("ui_update", PIX_COLOR_DEFAULT);
+	SCOPED_COMMAND_QUEUE_EVENT(D3D12_COMMAND_LIST_TYPE_DIRECT, "ui", 0);
 
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
