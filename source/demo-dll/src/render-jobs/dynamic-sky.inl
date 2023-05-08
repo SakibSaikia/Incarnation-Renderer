@@ -128,7 +128,6 @@ namespace RenderJob::DynamicSkyPass
 			// Constant buffer
 			struct Constants
 			{
-				Matrix invParallaxViewProjMatrix;
 				FPerezDistribution perez;
 				float turbidity;
 				Vector3 sunDir;
@@ -149,7 +148,6 @@ namespace RenderJob::DynamicSkyPass
 					L.Normalize();
 
 					auto cb = reinterpret_cast<Constants*>(pDest);
-					cb->invParallaxViewProjMatrix = (parallaxViewMatrix * passDesc.view->m_projectionTransform).Invert();
 					cb->perez = perezConstants;
 					cb->turbidity = passDesc.renderConfig.Turbidity;
 					cb->sunDir = L;
