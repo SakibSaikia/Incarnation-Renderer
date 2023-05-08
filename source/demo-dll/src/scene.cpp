@@ -1462,7 +1462,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "update_dynamic_sky", 0);
 
-		// Render dynamic sky to 2D surface using spherical/equirectangular projection
+		// Render dynamic sky to 2D surface to a latlong texture
 		const int resX = 2 * cubemapRes, resY = cubemapRes;
 		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_tex", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips) };
 		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_descriptorIndices.UAVs[0], resX, resY, m_sunDir);
@@ -1490,7 +1490,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Prefilter the cubemap
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, newEnvmap->m_descriptorIndices.UAVs, cubemapRes, 1, numMips);
+		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, newEnvmap->m_descriptorIndices.UAVs, cubemapRes, 0, numMips);
 
 		// SH Encode
 		Renderer::ShEncode(cmdList, newSH.get(), dynamicSkySurface->m_descriptorIndices.SRV, shFormat, resX, resY);
