@@ -345,6 +345,12 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 					bResetPathtracelAccumulation |= (settings->EnvSkyMode != currentSkyMode);
 					bUpdateSkylight |= (currentSkyMode == (int)EnvSkyMode::Environmentmap) && (settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky);
 
+					if (bUpdateSkylight)
+					{
+						// Clear the envmap name so that it will be reloaded when the envsky mode changes
+						scene->m_environmentFilename = {};
+					}
+
 
 					// ----------------------------------------------------------
 					// Environment map
