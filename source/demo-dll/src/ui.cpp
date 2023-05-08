@@ -187,6 +187,15 @@ namespace
 
 namespace ImGuiExt
 {
+	void TextCentered(const char* text)
+	{
+		auto windowWidth = ImGui::GetWindowSize().x;
+		auto textWidth = ImGui::CalcTextSize(text).x;
+
+		ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+		ImGui::Text(text);
+	}
+
 	void EditCondition(bool predicate, std::function<void()> code)
 	{
 		if (!predicate)
@@ -399,12 +408,15 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 							}
 						});
 
-					ImVec2 previewTexSize = { 0.45f * optionsWindowSize.x, 0.09f * optionsWindowSize.y };
+					ImVec2 previewTexSize;
+					previewTexSize.x = 0.95f * optionsWindowSize.x;
+					previewTexSize.y = 0.5f * previewTexSize.x;
 					ImTextureID previewEnvmapTex = RenderEnvironmentRadiancePreview(scene, settings, previewTexSize);
 					ImTextureID previewShTex = RenderEnvironmentIrradiancePreview(scene, settings, previewTexSize);
 					ImGuiExt::ImageZoom(previewEnvmapTex, previewTexSize);
-					ImGui::SameLine();
+					ImGuiExt::TextCentered("Radiance");
 					ImGuiExt::ImageZoom(previewShTex, previewTexSize);
+					ImGuiExt::TextCentered("Irradiance");
 
 					ImGui::EndTabItem();
 				}
