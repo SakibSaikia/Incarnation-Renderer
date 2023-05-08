@@ -222,7 +222,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 void FScene::ReloadEnvironment(const std::wstring& filename)
 {
 	m_skylight = Demo::GetTextureCache().CacheHDRI(filename);
-	m_environmentFilename = filename;
+	m_hdriFilename = filename;
 	FScene::s_loadProgress += FScene::s_cacheHDRITimeFrac;
 }
 

@@ -79,9 +79,9 @@ void Demo::App::Tick(const float deltaTime)
 		{
 			newScene->ReloadModel(m_config.ModelFilename);
 
-			if (m_config.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
+			if (m_config.EnvSkyMode == (int)EnvSkyMode::HDRI)
 			{
-				newScene->ReloadEnvironment(m_config.EnvironmentFilename);
+				newScene->ReloadEnvironment(m_config.HDRIFilename);
 			}
 		}).then([this, newScene]()
 		{
@@ -105,11 +105,11 @@ void Demo::App::Tick(const float deltaTime)
 	}
 
 	// Reload scene environment if required
-	if (m_config.EnvSkyMode == (int)EnvSkyMode::Environmentmap &&
-		(m_scene.m_environmentFilename.empty() || m_scene.m_environmentFilename != m_config.EnvironmentFilename))
+	if (m_config.EnvSkyMode == (int)EnvSkyMode::HDRI &&
+		(m_scene.m_hdriFilename.empty() || m_scene.m_hdriFilename != m_config.HDRIFilename))
 	{
 		Renderer::Status::Pause();
-		m_scene.ReloadEnvironment(m_config.EnvironmentFilename);
+		m_scene.ReloadEnvironment(m_config.HDRIFilename);
 		FScene::s_loadProgress = 1.f;
 		Renderer::Status::Resume();
 	}

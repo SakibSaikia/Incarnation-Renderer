@@ -1599,7 +1599,7 @@ void Renderer::Render(const FRenderState& renderState)
 			sceneRenderJobs.push_back(clusteredLightingJob.m_task);
 		}
 
-		if (c.EnvSkyMode == (int)EnvSkyMode::Environmentmap)
+		if (c.EnvSkyMode == (int)EnvSkyMode::HDRI)
 		{
 			// Environmentmap pass
 			RenderJob::EnvironmentmapPass::Desc envmapDesc = {};

@@ -73,7 +73,7 @@ struct FScene : public FModelLoader
 
 	// Scene files
 	std::wstring m_modelFilename = {};
-	std::wstring m_environmentFilename = {};
+	std::wstring m_hdriFilename = {};
 	std::string m_textureCachePath = {};
 	std::string m_modelCachePath = {};
 

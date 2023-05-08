@@ -36,7 +36,8 @@ namespace
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 	}
 
-	ImTextureID RenderEnvironmentMapPreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
+	// Prefiltered environment radiance
+	ImTextureID RenderEnvironmentRadiancePreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
 	{
 		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
 		std::unique_ptr<FShaderSurface> targetSurface { RenderBackend12::CreateNewShaderSurface(
@@ -109,7 +110,8 @@ namespace
 		return (ImTextureID)targetSurface->m_descriptorIndices.SRV;
 	}
 
-	ImTextureID RenderShPreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
+	// SH convolved with cosine lobe
+	ImTextureID RenderEnvironmentIrradiancePreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
 	{
 		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
 		std::unique_ptr<FShaderSurface> targetSurface{ RenderBackend12::CreateNewShaderSurface(
@@ -339,27 +341,27 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 				if (ImGui::BeginTabItem("Environment/Sky"))
 				{
 					int currentSkyMode = settings->EnvSkyMode;
-					ImGui::RadioButton("Environment Map", &settings->EnvSkyMode, (int)EnvSkyMode::Environmentmap);
+					ImGui::RadioButton("HDRI", &settings->EnvSkyMode, (int)EnvSkyMode::HDRI);
 					ImGui::SameLine();
 					ImGui::RadioButton("Dynamic Sky", &settings->EnvSkyMode, (int)EnvSkyMode::DynamicSky);
 					bResetPathtracelAccumulation |= (settings->EnvSkyMode != currentSkyMode);
-					bUpdateSkylight |= (currentSkyMode == (int)EnvSkyMode::Environmentmap) && (settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky);
+					bUpdateSkylight |= (currentSkyMode == (int)EnvSkyMode::HDRI) && (settings->EnvSkyMode == (int)EnvSkyMode::DynamicSky);
 
 					if (bUpdateSkylight)
 					{
 						// Clear the envmap name so that it will be reloaded when the envsky mode changes
-						scene->m_environmentFilename = {};
+						scene->m_hdriFilename = {};
 					}
 
 
 					// ----------------------------------------------------------
-					// Environment map
-					ImGuiExt::EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::Environmentmap,
+					// HDRI
+					ImGuiExt::EditCondition(settings->EnvSkyMode == (int)EnvSkyMode::HDRI,
 						[&]()
 						{
-							int curHdriIndex = std::find(hdris.begin(), hdris.end(), settings->EnvironmentFilename) - hdris.begin();
+							int curHdriIndex = std::find(hdris.begin(), hdris.end(), settings->HDRIFilename) - hdris.begin();
 							comboLabel = ws2s(hdris[curHdriIndex]);
-							if (ImGui::BeginCombo("Environment map", comboLabel.c_str(), ImGuiComboFlags_None))
+							if (ImGui::BeginCombo("HDRI Filename", comboLabel.c_str(), ImGuiComboFlags_None))
 							{
 								for (int n = 0; n < hdris.size(); n++)
 								{
@@ -367,7 +369,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 									if (ImGui::Selectable(ws2s(hdris[n]).c_str(), bSelected))
 									{
 										curHdriIndex = n;
-										settings->EnvironmentFilename = hdris[n];
+										settings->HDRIFilename = hdris[n];
 										bResetPathtracelAccumulation = true;
 									}
 
@@ -398,8 +400,8 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 						});
 
 					ImVec2 previewTexSize = { 0.45f * optionsWindowSize.x, 0.09f * optionsWindowSize.y };
-					ImTextureID previewEnvmapTex = RenderEnvironmentMapPreview(scene, settings, previewTexSize);
-					ImTextureID previewShTex = RenderShPreview(scene, settings, previewTexSize);
+					ImTextureID previewEnvmapTex = RenderEnvironmentRadiancePreview(scene, settings, previewTexSize);
+					ImTextureID previewShTex = RenderEnvironmentIrradiancePreview(scene, settings, previewTexSize);
 					ImGuiExt::ImageZoom(previewEnvmapTex, previewTexSize);
 					ImGui::SameLine();
 					ImGuiExt::ImageZoom(previewShTex, previewTexSize);

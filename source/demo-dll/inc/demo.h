@@ -22,7 +22,7 @@ enum class Viewmode
 
 enum class EnvSkyMode
 {
-	Environmentmap = 0,
+	HDRI = 0,
 	DynamicSky = 1
 };
 
