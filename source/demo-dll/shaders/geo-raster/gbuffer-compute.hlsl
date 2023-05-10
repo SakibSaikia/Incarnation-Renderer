@@ -177,7 +177,10 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
             FMaterialProperties matInfo = EvaluateMaterialProperties(material, UV, g_anisoSampler);
 
-            N = normalize(mul(matInfo.normalmap, tangentToWorld));
+            if (matInfo.bHasNormalmap)
+            {
+                N = normalize(mul(matInfo.normalmap, tangentToWorld));
+            }
 
             colorTarget[dispatchThreadId.xy] = matInfo.emissive * 20000.f;
             gbufferBaseColor[dispatchThreadId.xy] = float4(matInfo.basecolor, 0.f);
