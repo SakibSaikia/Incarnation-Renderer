@@ -93,15 +93,6 @@ void Demo::App::Tick(const float deltaTime)
 			FScene::s_loadProgress = 1.f;
 			Renderer::Status::Resume();
 		});
-
-		// Block when loading for the first time so that we have a scene to render.
-		// Subsequent loads will load in the background while displaying the previous scene.
-		static bool bInitialLoad = true;
-		if (bInitialLoad)
-		{
-			loadSceneTask.wait();
-			bInitialLoad = false;
-		}
 	}
 
 	// Reload scene environment if required

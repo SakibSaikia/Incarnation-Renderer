@@ -1280,464 +1280,468 @@ void Renderer::Render(const FRenderState& renderState)
 		totalPrimitives += mesh.m_primitives.size();
 	}
 
-	// These resources need to be kept alive until all the render jobs have finished and joined
-	FFenceMarker gpuFinishFence = RenderBackend12::GetCurrentFrameFence();
-	const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
-	const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-	std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_raster", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), hdrFormat, resX, resY, 1, 1, 1, 1, true, true) };
-	std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface(L"depth_buffer_raster", FShaderSurface::Type::DepthStencil, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
-	std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_rt", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
-	std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface(L"vis_buffer_raster", FShaderSurface::Type::RenderTarget, FResource::Allocation::Transient(gpuFinishFence), visBufferFormat, resX, resY) };
-	std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
-	std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1) };
-	std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
-	std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer(L"mesh_highlight_indirect_args", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(FIndirectDrawWithRootConstants)) };
-	std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_args_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
-	std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_counts_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
-	std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_count", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
-	std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_lists", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true) };
-	std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewShaderBuffer(L"light_grid", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)) }; // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
-
-	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
-
-	// Light Properties
-	std::unique_ptr<FShaderBuffer> packedLightPropertiesBuffer;
-	if (!renderState.m_scene->m_globalLightList.empty())
+	// If the scene has no primitives, it means that loading hasn't finished. So, skip rendering the scene.
+	if (totalPrimitives > 0)
 	{
-		const size_t bufferSize = renderState.m_scene->m_globalLightList.size() * sizeof(FLight);
-		FResourceUploadContext uploader{ bufferSize };
+		// These resources need to be kept alive until all the render jobs have finished and joined
+		FFenceMarker gpuFinishFence = RenderBackend12::GetCurrentFrameFence();
+		const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
+		const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
+		std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_raster", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), hdrFormat, resX, resY, 1, 1, 1, 1, true, true) };
+		std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface(L"depth_buffer_raster", FShaderSurface::Type::DepthStencil, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
+		std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_rt", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
+		std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface(L"vis_buffer_raster", FShaderSurface::Type::RenderTarget, FResource::Allocation::Transient(gpuFinishFence), visBufferFormat, resX, resY) };
+		std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+		std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1) };
+		std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+		std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer(L"mesh_highlight_indirect_args", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(FIndirectDrawWithRootConstants)) };
+		std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_args_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
+		std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_counts_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
+		std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_count", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
+		std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_lists", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true) };
+		std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewShaderBuffer(L"light_grid", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)) }; // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
 
-		packedLightPropertiesBuffer.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"light_properties_buffer",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Transient(gpuFinishFence),
-			bufferSize,
-			false,
-			(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
-			&uploader));
+		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-		
-		uploader.SubmitUploads(cmdList);
-	}
-
-	// Light Tranforms
-	std::unique_ptr<FShaderBuffer> packedLightTransformsBuffer;
-	const size_t sceneLightCount = renderState.m_scene->m_sceneLights.GetCount();
-	if (sceneLightCount > 0)
-	{
-		const size_t bufferSize = sceneLightCount * sizeof(Matrix);
-		FResourceUploadContext uploader{ bufferSize };
-
-		packedLightTransformsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"scene_light_transforms",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Transient(gpuFinishFence),
-			bufferSize,
-			false,
-			(const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),
-			&uploader));
-
-		uploader.SubmitUploads(cmdList);
-	}
-
-	// Submit uploads
-	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
-
-	// Scene Constants
-	std::unique_ptr<FSystemBuffer> cbSceneConstants{ RenderBackend12::CreateNewSystemBuffer(
-		L"scene_constants_cb",
-		FResource::AccessMode::CpuWriteOnly,
-		sizeof(FSceneConstants),
-		gpuFinishFence, 
-		[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
+		// Light Properties
+		std::unique_ptr<FShaderBuffer> packedLightPropertiesBuffer;
+		if (!renderState.m_scene->m_globalLightList.empty())
 		{
-			const size_t lightCount = scene->m_sceneLights.GetCount();
+			const size_t bufferSize = renderState.m_scene->m_globalLightList.size() * sizeof(FLight);
+			FResourceUploadContext uploader{ bufferSize };
 
-			// Sun direction
-			Vector3 L = scene->m_sunDir;
-			L.Normalize();
-
-			auto cb = reinterpret_cast<FSceneConstants*>(pDest);
-			cb->m_sceneRotation = scene->m_rootTransform;
-			cb->m_sunDir = L;
-			cb->m_primitiveCount = totalPrimitives;
-			cb->m_sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_descriptorIndices.SRV;
-			cb->m_sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_descriptorIndices.SRV;
-			cb->m_scenePrimitivesIndex = scene->m_packedPrimitives->m_descriptorIndices.SRV;
-			cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_descriptorIndices.SRV;
-			cb->m_lightCount = scene->m_sceneLights.GetCount();
-			cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_descriptorIndices.SRV : -1;
-			cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? lightTransformsBuf->m_descriptorIndices.SRV : -1;
-			cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? lightPropsBuf->m_descriptorIndices.SRV : -1;
-			cb->m_sceneBvhIndex = scene->m_tlas->m_descriptorIndices.SRV;
-			cb->m_envmapTextureIndex = scene->m_skylight.m_envmapTextureIndex;
-			cb->m_skylightProbeIndex = scene->m_skylight.m_shTextureIndex;
-			cb->m_envBrdfTextureIndex = s_envBRDF->m_srvIndex;
-			cb->m_sunIndex = scene->GetDirectionalLight();
-		}) };
-
-	Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
-
-	// View Constants
-	std::unique_ptr<FSystemBuffer> cbViewConstants{ RenderBackend12::CreateNewSystemBuffer(
-		L"view_constants_cb",
-		FResource::AccessMode::CpuWriteOnly,
-		sizeof(FViewConstants),
-		gpuFinishFence,
-		[&renderState, pixelJitter, config](uint8_t* pDest)
-		{
-			const FView& view = renderState.m_view;
-			Matrix jitterMatrix = Matrix::CreateTranslation(pixelJitter.x, pixelJitter.y, 0.f);
-			Matrix jitteredProjMatrix = view.m_projectionTransform * jitterMatrix;
-			Matrix jitteredViewProjMatrix = view.m_viewTransform * jitteredProjMatrix;
-
-			Matrix viewMatrix_ParallaxCorrected = view.m_viewTransform;
-			viewMatrix_ParallaxCorrected.Translation(Vector3::Zero);
-
-			auto cb = reinterpret_cast<FViewConstants*>(pDest);
-			cb->m_viewTransform = view.m_viewTransform;
-			cb->m_projTransform = jitteredProjMatrix;
-			cb->m_viewProjTransform = jitteredViewProjMatrix;
-			cb->m_invViewProjTransform = jitteredViewProjMatrix.Invert();
-			cb->m_invViewProjTransform_ParallaxCorrected = (viewMatrix_ParallaxCorrected * jitteredProjMatrix).Invert();;
-			cb->m_prevViewProjTransform = s_prevViewProjectionTransform;
-			cb->m_invProjTransform = jitteredProjMatrix.Invert();
-			cb->m_cullViewProjTransform = renderState.m_cullingView.m_viewTransform * jitteredProjMatrix;
-			cb->m_eyePos = view.m_position;
-			cb->m_exposure = config.Exposure;
-			cb->m_aperture = config.Pathtracing_CameraAperture;
-			cb->m_focalLength = config.Pathtracing_CameraFocalLength;
-			cb->m_nearPlane = config.CameraNearPlane;
-			cb->m_resX = renderState.m_resX;
-			cb->m_resY = renderState.m_resY;
-			cb->m_mouseX = renderState.m_mouseX;
-			cb->m_mouseY = renderState.m_mouseY;
-			cb->m_viewmode = config.Viewmode;
-		}) };
+			packedLightPropertiesBuffer.reset(RenderBackend12::CreateNewShaderBuffer(
+				L"light_properties_buffer",
+				FShaderBuffer::Type::Raw,
+				FResource::AccessMode::GpuReadOnly,
+				FResource::Allocation::Transient(gpuFinishFence),
+				bufferSize,
+				false,
+				(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
+				&uploader));
 
 
-	// Update acceleration structure. Can be used by both pathtracing and raster paths.
-	RenderJob::Result updateTLASJob = RenderJob::UpdateTLASPass::Execute(s_jobSync.get(), renderState.m_scene);
-	sceneRenderJobs.push_back(updateTLASJob.m_task);
-
-	if (c.PathTrace)
-	{
-		if (s_pathtraceCurrentSampleIndex < c.MaxSampleCount)
-		{
-			RenderJob::PathTracing::Desc pathtraceDesc = {};
-			pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
-			pathtraceDesc.historyBuffer = s_pathtraceHistoryBuffer.get();
-			pathtraceDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
-			pathtraceDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
-			pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
-			pathtraceDesc.resX = resX;
-			pathtraceDesc.resY = resY;
-			pathtraceDesc.scene = renderState.m_scene;
-			pathtraceDesc.view = &renderState.m_view;
-			pathtraceDesc.renderConfig = c;
-
-			RenderJob::Result pathTraceJob = RenderJob::PathTracing::Execute(s_jobSync.get(), pathtraceDesc);
-			sceneRenderJobs.push_back(pathTraceJob.m_task);
-
-			// Accumulate samples
-			s_pathtraceCurrentSampleIndex++;
+			uploader.SubmitUploads(cmdList);
 		}
 
-		RenderJob::TonemapPass::Desc tonemapDesc = {};
-		tonemapDesc.source = s_pathtraceHistoryBuffer.get();
-		tonemapDesc.target = RenderBackend12::GetBackBuffer();
-		tonemapDesc.renderConfig = c;
-
-		RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
-		sceneRenderJobs.push_back(tonemapJob.m_task);
-
-	}
-	else
-	{
-		// Cull Pass & Draw Call Generation
-		RenderJob::BatchCullingPass::Desc batchCullDesc = {};
-		batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
-		batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
-		batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
-		batchCullDesc.viewConstantBuffer = cbViewConstants.get();
-		batchCullDesc.primitiveCount = totalPrimitives;
-
-		RenderJob::Result batchCullJob = RenderJob::BatchCullingPass::Execute(s_jobSync.get(), batchCullDesc);
-		sceneRenderJobs.push_back(batchCullJob.m_task);
-
-		// Light Culling
-		const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
-		if (punctualLightCount > 0 && c.EnableDirectLighting)
+		// Light Tranforms
+		std::unique_ptr<FShaderBuffer> packedLightTransformsBuffer;
+		const size_t sceneLightCount = renderState.m_scene->m_sceneLights.GetCount();
+		if (sceneLightCount > 0)
 		{
-			RenderJob::LightCullingPass::Desc lightCullDesc = {};
-			lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
-			lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
-			lightCullDesc.lightGridBuffer = lightGridBuffer.get();
-			lightCullDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
-			lightCullDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
-			lightCullDesc.renderConfig = c;
-			lightCullDesc.scene = renderState.m_scene;
-			lightCullDesc.view = &renderState.m_cullingView;
-			lightCullDesc.jitter = pixelJitter;
-			lightCullDesc.renderConfig = c;
+			const size_t bufferSize = sceneLightCount * sizeof(Matrix);
+			FResourceUploadContext uploader{ bufferSize };
 
-			RenderJob::Result lightCullJob = RenderJob::LightCullingPass::Execute(s_jobSync.get(), lightCullDesc);
-			sceneRenderJobs.push_back(lightCullJob.m_task);
+			packedLightTransformsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(
+				L"scene_light_transforms",
+				FShaderBuffer::Type::Raw,
+				FResource::AccessMode::GpuReadOnly,
+				FResource::Allocation::Transient(gpuFinishFence),
+				bufferSize,
+				false,
+				(const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),
+				&uploader));
+
+			uploader.SubmitUploads(cmdList);
 		}
 
-		// Visibility Pass
-		RenderJob::VisibilityPass::Desc visDesc = {};
-		visDesc.visBufferTarget = visBuffer.get();
-		visDesc.depthStencilTarget = depthBuffer.get();
-		visDesc.indirectArgsBuffer = batchArgsBuffer.get();
-		visDesc.indirectCountsBuffer = batchCountsBuffer.get();
-		visDesc.sceneConstantBuffer = cbSceneConstants.get();
-		visDesc.viewConstantBuffer = cbViewConstants.get();
-		visDesc.visBufferFormat = visBufferFormat;
-		visDesc.resX = resX;
-		visDesc.resY = resY;
-		visDesc.scenePrimitiveCount = totalPrimitives;
+		// Submit uploads
+		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
-		RenderJob::Result visibilityJob = RenderJob::VisibilityPass::Execute(s_jobSync.get(), visDesc);
-		sceneRenderJobs.push_back(visibilityJob.m_task);
-		s_renderPassSync[VisibilityPass] = visibilityJob.m_syncObj;
-
-		// GBuffer Pass + Emissive (Compute)
-		RenderJob::GBufferComputePass::Desc gbufferComputeDesc = {};
-		gbufferComputeDesc.sourceVisBuffer = visBuffer.get();
-		gbufferComputeDesc.colorTarget = hdrRasterSceneColor.get();
-		gbufferComputeDesc.gbufferTargets[0] = gbuffer_basecolor.get();
-		gbufferComputeDesc.gbufferTargets[1] = gbuffer_normals.get();
-		gbufferComputeDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
-		gbufferComputeDesc.depthStencilTarget = depthBuffer.get();
-		gbufferComputeDesc.sceneConstantBuffer = cbSceneConstants.get();
-		gbufferComputeDesc.viewConstantBuffer = cbViewConstants.get();
-		gbufferComputeDesc.resX = resX;
-		gbufferComputeDesc.resY = resY;
-		gbufferComputeDesc.scene = renderState.m_scene;
-
-		RenderJob::Result gbufferComputeJob = RenderJob::GBufferComputePass::Execute(s_jobSync.get(), gbufferComputeDesc);
-		sceneRenderJobs.push_back(gbufferComputeJob.m_task);
-
-		// GBuffer Raster Pass (for decals)
-		RenderJob::GBufferRasterPass::Desc gbufferRasterDesc = {};
-		gbufferRasterDesc.sourceVisBuffer = visBuffer.get();
-		gbufferRasterDesc.colorTarget = hdrRasterSceneColor.get();
-		gbufferRasterDesc.gbufferTargets[0] = gbuffer_basecolor.get();
-		gbufferRasterDesc.gbufferTargets[1] = gbuffer_normals.get();
-		gbufferRasterDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
-		gbufferRasterDesc.depthStencilTarget = depthBuffer.get();
-		gbufferRasterDesc.sceneConstantBuffer = cbSceneConstants.get();
-		gbufferRasterDesc.viewConstantBuffer = cbViewConstants.get();
-		gbufferRasterDesc.resX = resX;
-		gbufferRasterDesc.resY = resY;
-		gbufferRasterDesc.scene = renderState.m_scene;
-
-		RenderJob::Result gbufferDecalsJob = RenderJob::GBufferRasterPass::Execute(s_jobSync.get(), gbufferRasterDesc);
-		sceneRenderJobs.push_back(gbufferDecalsJob.m_task);
-
-		// Sky Lighting
-		if (c.EnableSkyLighting)
-		{
-			RenderJob::SkyLightingPass::Desc skyLightingDesc = {};
-			skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
-			skyLightingDesc.depthStencilTex = depthBuffer.get();
-			skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
-			skyLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
-			skyLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-			skyLightingDesc.renderConfig = c;
-			skyLightingDesc.scene = renderState.m_scene;
-			skyLightingDesc.view = &renderState.m_view;
-			skyLightingDesc.jitter = pixelJitter;
-			skyLightingDesc.resX = resX;
-			skyLightingDesc.resY = resY;
-			skyLightingDesc.envBRDFTex = s_envBRDF.get();
-
-			RenderJob::Result skylightJob = RenderJob::SkyLightingPass::Execute(s_jobSync.get(), skyLightingDesc);
-			sceneRenderJobs.push_back(skylightJob.m_task);
-		}
-
-		// Direct Lighting
-		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
-		if (directionalLightIndex != -1 && c.EnableDirectLighting)
-		{
-			RenderJob::DirectLightingPass::Desc directLightingDesc = {};
-			directLightingDesc.directionalLightIndex = directionalLightIndex;
-			directLightingDesc.colorTarget = hdrRasterSceneColor.get();
-			directLightingDesc.depthStencilTex = depthBuffer.get();
-			directLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
-			directLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
-			directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-			directLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
-			directLightingDesc.viewConstantBuffer = cbViewConstants.get();
-			directLightingDesc.renderConfig = c;
-			directLightingDesc.resX = resX;
-			directLightingDesc.resY = resY;
-
-			RenderJob::Result directLightingJob = RenderJob::DirectLightingPass::Execute(s_jobSync.get(), directLightingDesc);
-			sceneRenderJobs.push_back(directLightingJob.m_task);
-		}
-
-		// Clustered Lighting
-		const bool bRequiresClear = directionalLightIndex == -1;
-		if (punctualLightCount > 0 && c.EnableDirectLighting)
-		{
-			RenderJob::ClusteredLightingPass::Desc clusteredLightingDesc = {};
-			clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
-			clusteredLightingDesc.lightGridBuffer = lightGridBuffer.get();
-			clusteredLightingDesc.colorTarget = hdrRasterSceneColor.get();
-			clusteredLightingDesc.depthStencilTex = depthBuffer.get();
-			clusteredLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
-			clusteredLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
-			clusteredLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-			clusteredLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
-			clusteredLightingDesc.viewConstantBuffer = cbViewConstants.get();
-			clusteredLightingDesc.renderConfig = c;
-			clusteredLightingDesc.resX = resX;
-			clusteredLightingDesc.resY = resY;
-
-			RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLightingPass::Execute(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
-			sceneRenderJobs.push_back(clusteredLightingJob.m_task);
-		}
-
-		if (c.EnvSkyMode == (int)EnvSkyMode::HDRI)
-		{
-			// Environmentmap pass
-			RenderJob::EnvironmentmapPass::Desc envmapDesc = {};
-			envmapDesc.colorTarget = hdrRasterSceneColor.get();
-			envmapDesc.depthStencilTarget = depthBuffer.get();
-			envmapDesc.format = hdrFormat;
-			envmapDesc.resX = resX;
-			envmapDesc.resY = resY;
-			envmapDesc.scene = renderState.m_scene;
-			envmapDesc.view = &renderState.m_view;
-			envmapDesc.jitter = pixelJitter;
-			envmapDesc.renderConfig = c;
-
-			RenderJob::Result envmapJob = RenderJob::EnvironmentmapPass::Execute(s_jobSync.get(), envmapDesc);
-			sceneRenderJobs.push_back(envmapJob.m_task);
-		}
-		else
-		{
-			RenderJob::DynamicSkyPass::Desc skyDesc = {};
-			skyDesc.colorTarget = hdrRasterSceneColor.get();
-			skyDesc.depthStencilTarget = depthBuffer.get();
-			skyDesc.format = hdrFormat;
-			skyDesc.resX = resX;
-			skyDesc.resY = resX;
-			skyDesc.scene = renderState.m_scene;
-			skyDesc.view = &renderState.m_view;
-			skyDesc.jitter = pixelJitter;
-			skyDesc.renderConfig = c;
-
-			RenderJob::Result dynamicSkyJob = RenderJob::DynamicSkyPass::Execute(s_jobSync.get(), skyDesc);
-			sceneRenderJobs.push_back(dynamicSkyJob.m_task);
-		}
-
-		if (c.Viewmode != (int)Viewmode::Normal && 
-			c.Viewmode != (int)Viewmode::LightingOnly)
-		{
-			// Debug Viz
-			RenderJob::DebugVizPass::Desc desc = {};
-			desc.visBuffer = visBuffer.get();
-			desc.gbuffers[0] = gbuffer_basecolor.get();
-			desc.gbuffers[1] = gbuffer_normals.get();
-			desc.gbuffers[2] = gbuffer_metallicRoughnessAo.get();
-			desc.target = RenderBackend12::GetBackBuffer();
-			desc.depthBuffer = depthBuffer.get();
-			desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
-			desc.jitter = pixelJitter;
-			desc.renderConfig = c;
-			desc.resX = resX;
-			desc.resY = resY;
-			desc.mouseX = renderState.m_mouseX;
-			desc.mouseY = renderState.m_mouseY;
-			desc.scene = renderState.m_scene;
-			desc.view = &renderState.m_view;
-
-			RenderJob::Result debugVizJob = RenderJob::DebugVizPass::Execute(s_jobSync.get(), desc);
-			sceneRenderJobs.push_back(debugVizJob.m_task);
-
-			if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
+		// Scene Constants
+		std::unique_ptr<FSystemBuffer> cbSceneConstants{ RenderBackend12::CreateNewSystemBuffer(
+			L"scene_constants_cb",
+			FResource::AccessMode::CpuWriteOnly,
+			sizeof(FSceneConstants),
+			gpuFinishFence,
+			[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
 			{
-				RenderJob::HighlightPass::Desc desc = {};
-				desc.colorTarget = RenderBackend12::GetBackBuffer();
-				desc.depthStencilTarget = depthBuffer.get();
-				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
-				desc.resX = resX;
-				desc.resY = resY;
-				desc.sceneConstantBuffer = cbSceneConstants.get();
-				desc.viewConstantBuffer = cbViewConstants.get();
-				desc.renderConfig = c;
+				const size_t lightCount = scene->m_sceneLights.GetCount();
 
-				RenderJob::Result highlightJob = RenderJob::HighlightPass::Execute(s_jobSync.get(), desc);
-				sceneRenderJobs.push_back(highlightJob.m_task);
-			}
-		}
-		else
-		{
-			if (c.EnableTAA)
+				// Sun direction
+				Vector3 L = scene->m_sunDir;
+				L.Normalize();
+
+				auto cb = reinterpret_cast<FSceneConstants*>(pDest);
+				cb->m_sceneRotation = scene->m_rootTransform;
+				cb->m_sunDir = L;
+				cb->m_primitiveCount = totalPrimitives;
+				cb->m_sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_descriptorIndices.SRV;
+				cb->m_sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_descriptorIndices.SRV;
+				cb->m_scenePrimitivesIndex = scene->m_packedPrimitives->m_descriptorIndices.SRV;
+				cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_descriptorIndices.SRV;
+				cb->m_lightCount = scene->m_sceneLights.GetCount();
+				cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_descriptorIndices.SRV : -1;
+				cb->m_packedLightTransformsBufferIndex = lightCount > 0 ? lightTransformsBuf->m_descriptorIndices.SRV : -1;
+				cb->m_packedGlobalLightPropertiesBufferIndex = lightCount > 0 ? lightPropsBuf->m_descriptorIndices.SRV : -1;
+				cb->m_sceneBvhIndex = scene->m_tlas->m_descriptorIndices.SRV;
+				cb->m_envmapTextureIndex = scene->m_skylight.m_envmapTextureIndex;
+				cb->m_skylightProbeIndex = scene->m_skylight.m_shTextureIndex;
+				cb->m_envBrdfTextureIndex = s_envBRDF->m_srvIndex;
+				cb->m_sunIndex = scene->GetDirectionalLight();
+			}) };
+
+		Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
+
+		// View Constants
+		std::unique_ptr<FSystemBuffer> cbViewConstants{ RenderBackend12::CreateNewSystemBuffer(
+			L"view_constants_cb",
+			FResource::AccessMode::CpuWriteOnly,
+			sizeof(FViewConstants),
+			gpuFinishFence,
+			[&renderState, pixelJitter, config](uint8_t* pDest)
 			{
 				const FView& view = renderState.m_view;
-				Matrix viewProjectionTransform = view.m_viewTransform * view.m_projectionTransform;
+				Matrix jitterMatrix = Matrix::CreateTranslation(pixelJitter.x, pixelJitter.y, 0.f);
+				Matrix jitteredProjMatrix = view.m_projectionTransform * jitterMatrix;
+				Matrix jitteredViewProjMatrix = view.m_viewTransform * jitteredProjMatrix;
 
-				// TAA Resolve
-				RenderJob::TAAResolvePass::Desc resolveDesc = {};
-				resolveDesc.source = hdrRasterSceneColor.get();
-				resolveDesc.target = s_taaAccumulationBuffer.get();
-				resolveDesc.resX = resX;
-				resolveDesc.resY = resY;
-				resolveDesc.historyIndex = (uint32_t)frameIndex;
-				resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
-				resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
-				resolveDesc.depthTextureIndex = depthBuffer->m_descriptorIndices.SRV;
-				resolveDesc.renderConfig = c;
+				Matrix viewMatrix_ParallaxCorrected = view.m_viewTransform;
+				viewMatrix_ParallaxCorrected.Translation(Vector3::Zero);
 
-				RenderJob::Result resolveJob = RenderJob::TAAResolvePass::Execute(s_jobSync.get(), resolveDesc);
-				sceneRenderJobs.push_back(resolveJob.m_task);
+				auto cb = reinterpret_cast<FViewConstants*>(pDest);
+				cb->m_viewTransform = view.m_viewTransform;
+				cb->m_projTransform = jitteredProjMatrix;
+				cb->m_viewProjTransform = jitteredViewProjMatrix;
+				cb->m_invViewProjTransform = jitteredViewProjMatrix.Invert();
+				cb->m_invViewProjTransform_ParallaxCorrected = (viewMatrix_ParallaxCorrected * jitteredProjMatrix).Invert();;
+				cb->m_prevViewProjTransform = s_prevViewProjectionTransform;
+				cb->m_invProjTransform = jitteredProjMatrix.Invert();
+				cb->m_cullViewProjTransform = renderState.m_cullingView.m_viewTransform * jitteredProjMatrix;
+				cb->m_eyePos = view.m_position;
+				cb->m_exposure = config.Exposure;
+				cb->m_aperture = config.Pathtracing_CameraAperture;
+				cb->m_focalLength = config.Pathtracing_CameraFocalLength;
+				cb->m_nearPlane = config.CameraNearPlane;
+				cb->m_resX = renderState.m_resX;
+				cb->m_resY = renderState.m_resY;
+				cb->m_mouseX = renderState.m_mouseX;
+				cb->m_mouseY = renderState.m_mouseY;
+				cb->m_viewmode = config.Viewmode;
+			}) };
 
-				// Tonemap
-				RenderJob::TonemapPass::Desc tonemapDesc = {};
-				tonemapDesc.source = s_taaAccumulationBuffer.get();
-				tonemapDesc.target = RenderBackend12::GetBackBuffer();
-				tonemapDesc.renderConfig = c;
 
-				RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
-				sceneRenderJobs.push_back(tonemapJob.m_task);
+		// Update acceleration structure. Can be used by both pathtracing and raster paths.
+		RenderJob::Result updateTLASJob = RenderJob::UpdateTLASPass::Execute(s_jobSync.get(), renderState.m_scene);
+		sceneRenderJobs.push_back(updateTLASJob.m_task);
 
-				// Save view projection transform for next frame's reprojection
-				s_prevViewProjectionTransform = viewProjectionTransform;
+		if (c.PathTrace)
+		{
+			if (s_pathtraceCurrentSampleIndex < c.MaxSampleCount)
+			{
+				RenderJob::PathTracing::Desc pathtraceDesc = {};
+				pathtraceDesc.targetBuffer = hdrRaytraceSceneColor.get();
+				pathtraceDesc.historyBuffer = s_pathtraceHistoryBuffer.get();
+				pathtraceDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
+				pathtraceDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
+				pathtraceDesc.currentSampleIndex = s_pathtraceCurrentSampleIndex;
+				pathtraceDesc.resX = resX;
+				pathtraceDesc.resY = resY;
+				pathtraceDesc.scene = renderState.m_scene;
+				pathtraceDesc.view = &renderState.m_view;
+				pathtraceDesc.renderConfig = c;
+
+				RenderJob::Result pathTraceJob = RenderJob::PathTracing::Execute(s_jobSync.get(), pathtraceDesc);
+				sceneRenderJobs.push_back(pathTraceJob.m_task);
+
+				// Accumulate samples
+				s_pathtraceCurrentSampleIndex++;
+			}
+
+			RenderJob::TonemapPass::Desc tonemapDesc = {};
+			tonemapDesc.source = s_pathtraceHistoryBuffer.get();
+			tonemapDesc.target = RenderBackend12::GetBackBuffer();
+			tonemapDesc.renderConfig = c;
+
+			RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
+			sceneRenderJobs.push_back(tonemapJob.m_task);
+
+		}
+		else
+		{
+			// Cull Pass & Draw Call Generation
+			RenderJob::BatchCullingPass::Desc batchCullDesc = {};
+			batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
+			batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
+			batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
+			batchCullDesc.viewConstantBuffer = cbViewConstants.get();
+			batchCullDesc.primitiveCount = totalPrimitives;
+
+			RenderJob::Result batchCullJob = RenderJob::BatchCullingPass::Execute(s_jobSync.get(), batchCullDesc);
+			sceneRenderJobs.push_back(batchCullJob.m_task);
+
+			// Light Culling
+			const size_t punctualLightCount = renderState.m_scene->GetPunctualLightCount();
+			if (punctualLightCount > 0 && c.EnableDirectLighting)
+			{
+				RenderJob::LightCullingPass::Desc lightCullDesc = {};
+				lightCullDesc.culledLightCountBuffer = culledLightCountBuffer.get();
+				lightCullDesc.culledLightListsBuffer = culledLightListsBuffer.get();
+				lightCullDesc.lightGridBuffer = lightGridBuffer.get();
+				lightCullDesc.lightPropertiesBuffer = packedLightPropertiesBuffer.get();
+				lightCullDesc.lightTransformsBuffer = packedLightTransformsBuffer.get();
+				lightCullDesc.renderConfig = c;
+				lightCullDesc.scene = renderState.m_scene;
+				lightCullDesc.view = &renderState.m_cullingView;
+				lightCullDesc.jitter = pixelJitter;
+				lightCullDesc.renderConfig = c;
+
+				RenderJob::Result lightCullJob = RenderJob::LightCullingPass::Execute(s_jobSync.get(), lightCullDesc);
+				sceneRenderJobs.push_back(lightCullJob.m_task);
+			}
+
+			// Visibility Pass
+			RenderJob::VisibilityPass::Desc visDesc = {};
+			visDesc.visBufferTarget = visBuffer.get();
+			visDesc.depthStencilTarget = depthBuffer.get();
+			visDesc.indirectArgsBuffer = batchArgsBuffer.get();
+			visDesc.indirectCountsBuffer = batchCountsBuffer.get();
+			visDesc.sceneConstantBuffer = cbSceneConstants.get();
+			visDesc.viewConstantBuffer = cbViewConstants.get();
+			visDesc.visBufferFormat = visBufferFormat;
+			visDesc.resX = resX;
+			visDesc.resY = resY;
+			visDesc.scenePrimitiveCount = totalPrimitives;
+
+			RenderJob::Result visibilityJob = RenderJob::VisibilityPass::Execute(s_jobSync.get(), visDesc);
+			sceneRenderJobs.push_back(visibilityJob.m_task);
+			s_renderPassSync[VisibilityPass] = visibilityJob.m_syncObj;
+
+			// GBuffer Pass + Emissive (Compute)
+			RenderJob::GBufferComputePass::Desc gbufferComputeDesc = {};
+			gbufferComputeDesc.sourceVisBuffer = visBuffer.get();
+			gbufferComputeDesc.colorTarget = hdrRasterSceneColor.get();
+			gbufferComputeDesc.gbufferTargets[0] = gbuffer_basecolor.get();
+			gbufferComputeDesc.gbufferTargets[1] = gbuffer_normals.get();
+			gbufferComputeDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
+			gbufferComputeDesc.depthStencilTarget = depthBuffer.get();
+			gbufferComputeDesc.sceneConstantBuffer = cbSceneConstants.get();
+			gbufferComputeDesc.viewConstantBuffer = cbViewConstants.get();
+			gbufferComputeDesc.resX = resX;
+			gbufferComputeDesc.resY = resY;
+			gbufferComputeDesc.scene = renderState.m_scene;
+
+			RenderJob::Result gbufferComputeJob = RenderJob::GBufferComputePass::Execute(s_jobSync.get(), gbufferComputeDesc);
+			sceneRenderJobs.push_back(gbufferComputeJob.m_task);
+
+			// GBuffer Raster Pass (for decals)
+			RenderJob::GBufferRasterPass::Desc gbufferRasterDesc = {};
+			gbufferRasterDesc.sourceVisBuffer = visBuffer.get();
+			gbufferRasterDesc.colorTarget = hdrRasterSceneColor.get();
+			gbufferRasterDesc.gbufferTargets[0] = gbuffer_basecolor.get();
+			gbufferRasterDesc.gbufferTargets[1] = gbuffer_normals.get();
+			gbufferRasterDesc.gbufferTargets[2] = gbuffer_metallicRoughnessAo.get();
+			gbufferRasterDesc.depthStencilTarget = depthBuffer.get();
+			gbufferRasterDesc.sceneConstantBuffer = cbSceneConstants.get();
+			gbufferRasterDesc.viewConstantBuffer = cbViewConstants.get();
+			gbufferRasterDesc.resX = resX;
+			gbufferRasterDesc.resY = resY;
+			gbufferRasterDesc.scene = renderState.m_scene;
+
+			RenderJob::Result gbufferDecalsJob = RenderJob::GBufferRasterPass::Execute(s_jobSync.get(), gbufferRasterDesc);
+			sceneRenderJobs.push_back(gbufferDecalsJob.m_task);
+
+			// Sky Lighting
+			if (c.EnableSkyLighting)
+			{
+				RenderJob::SkyLightingPass::Desc skyLightingDesc = {};
+				skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
+				skyLightingDesc.depthStencilTex = depthBuffer.get();
+				skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+				skyLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+				skyLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+				skyLightingDesc.renderConfig = c;
+				skyLightingDesc.scene = renderState.m_scene;
+				skyLightingDesc.view = &renderState.m_view;
+				skyLightingDesc.jitter = pixelJitter;
+				skyLightingDesc.resX = resX;
+				skyLightingDesc.resY = resY;
+				skyLightingDesc.envBRDFTex = s_envBRDF.get();
+
+				RenderJob::Result skylightJob = RenderJob::SkyLightingPass::Execute(s_jobSync.get(), skyLightingDesc);
+				sceneRenderJobs.push_back(skylightJob.m_task);
+			}
+
+			// Direct Lighting
+			int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
+			if (directionalLightIndex != -1 && c.EnableDirectLighting)
+			{
+				RenderJob::DirectLightingPass::Desc directLightingDesc = {};
+				directLightingDesc.directionalLightIndex = directionalLightIndex;
+				directLightingDesc.colorTarget = hdrRasterSceneColor.get();
+				directLightingDesc.depthStencilTex = depthBuffer.get();
+				directLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+				directLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+				directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+				directLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
+				directLightingDesc.viewConstantBuffer = cbViewConstants.get();
+				directLightingDesc.renderConfig = c;
+				directLightingDesc.resX = resX;
+				directLightingDesc.resY = resY;
+
+				RenderJob::Result directLightingJob = RenderJob::DirectLightingPass::Execute(s_jobSync.get(), directLightingDesc);
+				sceneRenderJobs.push_back(directLightingJob.m_task);
+			}
+
+			// Clustered Lighting
+			const bool bRequiresClear = directionalLightIndex == -1;
+			if (punctualLightCount > 0 && c.EnableDirectLighting)
+			{
+				RenderJob::ClusteredLightingPass::Desc clusteredLightingDesc = {};
+				clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
+				clusteredLightingDesc.lightGridBuffer = lightGridBuffer.get();
+				clusteredLightingDesc.colorTarget = hdrRasterSceneColor.get();
+				clusteredLightingDesc.depthStencilTex = depthBuffer.get();
+				clusteredLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+				clusteredLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+				clusteredLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+				clusteredLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
+				clusteredLightingDesc.viewConstantBuffer = cbViewConstants.get();
+				clusteredLightingDesc.renderConfig = c;
+				clusteredLightingDesc.resX = resX;
+				clusteredLightingDesc.resY = resY;
+
+				RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLightingPass::Execute(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
+				sceneRenderJobs.push_back(clusteredLightingJob.m_task);
+			}
+
+			if (c.EnvSkyMode == (int)EnvSkyMode::HDRI)
+			{
+				// Environmentmap pass
+				RenderJob::EnvironmentmapPass::Desc envmapDesc = {};
+				envmapDesc.colorTarget = hdrRasterSceneColor.get();
+				envmapDesc.depthStencilTarget = depthBuffer.get();
+				envmapDesc.format = hdrFormat;
+				envmapDesc.resX = resX;
+				envmapDesc.resY = resY;
+				envmapDesc.scene = renderState.m_scene;
+				envmapDesc.view = &renderState.m_view;
+				envmapDesc.jitter = pixelJitter;
+				envmapDesc.renderConfig = c;
+
+				RenderJob::Result envmapJob = RenderJob::EnvironmentmapPass::Execute(s_jobSync.get(), envmapDesc);
+				sceneRenderJobs.push_back(envmapJob.m_task);
 			}
 			else
 			{
-				// Tonemap
-				RenderJob::TonemapPass::Desc tonemapDesc = {};
-				tonemapDesc.source = hdrRasterSceneColor.get();
-				tonemapDesc.target = RenderBackend12::GetBackBuffer();
-				tonemapDesc.renderConfig = c;
+				RenderJob::DynamicSkyPass::Desc skyDesc = {};
+				skyDesc.colorTarget = hdrRasterSceneColor.get();
+				skyDesc.depthStencilTarget = depthBuffer.get();
+				skyDesc.format = hdrFormat;
+				skyDesc.resX = resX;
+				skyDesc.resY = resX;
+				skyDesc.scene = renderState.m_scene;
+				skyDesc.view = &renderState.m_view;
+				skyDesc.jitter = pixelJitter;
+				skyDesc.renderConfig = c;
 
-				RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
-				sceneRenderJobs.push_back(tonemapJob.m_task);
+				RenderJob::Result dynamicSkyJob = RenderJob::DynamicSkyPass::Execute(s_jobSync.get(), skyDesc);
+				sceneRenderJobs.push_back(dynamicSkyJob.m_task);
+			}
+
+			if (c.Viewmode != (int)Viewmode::Normal &&
+				c.Viewmode != (int)Viewmode::LightingOnly)
+			{
+				// Debug Viz
+				RenderJob::DebugVizPass::Desc desc = {};
+				desc.visBuffer = visBuffer.get();
+				desc.gbuffers[0] = gbuffer_basecolor.get();
+				desc.gbuffers[1] = gbuffer_normals.get();
+				desc.gbuffers[2] = gbuffer_metallicRoughnessAo.get();
+				desc.target = RenderBackend12::GetBackBuffer();
+				desc.depthBuffer = depthBuffer.get();
+				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
+				desc.jitter = pixelJitter;
+				desc.renderConfig = c;
+				desc.resX = resX;
+				desc.resY = resY;
+				desc.mouseX = renderState.m_mouseX;
+				desc.mouseY = renderState.m_mouseY;
+				desc.scene = renderState.m_scene;
+				desc.view = &renderState.m_view;
+
+				RenderJob::Result debugVizJob = RenderJob::DebugVizPass::Execute(s_jobSync.get(), desc);
+				sceneRenderJobs.push_back(debugVizJob.m_task);
+
+				if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
+				{
+					RenderJob::HighlightPass::Desc desc = {};
+					desc.colorTarget = RenderBackend12::GetBackBuffer();
+					desc.depthStencilTarget = depthBuffer.get();
+					desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
+					desc.resX = resX;
+					desc.resY = resY;
+					desc.sceneConstantBuffer = cbSceneConstants.get();
+					desc.viewConstantBuffer = cbViewConstants.get();
+					desc.renderConfig = c;
+
+					RenderJob::Result highlightJob = RenderJob::HighlightPass::Execute(s_jobSync.get(), desc);
+					sceneRenderJobs.push_back(highlightJob.m_task);
+				}
+			}
+			else
+			{
+				if (c.EnableTAA)
+				{
+					const FView& view = renderState.m_view;
+					Matrix viewProjectionTransform = view.m_viewTransform * view.m_projectionTransform;
+
+					// TAA Resolve
+					RenderJob::TAAResolvePass::Desc resolveDesc = {};
+					resolveDesc.source = hdrRasterSceneColor.get();
+					resolveDesc.target = s_taaAccumulationBuffer.get();
+					resolveDesc.resX = resX;
+					resolveDesc.resY = resY;
+					resolveDesc.historyIndex = (uint32_t)frameIndex;
+					resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
+					resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
+					resolveDesc.depthTextureIndex = depthBuffer->m_descriptorIndices.SRV;
+					resolveDesc.renderConfig = c;
+
+					RenderJob::Result resolveJob = RenderJob::TAAResolvePass::Execute(s_jobSync.get(), resolveDesc);
+					sceneRenderJobs.push_back(resolveJob.m_task);
+
+					// Tonemap
+					RenderJob::TonemapPass::Desc tonemapDesc = {};
+					tonemapDesc.source = s_taaAccumulationBuffer.get();
+					tonemapDesc.target = RenderBackend12::GetBackBuffer();
+					tonemapDesc.renderConfig = c;
+
+					RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
+					sceneRenderJobs.push_back(tonemapJob.m_task);
+
+					// Save view projection transform for next frame's reprojection
+					s_prevViewProjectionTransform = viewProjectionTransform;
+				}
+				else
+				{
+					// Tonemap
+					RenderJob::TonemapPass::Desc tonemapDesc = {};
+					tonemapDesc.source = hdrRasterSceneColor.get();
+					tonemapDesc.target = RenderBackend12::GetBackBuffer();
+					tonemapDesc.renderConfig = c;
+
+					RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
+					sceneRenderJobs.push_back(tonemapJob.m_task);
+				}
 			}
 		}
-	}
-	
-	// Wait for all scene render jobs to finish
-	auto sceneRenderJoinTask = concurrency::when_all(std::begin(sceneRenderJobs), std::end(sceneRenderJobs));
-	sceneRenderJoinTask.wait();
 
-	// Render debug primitives
-	FDebugDraw::PassDesc debugDesc = {};
-	debugDesc.colorTarget = RenderBackend12::GetBackBuffer();
-	debugDesc.depthTarget = depthBuffer.get();
-	debugDesc.resX = resX;
-	debugDesc.resY = resY;
-	debugDesc.scene = renderState.m_scene;
-	debugDesc.view = &renderState.m_view;
-	debugDesc.renderConfig = c;
-	s_debugDrawing.Flush(debugDesc);
+		// Wait for all scene render jobs to finish
+		auto sceneRenderJoinTask = concurrency::when_all(std::begin(sceneRenderJobs), std::end(sceneRenderJobs));
+		sceneRenderJoinTask.wait();
+
+		// Render debug primitives
+		FDebugDraw::PassDesc debugDesc = {};
+		debugDesc.colorTarget = RenderBackend12::GetBackBuffer();
+		debugDesc.depthTarget = depthBuffer.get();
+		debugDesc.resX = resX;
+		debugDesc.resY = resY;
+		debugDesc.scene = renderState.m_scene;
+		debugDesc.view = &renderState.m_view;
+		debugDesc.renderConfig = c;
+		s_debugDrawing.Flush(debugDesc);
+	}
 
 	// Render UI
 	RenderJob::UIPass::Desc uiDesc = { RenderBackend12::GetBackBuffer(), c };
