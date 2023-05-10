@@ -31,6 +31,13 @@ struct TSceneEntities
 	std::vector<Matrix> m_transformList;
 	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
 	size_t GetCount() const { return m_entityList.size(); }
+	void Clear()
+	{
+		m_entityList.clear();
+		m_entityNames.clear();
+		m_transformList.clear();
+		m_objectSpaceBoundsList.clear();
+	}
 };
 
 struct FCamera

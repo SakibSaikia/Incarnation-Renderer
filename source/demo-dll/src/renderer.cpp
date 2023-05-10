@@ -1274,13 +1274,8 @@ void Renderer::Render(const FRenderState& renderState)
 	static uint64_t frameIndex = 0;
 	SCOPED_COMMAND_QUEUE_EVENT(D3D12_COMMAND_LIST_TYPE_DIRECT, PrintString("frame_%d", frameIndex).c_str(), 0);
 
-	size_t totalPrimitives = 0;
-	for (const auto& mesh : renderState.m_scene->m_sceneMeshes.m_entityList)
-	{
-		totalPrimitives += mesh.m_primitives.size();
-	}
-
 	// If the scene has no primitives, it means that loading hasn't finished. So, skip rendering the scene.
+	const size_t totalPrimitives = renderState.m_scene->m_primitiveCount;
 	if (totalPrimitives > 0)
 	{
 		// These resources need to be kept alive until all the render jobs have finished and joined

@@ -77,6 +77,10 @@ void Demo::App::Tick(const float deltaTime)
 		m_scene.m_modelFilename = m_config.ModelFilename;
 		concurrency::task<void> loadSceneTask = concurrency::create_task([this, newScene]()
 		{
+			Renderer::Status::Pause();
+			m_scene.Clear();
+			Renderer::Status::Resume();
+
 			newScene->ReloadModel(m_config.ModelFilename);
 
 			if (m_config.EnvSkyMode == (int)EnvSkyMode::HDRI)

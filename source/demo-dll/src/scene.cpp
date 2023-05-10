@@ -1347,6 +1347,9 @@ void FScene::Clear()
 	m_meshBuffers.clear();
 	m_blasList.clear();
 	m_materialList.clear();
+	m_sceneMeshes.Clear();
+	m_sceneMeshDecals.Clear();
+	m_sceneLights.Clear();
 
 	m_packedMeshBufferViews.reset(nullptr);
 	m_packedMeshAccessors.reset(nullptr);
