@@ -18,6 +18,7 @@ struct FConfig
 	int EnvSkyMode = 1;
 	float SkyBrightness = 25000.f;
 	bool EnableDirectLighting = true;
+	bool EnableSkyLighting = true;
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = true;
 	bool PathTrace = false;

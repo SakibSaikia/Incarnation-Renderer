@@ -1539,22 +1539,25 @@ void Renderer::Render(const FRenderState& renderState)
 		sceneRenderJobs.push_back(gbufferDecalsJob.m_task);
 
 		// Sky Lighting
-		RenderJob::SkyLightingPass::Desc skyLightingDesc = {};
-		skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
-		skyLightingDesc.depthStencilTex = depthBuffer.get();
-		skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
-		skyLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
-		skyLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-		skyLightingDesc.renderConfig = c;
-		skyLightingDesc.scene = renderState.m_scene;
-		skyLightingDesc.view = &renderState.m_view;
-		skyLightingDesc.jitter = pixelJitter;
-		skyLightingDesc.resX = resX;
-		skyLightingDesc.resY = resY;
-		skyLightingDesc.envBRDFTex = s_envBRDF.get();
+		if (c.EnableSkyLighting)
+		{
+			RenderJob::SkyLightingPass::Desc skyLightingDesc = {};
+			skyLightingDesc.colorTarget = hdrRasterSceneColor.get();
+			skyLightingDesc.depthStencilTex = depthBuffer.get();
+			skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+			skyLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+			skyLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+			skyLightingDesc.renderConfig = c;
+			skyLightingDesc.scene = renderState.m_scene;
+			skyLightingDesc.view = &renderState.m_view;
+			skyLightingDesc.jitter = pixelJitter;
+			skyLightingDesc.resX = resX;
+			skyLightingDesc.resY = resY;
+			skyLightingDesc.envBRDFTex = s_envBRDF.get();
 
-		RenderJob::Result skylightJob = RenderJob::SkyLightingPass::Execute(s_jobSync.get(), skyLightingDesc);
-		sceneRenderJobs.push_back(skylightJob.m_task);
+			RenderJob::Result skylightJob = RenderJob::SkyLightingPass::Execute(s_jobSync.get(), skyLightingDesc);
+			sceneRenderJobs.push_back(skylightJob.m_task);
+		}
 
 		// Direct Lighting
 		int directionalLightIndex = renderState.m_scene->GetDirectionalLight();

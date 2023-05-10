@@ -423,6 +423,8 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 
 				if (ImGui::BeginTabItem("Lights"))
 				{
+					ImGui::Checkbox("Enable Skylight", &settings->EnableSkyLighting);
+
 					int lightCount = scene->m_sceneLights.GetCount();
 					if (lightCount > 0)
 					{
