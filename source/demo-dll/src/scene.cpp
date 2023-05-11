@@ -1450,9 +1450,10 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 	const int numSHCoefficients = 9;
 	const DXGI_FORMAT shFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	const DXGI_FORMAT radianceFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const int cubemapRes = Demo::GetConfig().EnvmapResolution;
 	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
-	std::shared_ptr<FShaderSurface> newEnvmap{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_envmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapRes, cubemapRes, numMips, 1, 6) };
+	std::shared_ptr<FShaderSurface> newEnvmap{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_envmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, cubemapRes, cubemapRes, numMips, 1, 6) };
 	std::shared_ptr<FShaderSurface> newSH{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_sh", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), shFormat, numSHCoefficients, 1) };
 
 	{
@@ -1467,7 +1468,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Render dynamic sky to 2D surface to a latlong texture
 		const int resX = 2 * cubemapRes, resY = cubemapRes;
-		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_tex", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, resX, resY, numMips) };
+		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_tex", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, resX, resY, numMips) };
 		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_descriptorIndices.UAVs[0], resX, resY, m_sunDir);
 
 		// Downsample to generate mips
@@ -1488,7 +1489,7 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Convert to cubemap
 		const size_t cubemapSize = cubemapRes;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R32G32B32A32_FLOAT, cubemapSize, cubemapSize, numMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, cubemapSize, cubemapSize, numMips, 1, 6) };
 		Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_descriptorIndices.SRV, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// Prefilter the cubemap
