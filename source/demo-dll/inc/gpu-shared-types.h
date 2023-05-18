@@ -153,6 +153,12 @@ struct FViewConstants
 	Matrix m_invProjTransform;
 	Matrix m_cullViewProjTransform;
 	Vector3 m_eyePos;
+	float __padding0;
+	Vector3 m_cameraRightVec;
+	float __padding1;
+	Vector3 m_cameraUpVector;
+	float __padding2;
+	Vector3 m_cameraLookVector;
 	float m_exposure;
 	float m_aperture;
 	float m_focalLength;

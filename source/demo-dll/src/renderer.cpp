@@ -1406,6 +1406,9 @@ void Renderer::Render(const FRenderState& renderState)
 				cb->m_invProjTransform = jitteredProjMatrix.Invert();
 				cb->m_cullViewProjTransform = renderState.m_cullingView.m_viewTransform * jitteredProjMatrix;
 				cb->m_eyePos = view.m_position;
+				cb->m_cameraRightVec = view.m_right;
+				cb->m_cameraUpVector = view.m_up;
+				cb->m_cameraLookVector = view.m_look;
 				cb->m_exposure = config.Exposure;
 				cb->m_aperture = config.Pathtracing_CameraAperture;
 				cb->m_focalLength = config.Pathtracing_CameraFocalLength;
