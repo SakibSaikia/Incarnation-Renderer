@@ -303,6 +303,8 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 		ImGui::Checkbox("TAA", &settings->EnableTAA);
 		ImGui::SameLine();
 		ImGui::Checkbox("Pathtracing", &settings->PathTrace);
+		ImGui::SameLine();
+		ImGui::Checkbox("HBAO", &settings->EnableHBAO);
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 		// Model
@@ -545,6 +547,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 				ImGui::RadioButton("Normalmap", &settings->Viewmode, (int)Viewmode::Normalmap);
 				ImGui::RadioButton("Emissive", &settings->Viewmode, (int)Viewmode::Emissive);
 				ImGui::RadioButton("Reflections", &settings->Viewmode, (int)Viewmode::Reflections);
+				ImGui::RadioButton("Ambient Occlusion", &settings->Viewmode, (int)Viewmode::AmbientOcclusion);
 				ImGui::RadioButton("Object IDs", &settings->Viewmode, (int)Viewmode::ObjectIds);
 				ImGui::RadioButton("Triangle IDs", &settings->Viewmode, (int)Viewmode::TriangleIds);
 				ImGui::RadioButton("Light Cluster Slices", &settings->Viewmode, (int)Viewmode::LightClusterSlices);

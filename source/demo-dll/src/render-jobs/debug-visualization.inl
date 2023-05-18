@@ -6,6 +6,7 @@ namespace RenderJob::DebugVizPass
 		FShaderSurface* gbuffers[3];
 		FShaderSurface* target;
 		FShaderSurface* depthBuffer;
+		FShaderSurface* aoBuffer;
 		FShaderBuffer* indirectArgsBuffer;
 		Vector2 jitter;
 		FConfig renderConfig;
@@ -25,6 +26,7 @@ namespace RenderJob::DebugVizPass
 		size_t gbuffer1TransitionToken = passDesc.gbuffers[1]->m_resource->GetTransitionToken();
 		size_t gbuffer2TransitionToken = passDesc.gbuffers[2]->m_resource->GetTransitionToken();
 		size_t depthTransitionToken = passDesc.depthBuffer->m_resource->GetTransitionToken();
+		size_t aoTransitionToken = passDesc.aoBuffer->m_resource->GetTransitionToken();
 		size_t indirectArgsTransitionToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"debugviz_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -130,6 +132,7 @@ namespace RenderJob::DebugVizPass
 				int gbuffer1TextureIndex;
 				int gbuffer2TextureIndex;
 				int depthBufferTextureIndex;
+				int aoTextureIndex;
 				int indirectArgsBufferIndex;
 				int sceneMeshAccessorsIndex;
 				int sceneMeshBufferViewsIndex;
@@ -140,7 +143,6 @@ namespace RenderJob::DebugVizPass
 				uint32_t mouseX;
 				uint32_t mouseY;
 				uint32_t lightClusterSlices;
-				float __padding;
 				Matrix invProjectionTransform;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_descriptorIndices.SRV,
@@ -148,6 +150,7 @@ namespace RenderJob::DebugVizPass
 					(int)passDesc.gbuffers[1]->m_descriptorIndices.SRV,
 					(int)passDesc.gbuffers[2]->m_descriptorIndices.SRV,
 					(int)passDesc.depthBuffer->m_descriptorIndices.SRV,
+					(int)passDesc.aoBuffer->m_descriptorIndices.SRV,
 					(int)passDesc.indirectArgsBuffer->m_descriptorIndices.UAV,
 					(int)passDesc.scene->m_packedMeshAccessors->m_descriptorIndices.SRV,
 					(int)passDesc.scene->m_packedMeshBufferViews->m_descriptorIndices.SRV,
@@ -158,7 +161,6 @@ namespace RenderJob::DebugVizPass
 					passDesc.mouseX,
 					passDesc.mouseY,
 					passDesc.renderConfig.LightClusterDimZ,
-					0.f,
 					(passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert()
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
@@ -169,6 +171,7 @@ namespace RenderJob::DebugVizPass
 			passDesc.gbuffers[1]->m_resource->Transition(cmdList, gbuffer1TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.gbuffers[2]->m_resource->Transition(cmdList, gbuffer2TransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.depthBuffer->m_resource->Transition(cmdList, depthTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			passDesc.aoBuffer->m_resource->Transition(cmdList, aoTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			passDesc.target->m_resource->Transition(cmdList, targetTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.indirectArgsBuffer->m_resource->Transition(cmdList, indirectArgsTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 

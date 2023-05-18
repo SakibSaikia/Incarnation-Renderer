@@ -19,6 +19,7 @@ cbuffer cb : register(b0)
 	int g_gbuffer1TextureIndex;
 	int g_gbuffer2TextureIndex;
 	int g_depthBufferTextureIndex;
+	int g_aoTextureIndex;
 	int g_indirectArgsBufferIndex;
 	int g_sceneMeshAccessorsIndex;
 	int g_sceneMeshBufferViewsIndex;
@@ -29,7 +30,6 @@ cbuffer cb : register(b0)
 	uint g_mouseX;
 	uint g_mouseY;
 	uint g_lightClusterSlices;
-	float __pad;
 	float4x4 g_invProjectionTransform;
 }
 
@@ -156,6 +156,12 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		const uint sliceIndex = floor(scale * log(z) + bias);
 
 		return hsv2rgb(float3(sliceIndex / (float)numSlices * 360.f, 0.85f, 0.95f)).rgbr;
+	}
+	// Ambient Occlusion
+	else if (g_viewmode == 12)
+	{
+		Texture2D aoTex = ResourceDescriptorHeap[g_aoTextureIndex];
+		return aoTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)).rrrr;
 	}
 
 	return 0.xxxx;

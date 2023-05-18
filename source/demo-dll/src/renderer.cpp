@@ -45,6 +45,7 @@ namespace Renderer
 #include "render-jobs/direct-lighting.inl"
 #include "render-jobs/clustered-lighting.inl"
 #include "render-jobs/dynamic-sky.inl"
+#include "render-jobs/hbao.inl"
 
 namespace
 {
@@ -1286,9 +1287,10 @@ void Renderer::Render(const FRenderState& renderState)
 		std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface(L"depth_buffer_raster", FShaderSurface::Type::DepthStencil, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
 		std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_rt", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
 		std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface(L"vis_buffer_raster", FShaderSurface::Type::RenderTarget, FResource::Allocation::Transient(gpuFinishFence), visBufferFormat, resX, resY) };
-		std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
-		std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY, 1, 1) };
-		std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY, 1, 1) };
+		std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY) };
+		std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY) };
+		std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY) };
+		std::unique_ptr<FShaderSurface> aoBuffer{ RenderBackend12::CreateNewShaderSurface(L"hbao", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8_UNORM, resX, resY) };
 		std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer(L"mesh_highlight_indirect_args", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(FIndirectDrawWithRootConstants)) };
 		std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_args_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
 		std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_counts_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
@@ -1536,6 +1538,22 @@ void Renderer::Render(const FRenderState& renderState)
 			RenderJob::Result gbufferDecalsJob = RenderJob::GBufferRasterPass::Execute(s_jobSync.get(), gbufferRasterDesc);
 			sceneRenderJobs.push_back(gbufferDecalsJob.m_task);
 
+			// Ambient Occlusion
+			if (c.EnableHBAO)
+			{
+				RenderJob::HBAO::Desc hbaoDesc = {};
+				hbaoDesc.aoTarget = aoBuffer.get();
+				hbaoDesc.depthStencil = depthBuffer.get();
+				hbaoDesc.gbufferNormals = gbuffer_normals.get();
+				hbaoDesc.sceneConstantBuffer = cbSceneConstants.get();
+				hbaoDesc.viewConstantBuffer = cbViewConstants.get();
+				hbaoDesc.resX = resX;
+				hbaoDesc.resY = resY;
+
+				RenderJob::Result hbaoJob = RenderJob::HBAO::Execute(s_jobSync.get(), hbaoDesc);
+				sceneRenderJobs.push_back(hbaoJob.m_task);
+			}
+
 			// Sky Lighting
 			if (c.EnableSkyLighting)
 			{
@@ -1645,6 +1663,7 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.gbuffers[2] = gbuffer_metallicRoughnessAo.get();
 				desc.target = RenderBackend12::GetBackBuffer();
 				desc.depthBuffer = depthBuffer.get();
+				desc.aoBuffer = aoBuffer.get();
 				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 				desc.jitter = pixelJitter;
 				desc.renderConfig = c;
