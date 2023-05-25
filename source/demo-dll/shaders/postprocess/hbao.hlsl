@@ -21,7 +21,10 @@
     "CBV(b2)"
 
 static const uint NumSlices = 4;
+static const uint MaxTracesPerSlice = 4;
 static const float AzimuthalSliceAngle = k_Pi / NumSlices;
+static const float TerminateTraceThreshold = k_Pi / 36.f; // 5 degrees
+static const float MaxTraceLength = 1.f;
 
 struct FPassConstants
 {
@@ -34,9 +37,63 @@ ConstantBuffer<FPassConstants> g_passCb : register(b0);
 ConstantBuffer<FViewConstants> g_viewCb : register(b1);
 ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
-float GatherAO(float cosHorizonAngleStart)
+bool RayHit(float3 origin, float3 dir)
 {
-    return 2.f * cosHorizonAngleStart;
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = dir;
+    ray.TMin = 0.1f;
+    ray.TMax = MaxTraceLength;
+
+    RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_sceneCb.m_sceneBvhIndex];
+
+    RayQuery<RAY_FLAG_CULL_BACK_FACING_TRIANGLES> q;
+    q.TraceRayInline(sceneBvh, RAY_FLAG_NONE, 0xff, ray);
+
+    if (!q.Proceed())
+    {
+        return q.CommittedStatus() == COMMITTED_TRIANGLE_HIT;
+    }
+    else
+    {
+        // This means that further evaluation is needed. For now, consider translucent triangles as a hit.
+        return q.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE;
+    }
+}
+
+float ComputeHorizonAngle(float horizonAngleStart, float3 pixelWorldPos, float3 sliceBitangent, float3 sliceTangent)
+{
+    float minHorizonAngle = 0.f;
+    float maxHorizonAngle = horizonAngleStart;
+    int traceIdx = 0;
+    float newHorizonAngle;
+
+    // Binary search
+    while (traceIdx < MaxTracesPerSlice && (maxHorizonAngle - minHorizonAngle) > TerminateTraceThreshold)
+    {
+        newHorizonAngle = minHorizonAngle + 0.5f * (maxHorizonAngle - minHorizonAngle);
+        float3 rayDir = cos(newHorizonAngle) * sliceBitangent + sin(newHorizonAngle) * sliceTangent;
+
+        if (RayHit(pixelWorldPos, rayDir))
+        {
+            maxHorizonAngle = newHorizonAngle;
+        }
+        else
+        {
+            minHorizonAngle = newHorizonAngle;
+        }
+
+        traceIdx++;
+    }
+
+    return maxHorizonAngle;
+}
+
+float GatherAO(float horizonAngleStart, float3 pixelWorldPos, float3 sliceBitangent, float3 sliceTangent)
+{
+    float frontHorizonAngle = ComputeHorizonAngle(horizonAngleStart, pixelWorldPos, sliceBitangent, sliceTangent);
+    float backHorizonAngle = ComputeHorizonAngle(horizonAngleStart, pixelWorldPos, sliceBitangent, -sliceTangent);
+    return cos(frontHorizonAngle) + cos(backHorizonAngle);
 }
 
 
@@ -81,15 +138,18 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             // Projection of the world normal onto the slice plane 
             // n' = {n.D(φ), n.ω0}
-            float2 sliceNormal;
-            sliceNormal.x = dot(worldNormal, sliceTangentVec);
-            sliceNormal.y = dot(worldNormal, localAt);
+            float2 sliceProjectedNormal;
+            sliceProjectedNormal.x = dot(worldNormal, sliceTangentVec);
+            sliceProjectedNormal.y = dot(worldNormal, localAt);
 
             // Project slice direction vector D(φ) onto world normal plane
             float t = -dot(sliceTangentVec, worldNormal) / dot(localAt, worldNormal);
-            float cosHorizonAngle = t * rsqrt(1 + t * t);
 
-            sumAO += GatherAO(cosHorizonAngle);
+            // Horizon angle is the angle between localUp and the projected slice vector into the normal plane
+            // Note: that front and back horizon angles are the same, just different sign. (although the perspective distorts the perception in Fig 6 of the paper)
+            float horizonAngle = acos(t * rsqrt(1 + t * t));
+
+            sumAO += GatherAO(horizonAngle, pixelWorldPos.xyz, localAt, sliceTangentVec);
 
             azimuthAngle += AzimuthalSliceAngle;
         }
