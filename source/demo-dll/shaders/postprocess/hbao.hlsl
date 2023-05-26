@@ -154,6 +154,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             azimuthAngle += AzimuthalSliceAngle;
         }
 
+        // For each slice we are computing AO for both front and back horizon angles.
+        // So, we have to divide the total AO by two times the number of slices.
         RWTexture2D<float> aoTarget = ResourceDescriptorHeap[g_passCb.m_aoTargetUavIndex];
         aoTarget[dispatchThreadId.xy] = 1.f - saturate(sumAO / 2.f * NumSlices);
     }
