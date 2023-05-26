@@ -25,7 +25,8 @@ bool FrustumCull(FGpuPrimitive primitive)
     // Gribb-Hartmann frustum plane extraction
     // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
-    float4x4 M = transpose(mul(primitive.m_localToWorld, g_viewCb.m_cullViewProjTransform));
+    float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
+    float4x4 M = transpose(mul(localToWorld, g_viewCb.m_cullViewProjTransform));
     float4 nPlane = M[3] - M[2];
     float4 lPlane = M[3] + M[0];
     float4 rPlane = M[3] - M[0];
