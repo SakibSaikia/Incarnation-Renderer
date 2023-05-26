@@ -8,7 +8,7 @@ struct FConfig
 	DXGI_FORMAT BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	bool UseGpuBasedValidation = false;
 	std::wstring ModelFilename = L"intel-sponza.gltf";
-	std::wstring HDRIFilename = L"lilienstein_2k.hdr";
+	std::wstring HDRIFilename = L"lilienstein.hdr";
 	bool UseContentCache = true;
 	float Fov = 0.25f * DirectX::XM_PI;
 	float Exposure = 13.f;
