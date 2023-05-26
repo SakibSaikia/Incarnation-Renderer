@@ -294,12 +294,14 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 	bool bResetPathtracelAccumulation = false;
 	bool bUpdateSkylight = false;
 
-	const ImVec2 optionsWindowSize = { 0.2f * viewport->WorkSize.x, viewport->WorkSize.y };
-	ImGui::SetNextWindowPos(viewport->WorkSize -  optionsWindowSize, ImGuiCond_Always);
-	ImGui::SetNextWindowSize(optionsWindowSize, ImGuiCond_Always);
-
-	ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+	// Show options menu once the scene has finished loading
+	if (FScene::s_loadProgress == 1.f)
 	{
+		const ImVec2 optionsWindowSize = { 0.2f * viewport->WorkSize.x, viewport->WorkSize.y };
+		ImGui::SetNextWindowPos(viewport->WorkSize - optionsWindowSize, ImGuiCond_Always);
+		ImGui::SetNextWindowSize(optionsWindowSize, ImGuiCond_Always);
+
+		ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 		ImGui::Checkbox("TAA", &settings->EnableTAA);
 		ImGui::SameLine();
 		ImGui::Checkbox("Pathtracing", &settings->PathTrace);
@@ -570,11 +572,13 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 				ImGui::TreePop();
 			}
 		}
+		ImGui::End();
 	}
-	ImGui::End();
 
-	ImGui::Begin("Render Stats");
+	// Show render stats once the scene has finished loading
+	if (FScene::s_loadProgress == 1.f)
 	{
+		ImGui::Begin("Render Stats");
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 		FRenderStats stats = Renderer::GetRenderStats();
@@ -586,9 +590,10 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 			{
 				ImGui::Text("Light Culling			%.2f%%", numLights == 0 ? 0.f : 100.f * stats.m_culledLights / (float)(numLights * settings->LightClusterDimX * settings->LightClusterDimY * settings->LightClusterDimZ));
 			});
+		ImGui::End();
 	}
-	ImGui::End();
 
+	// Show progress bar when scene is being loaded
 	if (FScene::s_loadProgress != 1.f)
 	{
 		ImGui::SetNextWindowPos(ImVec2(0.2f * viewport->WorkSize.x, 0.8f * viewport->WorkSize.y), ImGuiCond_Always);

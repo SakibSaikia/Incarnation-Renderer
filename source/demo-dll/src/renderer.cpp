@@ -1761,7 +1761,7 @@ void Renderer::Render(const FRenderState& renderState)
 	}
 
 	// Render UI
-	RenderJob::UIPass::Desc uiDesc = { RenderBackend12::GetBackBuffer(), c };
+	RenderJob::UIPass::Desc uiDesc = { RenderBackend12::GetBackBuffer(), c, totalPrimitives == 0 };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{

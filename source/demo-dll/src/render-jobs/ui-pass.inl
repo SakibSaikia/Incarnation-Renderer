@@ -4,6 +4,7 @@ namespace RenderJob::UIPass
 	{
 		FShaderSurface* colorTarget;
 		FConfig renderConfig;
+		bool bClearTarget;
 	};
 
 	Result Execute(Sync* jobSync, const Desc& passDesc)
@@ -208,6 +209,13 @@ namespace RenderJob::UIPass
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, nullptr);
 
 			d3dCmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			// Clear if required
+			if (passDesc.bClearTarget)
+			{
+				const float clearValue[] = { 0, 0, 0, 0 };
+				d3dCmdList->ClearRenderTargetView(rtvs[0], clearValue, 0, nullptr);
+			}
 
 			// Render commands
 			int vertexOffset = 0;
