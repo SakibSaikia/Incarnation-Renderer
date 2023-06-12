@@ -63,12 +63,12 @@ namespace RenderJob::ForwardLightingPass
 				int sceneLightsTransformsBufferIndex;
 			};
 
-			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"frame_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(FrameCbLayout),
-				cmdList->GetFence(),
-				[passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"frame_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence()),
+				.size = sizeof(FrameCbLayout),
+				.uploadCallback = [passDesc](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
 
@@ -84,7 +84,8 @@ namespace RenderJob::ForwardLightingPass
 					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
 					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
 					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -97,19 +98,20 @@ namespace RenderJob::ForwardLightingPass
 				float exposure;
 			};
 
-			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"view_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(ViewCbLayout),
-				cmdList->GetFence(),
-				[passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"view_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence()),
+				.size = sizeof(ViewCbLayout),
+				.uploadCallback = [passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewTransform = passDesc.view->m_viewTransform;
 					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 					cbDest->eyePos = passDesc.view->m_position;
 					cbDest->exposure = passDesc.renderConfig.Exposure;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 

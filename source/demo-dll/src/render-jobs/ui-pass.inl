@@ -33,21 +33,22 @@ namespace RenderJob::UIPass
 
 			// Vertex Buffer
 			{
-				std::unique_ptr<FSystemBuffer> vtxBuffer{ RenderBackend12::CreateNewSystemBuffer(
-					L"imgui_vb",
-					FResource::AccessMode::CpuWriteOnly,
-					vtxBufferSize,
-					cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-					[drawData](uint8_t* pDest)
-				{
-					ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
-					for (int i = 0; i < drawData->CmdListsCount; ++i)
+				std::unique_ptr<FSystemBuffer> vtxBuffer{ RenderBackend12::CreateNewSystemBuffer({
+					.name = L"imgui_vb",
+					.accessMode = FResource::AccessMode::CpuWriteOnly,
+					.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+					.size = vtxBufferSize,
+					.uploadCallback = [drawData](uint8_t* pDest)
 					{
-						const ImDrawList* imguiCL = drawData->CmdLists[i];
-						memcpy(vbDest, imguiCL->VtxBuffer.Data, imguiCL->VtxBuffer.Size * sizeof(ImDrawVert));
-						vbDest += imguiCL->VtxBuffer.Size;
+						ImDrawVert* vbDest = reinterpret_cast<ImDrawVert*>(pDest);
+						for (int i = 0; i < drawData->CmdListsCount; ++i)
+						{
+							const ImDrawList* imguiCL = drawData->CmdLists[i];
+							memcpy(vbDest, imguiCL->VtxBuffer.Data, imguiCL->VtxBuffer.Size * sizeof(ImDrawVert));
+							vbDest += imguiCL->VtxBuffer.Size;
+						}
 					}
-				}) };
+				})};
 
 				D3D12_VERTEX_BUFFER_VIEW vbDescriptor = {};
 				vbDescriptor.BufferLocation = vtxBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
@@ -58,21 +59,22 @@ namespace RenderJob::UIPass
 
 			// Index Buffer
 			{
-				std::unique_ptr<FSystemBuffer> idxBuffer{ RenderBackend12::CreateNewSystemBuffer(
-					L"imgui_ib",
-					FResource::AccessMode::CpuWriteOnly,
-					idxBufferSize,
-					cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-					[drawData](uint8_t* pDest)
-				{
-					ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);
-					for (int i = 0; i < drawData->CmdListsCount; ++i)
+				std::unique_ptr<FSystemBuffer> idxBuffer{ RenderBackend12::CreateNewSystemBuffer({
+					.name = L"imgui_ib",
+					.accessMode = FResource::AccessMode::CpuWriteOnly,
+					.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+					.size = idxBufferSize,
+					.uploadCallback = [drawData](uint8_t* pDest)
 					{
-						const ImDrawList* imguiCL = drawData->CmdLists[i];
-						memcpy(ibDest, imguiCL->IdxBuffer.Data, imguiCL->IdxBuffer.Size * sizeof(ImDrawIdx));
-						ibDest += imguiCL->IdxBuffer.Size;
+						ImDrawIdx* ibDest = reinterpret_cast<ImDrawIdx*>(pDest);
+						for (int i = 0; i < drawData->CmdListsCount; ++i)
+						{
+							const ImDrawList* imguiCL = drawData->CmdLists[i];
+							memcpy(ibDest, imguiCL->IdxBuffer.Data, imguiCL->IdxBuffer.Size * sizeof(ImDrawIdx));
+							ibDest += imguiCL->IdxBuffer.Size;
+						}
 					}
-				}) };
+				})};
 
 				D3D12_INDEX_BUFFER_VIEW ibDescriptor = {};
 				ibDescriptor.BufferLocation = idxBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();

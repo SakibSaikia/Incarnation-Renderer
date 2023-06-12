@@ -40,13 +40,13 @@ namespace
 	ImTextureID RenderEnvironmentRadiancePreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
 	{
 		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
-		std::unique_ptr<FShaderSurface> targetSurface { RenderBackend12::CreateNewShaderSurface(
-			L"envmap_preview", 
-			FShaderSurface::Type::UAV, 
-			FResource::Allocation::Transient(endOfFrameFence), 
-			DXGI_FORMAT_R8G8B8A8_UNORM, 
-			texSize.x, 
-			texSize.y) };
+		std::unique_ptr<FShaderSurface> targetSurface{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"envmap_preview",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(endOfFrameFence),
+			.format = DXGI_FORMAT_R8G8B8A8_UNORM,
+			.width = (size_t)texSize.x,
+			.height = (size_t)texSize.y })};
 
 		// Render preview envmap
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"envmap_preview", D3D12_COMMAND_LIST_TYPE_DIRECT);
@@ -114,13 +114,13 @@ namespace
 	ImTextureID RenderEnvironmentIrradiancePreview(const FScene* scene, const FConfig* settings, ImVec2 texSize)
 	{
 		FFenceMarker endOfFrameFence = RenderBackend12::GetCurrentFrameFence();
-		std::unique_ptr<FShaderSurface> targetSurface{ RenderBackend12::CreateNewShaderSurface(
-			L"sh_preview",
-			FShaderSurface::Type::UAV,
-			FResource::Allocation::Transient(endOfFrameFence),
-			DXGI_FORMAT_R8G8B8A8_UNORM,
-			texSize.x,
-			texSize.y) };
+		std::unique_ptr<FShaderSurface> targetSurface{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"sh_preview",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(endOfFrameFence),
+			.format = DXGI_FORMAT_R8G8B8A8_UNORM,
+			.width = (size_t)texSize.x,
+			.height = (size_t)texSize.y })};
 
 		// Render preview envmap
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"sh_preview", D3D12_COMMAND_LIST_TYPE_DIRECT);

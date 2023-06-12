@@ -88,12 +88,12 @@ namespace RenderJob::LightCullingPass
 				Matrix invViewProjTransform;
 			};
 
-			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
-				L"light_cull_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(Constants),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"light_cull_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(Constants),
+				.uploadCallback = [passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->culledLightCountBufferUavIndex = passDesc.culledLightCountBuffer->m_descriptorIndices.UAV;
@@ -110,7 +110,8 @@ namespace RenderJob::LightCullingPass
 					cb->cameraNearPlane = passDesc.renderConfig.CameraNearPlane;
 					cb->projTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
 					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
-				}) };
+				}
+				})};
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 

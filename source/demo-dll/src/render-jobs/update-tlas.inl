@@ -44,15 +44,16 @@ namespace RenderJob::UpdateTLASPass
 			}
 
 			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-			std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer(
-				L"instance_descs_buffer",
-				FResource::AccessMode::CpuWriteOnly,
-				instanceDescBufferSize,
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"instance_descs_buffer",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = instanceDescBufferSize,
+				.uploadCallback = [pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 				{
 					memcpy(pDest, pData, instanceDescBufferSize);
-				}) };
+				}
+			})};
 
 			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
 			tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
@@ -65,12 +66,12 @@ namespace RenderJob::UpdateTLASPass
 			RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
 			// TLAS scratch buffer
-			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer(
-				L"tlas_scratch",
-				FShaderBuffer::Type::AccelerationStructure,
-				FResource::AccessMode::GpuWriteOnly,
-				FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
-				GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
+			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer({
+				.name = L"tlas_scratch",
+				.type = FShaderBuffer::Type::AccelerationStructure,
+				.accessMode = FResource::AccessMode::GpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)}) };
 
 			// Build TLAS
 			scene->m_tlas->m_resource->UavBarrier(cmdList);

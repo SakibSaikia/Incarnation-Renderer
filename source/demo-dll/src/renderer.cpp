@@ -98,9 +98,29 @@ void Renderer::Initialize(const uint32_t resX, const uint32_t resY)
 	s_jobSync = std::make_unique<RenderJob::Sync>();
 	s_envBRDF = Renderer::GenerateEnvBrdfTexture(512, 512);
 
-	s_pathtraceHistoryBuffer.reset(RenderBackend12::CreateNewShaderSurface(L"hdr_history_buffer_rt", FShaderSurface::Type::UAV, FResource::Allocation::Persistent(), DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
-	s_taaAccumulationBuffer.reset(RenderBackend12::CreateNewShaderSurface(L"taa_accumulation_buffer_raster", FShaderSurface::Type::UAV, FResource::Allocation::Persistent(), DXGI_FORMAT_R11G11B10_FLOAT, resX, resY, 1, 1));
-	s_renderStatsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"render_stats_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Persistent(), sizeof(FRenderStats), false, nullptr, nullptr, SpecialDescriptors::RenderStatsBufferUavIndex));
+	s_pathtraceHistoryBuffer.reset(RenderBackend12::CreateNewShaderSurface({
+		.name = L"hdr_history_buffer_rt",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Persistent(),
+		.format = DXGI_FORMAT_R11G11B10_FLOAT,
+		.width = resX,
+		.height = resY }));
+
+	s_taaAccumulationBuffer.reset(RenderBackend12::CreateNewShaderSurface({
+		.name = L"taa_accumulation_buffer_raster",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Persistent(),
+		.format = DXGI_FORMAT_R11G11B10_FLOAT,
+		.width = resX,
+		.height = resY }));
+
+	s_renderStatsBuffer.reset( RenderBackend12::CreateNewShaderBuffer({
+		.name = L"render_stats_buffer",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadWrite,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = sizeof(FRenderStats),
+		.fixedUavIndex = SpecialDescriptors::RenderStatsBufferUavIndex }));
 
 	// Generate Pixel Jitter Values
 	for (int sampleIdx = 0; sampleIdx < 16; ++sampleIdx)
@@ -151,7 +171,13 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"hdr_preprocess", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 
-	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface(L"env_brdf_uav", FShaderSurface::Type::UAV, FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)), DXGI_FORMAT_R16G16_FLOAT, width, height) };
+	std::unique_ptr<FShaderSurface> brdfUav{ RenderBackend12::CreateNewShaderSurface({
+		.name = L"env_brdf_uav",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+		.format = DXGI_FORMAT_R16G16_FLOAT,
+		.width = width,
+		.height = height })};
 
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "integrate_env_bdrf", 0);
@@ -201,7 +227,14 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 
 	// Copy from UAV to destination texture
 	brdfUav->m_resource->Transition(cmdList, brdfUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-	std::unique_ptr<FTexture> brdfTex{ RenderBackend12::CreateNewTexture(L"env_brdf_tex", FTexture::Type::Tex2D, FResource::Allocation::Persistent(), DXGI_FORMAT_R16G16_FLOAT, width, height, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
+	std::unique_ptr<FTexture> brdfTex{ RenderBackend12::CreateNewTexture({
+		.name = L"env_brdf_tex",
+		.type = FTexture::Type::Tex2D,
+		.alloc = FResource::Allocation::Persistent(),
+		.format = DXGI_FORMAT_R16G16_FLOAT,
+		.width = width,
+		.height = height,
+		.resourceState = D3D12_RESOURCE_STATE_COPY_DEST })};
 	d3dCmdList->CopyResource(brdfTex->m_resource->m_d3dResource, brdfUav->m_resource->m_d3dResource);
 	brdfTex->m_resource->Transition(cmdList, brdfTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -235,7 +268,20 @@ std::unique_ptr<FTexture> Renderer::GenerateWhiteNoiseTextures(const uint32_t wi
 	}
 
 	FResourceUploadContext uploader{ numSamples };
-	std::unique_ptr<FTexture> noiseTexArray{ RenderBackend12::CreateNewTexture(L"white_noise_array", FTexture::Type::Tex2DArray, FResource::Allocation::Persistent(), DXGI_FORMAT_R8_UNORM, width, height, 1, depth, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, noiseImages.data(), &uploader) };
+	std::unique_ptr<FTexture> noiseTexArray{ RenderBackend12::CreateNewTexture({
+		.name = L"white_noise_array",
+		.type = FTexture::Type::Tex2DArray,
+		.alloc = FResource::Allocation::Persistent(),
+		.format = DXGI_FORMAT_R8_UNORM,
+		.width = width,
+		.height = height,
+		.numSlices = depth,
+		.resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		.upload = {
+			.images = noiseImages.data(),
+			.context = &uploader 
+		}
+	})};
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_noise_texture", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
 	RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
@@ -496,7 +542,15 @@ void Renderer::ShEncode(FCommandList* cmdList, FShaderSurface* destSurface, cons
 	// ---------------------------------------------------------------------------------------------------------
 	// Project radiance to SH basis
 	// ---------------------------------------------------------------------------------------------------------
-	std::unique_ptr<FShaderSurface> shTexureUav{ RenderBackend12::CreateNewShaderSurface(L"ShProj", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), srcFormat, baseMipWidth, baseMipHeight, shMips, 1, numCoefficients) };
+	std::unique_ptr<FShaderSurface> shTexureUav{ RenderBackend12::CreateNewShaderSurface({
+		.name = L"ShProj",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = srcFormat,
+		.width = baseMipWidth,
+		.height = baseMipHeight,
+		.mipLevels = shMips,
+		.arraySize = numCoefficients })};
 	{
 		SCOPED_COMMAND_LIST_EVENT(cmdList, "SH_projection", 0);
 
@@ -789,27 +843,29 @@ void FDebugDraw::Initialize()
 		const size_t uploadBufferSize = primitives.size() * sizeof(FGpuPrimitive) + primitiveIndexCounts.size() * sizeof(uint32_t);
 		FResourceUploadContext uploader{ uploadBufferSize };
 
-		m_packedPrimitives.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"debug_primitives",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Persistent(),
-			primitives.size() * sizeof(FGpuPrimitive),
-			false,
-			(const uint8_t*)primitives.data(),
-			&uploader));
+		m_packedPrimitives.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"debug_primitives",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = primitives.size() * sizeof(FGpuPrimitive),
+			.upload = {
+				.pData = (const uint8_t*)primitives.data(), 
+				.context = &uploader 
+			}
+		}));
 
-		m_packedPrimitiveIndexCounts.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"debug_primitive_index_counts",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Persistent(),
-			primitiveIndexCounts.size() * sizeof(uint32_t),
-			false,
-			(const uint8_t*)primitiveIndexCounts.data(),
-			&uploader,
-			-1,
-			SpecialDescriptors::DebugPrimitiveIndexCountSrvIndex));
+		m_packedPrimitiveIndexCounts.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"debug_primitive_index_counts",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = primitiveIndexCounts.size() * sizeof(uint32_t),
+			.upload = {
+				.pData = (const uint8_t*)primitiveIndexCounts.data(),
+				.context = &uploader 
+			},
+			.fixedSrvIndex = SpecialDescriptors::DebugPrimitiveIndexCountSrvIndex }));
 
 		uploader.SubmitUploads(cmdList);
 
@@ -817,13 +873,48 @@ void FDebugDraw::Initialize()
 	}
 
 	// Buffer that contains queued debug draw commands
-	m_queuedCommandsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_commands", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Persistent(), MaxCommands * sizeof(FDebugDrawCmd)));
+	m_queuedCommandsBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"debug_draw_commands",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadWrite,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = MaxCommands * sizeof(FDebugDrawCmd) }));
 
 	// Indirect draw buffers
-	m_indirectPrimitiveArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_prim_args_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Persistent(), MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex));
-	m_indirectPrimitiveCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_prim_counts_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Persistent(), sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex));
-	m_indirectLineArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_line_args_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Persistent(), MaxCommands * sizeof(FIndirectDrawWithRootConstants), false, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex));
-	m_indirectLineCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(L"debug_draw_line_counts_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Persistent(), sizeof(uint32_t), true, nullptr, nullptr, SpecialDescriptors::DebugDrawIndirectLineCountUavIndex));
+	m_indirectPrimitiveArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"debug_draw_prim_args_buffer",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadWrite,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = MaxCommands * sizeof(FIndirectDrawWithRootConstants),
+		.fixedUavIndex = SpecialDescriptors::DebugDrawIndirectPrimitiveArgsUavIndex }));
+
+	m_indirectPrimitiveCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"debug_draw_prim_counts_buffer",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadWrite,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = sizeof(uint32_t),
+		.bCreateNonShaderVisibleDescriptor = true,
+		.fixedUavIndex = SpecialDescriptors::DebugDrawIndirectPrimitiveCountUavIndex }));
+
+
+	m_indirectLineArgsBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"debug_draw_line_args_buffer",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadWrite,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = MaxCommands * sizeof(FIndirectDrawWithRootConstants),
+		.fixedUavIndex = SpecialDescriptors::DebugDrawIndirectLineArgsUavIndex }));
+
+	m_indirectLineCountsBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"debug_draw_line_counts_buffer",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadWrite,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = sizeof(uint32_t),
+		.bCreateNonShaderVisibleDescriptor = true,
+		.fixedUavIndex = SpecialDescriptors::DebugDrawIndirectLineCountUavIndex }));
 }
 
 void FDebugDraw::DrawPrimitive(DebugShape::Type shapeType, Color color, Matrix transform, bool bPersistent)
@@ -909,17 +1000,18 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				uint32_t debugDrawCount;
 			};
 
-			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
-				L"debug_drawcall_gen_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(Constants),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[&](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"debug_drawcall_gen_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(Constants),
+				.uploadCallback = [&](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->queuedCommandsBufferIndex = m_queuedCommandsBuffer->m_descriptorIndices.SRV;
 					cb->debugDrawCount = (uint32_t)numCommands;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -960,19 +1052,20 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				int debugPrimitivesIndex;
 			};
 
-			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"frame_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(FrameCbLayout),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[this, passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"frame_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(FrameCbLayout),
+				.uploadCallback = [this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
 					cbDest->debugMeshAccessorsIndex = m_packedMeshAccessors->m_descriptorIndices.SRV;
 					cbDest->debugMeshBufferViewsIndex = m_packedMeshBufferViews->m_descriptorIndices.SRV;
 					cbDest->debugPrimitivesIndex = m_packedPrimitives->m_descriptorIndices.SRV;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -982,16 +1075,17 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix viewProjTransform;
 			};
 
-			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"view_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(ViewCbLayout),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"view_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(ViewCbLayout),
+				.uploadCallback = [passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -1107,16 +1201,17 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix sceneRotation;
 			};
 
-			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"frame_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(FrameCbLayout),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[this, passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"frame_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(FrameCbLayout),
+				.uploadCallback = [this, passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
 					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -1126,16 +1221,17 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 				Matrix viewProjTransform;
 			};
 
-			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"view_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(ViewCbLayout),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"view_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(ViewCbLayout),
+				.uploadCallback = [passDesc](uint8_t* pDest)
 				{
 					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
 					cbDest->viewProjTransform = passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
@@ -1283,20 +1379,118 @@ void Renderer::Render(const FRenderState& renderState)
 		FFenceMarker gpuFinishFence = RenderBackend12::GetCurrentFrameFence();
 		const DXGI_FORMAT hdrFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 		const DXGI_FORMAT visBufferFormat = DXGI_FORMAT_R32_UINT;
-		std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_raster", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), hdrFormat, resX, resY, 1, 1, 1, 1, true, true) };
-		std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface(L"depth_buffer_raster", FShaderSurface::Type::DepthStencil, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_D32_FLOAT_S8X24_UINT, resX, resY) };
-		std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface(L"hdr_scene_color_rt", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16B16A16_FLOAT, resX, resY, 1, 1, 1, 1, true, true) };
-		std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface(L"vis_buffer_raster", FShaderSurface::Type::RenderTarget, FResource::Allocation::Transient(gpuFinishFence), visBufferFormat, resX, resY) };
-		std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_basecolor", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY) };
-		std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_normals", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R16G16_FLOAT, resX, resY) };
-		std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface(L"gbuffer_metallic_roughness_ao", FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8G8B8A8_UNORM, resX, resY) };
-		std::unique_ptr<FShaderSurface> aoBuffer{ RenderBackend12::CreateNewShaderSurface(L"hbao", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), DXGI_FORMAT_R8_UNORM, resX, resY) };
-		std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer(L"mesh_highlight_indirect_args", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(FIndirectDrawWithRootConstants)) };
-		std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_args_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), totalPrimitives * sizeof(FIndirectDrawWithRootConstants)) };
-		std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"batch_counts_buffer", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
-		std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_count", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), sizeof(uint32_t), true) };
-		std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewShaderBuffer(L"culled_light_lists", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t), true) };
-		std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewShaderBuffer(L"light_grid", FShaderBuffer::Type::Raw, FResource::AccessMode::GpuReadWrite, FResource::Allocation::Transient(gpuFinishFence), 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t)) }; // Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
+
+		std::unique_ptr<FShaderSurface> hdrRasterSceneColor{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"hdr_scene_color_raster",
+			.type = FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = hdrFormat,
+			.width = resX,
+			.height = resY,
+			.bCreateNonShaderVisibleDescriptors = true })};
+
+		std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"depth_buffer_raster",
+			.type = FShaderSurface::Type::DepthStencil,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT,
+			.width = resX,
+			.height = resY })};
+
+		std::unique_ptr<FShaderSurface> hdrRaytraceSceneColor{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"hdr_scene_color_rt",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_R16G16B16A16_FLOAT,
+			.width = resX,
+			.height = resY,
+			.bCreateNonShaderVisibleDescriptors = true })};
+
+		std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"vis_buffer_raster",
+			.type = FShaderSurface::Type::RenderTarget,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = visBufferFormat,
+			.width = resX,
+			.height = resY })};
+
+		std::unique_ptr<FShaderSurface> gbuffer_basecolor{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"gbuffer_basecolor",
+			.type = FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_R8G8B8A8_UNORM,
+			.width = resX,
+			.height = resY })};
+
+		std::unique_ptr<FShaderSurface> gbuffer_normals{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"gbuffer_normals",
+			.type = FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_R16G16_FLOAT,
+			.width = resX,
+			.height = resY })};
+
+		std::unique_ptr<FShaderSurface> gbuffer_metallicRoughnessAo{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"gbuffer_metallic_roughness_ao",
+			.type = FShaderSurface::Type::RenderTarget | FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_R8G8B8A8_UNORM,
+			.width = resX,
+			.height = resY })};
+
+		std::unique_ptr<FShaderSurface> aoBuffer{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"hbao",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_R8_UNORM,
+			.width = resX,
+			.height = resY })};
+
+		std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"mesh_highlight_indirect_args",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = sizeof(FIndirectDrawWithRootConstants) })};
+
+		std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"batch_args_buffer",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = totalPrimitives * sizeof(FIndirectDrawWithRootConstants) })};
+
+		std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"batch_counts_buffer",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = sizeof(uint32_t),
+			.bCreateNonShaderVisibleDescriptor = true })};
+
+		std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"culled_light_count",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = sizeof(uint32_t),
+			.bCreateNonShaderVisibleDescriptor = true })};
+
+		std::unique_ptr<FShaderBuffer> culledLightListsBuffer{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"culled_light_lists",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = c.MaxLightsPerCluster * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t),
+			.bCreateNonShaderVisibleDescriptor = true })};
+
+		// Each entry contains an offset into the CulledLightList buffer and the number of lights in the cluster
+		std::unique_ptr<FShaderBuffer> lightGridBuffer{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"light_grid",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = 2 * c.LightClusterDimX * c.LightClusterDimY * c.LightClusterDimZ * sizeof(uint32_t) })}; 
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_buffers", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -1307,15 +1501,17 @@ void Renderer::Render(const FRenderState& renderState)
 			const size_t bufferSize = renderState.m_scene->m_globalLightList.size() * sizeof(FLight);
 			FResourceUploadContext uploader{ bufferSize };
 
-			packedLightPropertiesBuffer.reset(RenderBackend12::CreateNewShaderBuffer(
-				L"light_properties_buffer",
-				FShaderBuffer::Type::Raw,
-				FResource::AccessMode::GpuReadOnly,
-				FResource::Allocation::Transient(gpuFinishFence),
-				bufferSize,
-				false,
-				(const uint8_t*)renderState.m_scene->m_globalLightList.data(),
-				&uploader));
+			packedLightPropertiesBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+				.name = L"light_properties_buffer",
+				.type = FShaderBuffer::Type::Raw,
+				.accessMode = FResource::AccessMode::GpuReadOnly,
+				.alloc = FResource::Allocation::Transient(gpuFinishFence),
+				.size = bufferSize,
+				.upload = {
+					.pData = (const uint8_t*)renderState.m_scene->m_globalLightList.data(),
+					.context = &uploader
+				}
+			}));
 
 
 			uploader.SubmitUploads(cmdList);
@@ -1329,15 +1525,17 @@ void Renderer::Render(const FRenderState& renderState)
 			const size_t bufferSize = sceneLightCount * sizeof(Matrix);
 			FResourceUploadContext uploader{ bufferSize };
 
-			packedLightTransformsBuffer.reset(RenderBackend12::CreateNewShaderBuffer(
-				L"scene_light_transforms",
-				FShaderBuffer::Type::Raw,
-				FResource::AccessMode::GpuReadOnly,
-				FResource::Allocation::Transient(gpuFinishFence),
-				bufferSize,
-				false,
-				(const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),
-				&uploader));
+			packedLightTransformsBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+				.name = L"scene_light_transforms",
+				.type = FShaderBuffer::Type::Raw,
+				.accessMode = FResource::AccessMode::GpuReadOnly,
+				.alloc = FResource::Allocation::Transient(gpuFinishFence),
+				.size = bufferSize,
+				.upload = {
+					.pData = (const uint8_t*)renderState.m_scene->m_sceneLights.m_transformList.data(),
+					.context = &uploader 
+				}
+			})) ;
 
 			uploader.SubmitUploads(cmdList);
 		}
@@ -1346,12 +1544,12 @@ void Renderer::Render(const FRenderState& renderState)
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
 		// Scene Constants
-		std::unique_ptr<FSystemBuffer> cbSceneConstants{ RenderBackend12::CreateNewSystemBuffer(
-			L"scene_constants_cb",
-			FResource::AccessMode::CpuWriteOnly,
-			sizeof(FSceneConstants),
-			gpuFinishFence,
-			[scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
+		std::unique_ptr<FSystemBuffer> cbSceneConstants{ RenderBackend12::CreateNewSystemBuffer({
+			.name = L"scene_constants_cb",
+			.accessMode = FResource::AccessMode::CpuWriteOnly,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = sizeof(FSceneConstants),
+			.uploadCallback = [scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
 			{
 				const size_t lightCount = scene->m_sceneLights.GetCount();
 
@@ -1376,17 +1574,18 @@ void Renderer::Render(const FRenderState& renderState)
 				cb->m_skylightProbeIndex = scene->m_skylight.m_shTextureIndex;
 				cb->m_envBrdfTextureIndex = s_envBRDF->m_srvIndex;
 				cb->m_sunIndex = scene->GetDirectionalLight();
-			}) };
+			}
+		})};
 
 		Vector2 pixelJitter = config.EnableTAA && config.Viewmode == (int)Viewmode::Normal ? s_pixelJitterValues[frameIndex % 16] : Vector2{ 0.f, 0.f };
 
 		// View Constants
-		std::unique_ptr<FSystemBuffer> cbViewConstants{ RenderBackend12::CreateNewSystemBuffer(
-			L"view_constants_cb",
-			FResource::AccessMode::CpuWriteOnly,
-			sizeof(FViewConstants),
-			gpuFinishFence,
-			[&renderState, pixelJitter, config](uint8_t* pDest)
+		std::unique_ptr<FSystemBuffer> cbViewConstants{ RenderBackend12::CreateNewSystemBuffer({
+			.name = L"view_constants_cb",
+			.accessMode = FResource::AccessMode::CpuWriteOnly,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = sizeof(FViewConstants),
+			.uploadCallback = [&renderState, pixelJitter, config](uint8_t* pDest)
 			{
 				const FView& view = renderState.m_view;
 				Matrix jitterMatrix = Matrix::CreateTranslation(pixelJitter.x, pixelJitter.y, 0.f);
@@ -1418,7 +1617,8 @@ void Renderer::Render(const FRenderState& renderState)
 				cb->m_mouseX = renderState.m_mouseX;
 				cb->m_mouseY = renderState.m_mouseY;
 				cb->m_viewmode = config.Viewmode;
-			}) };
+			}
+		})};
 
 
 		// Update acceleration structure. Can be used by both pathtracing and raster paths.

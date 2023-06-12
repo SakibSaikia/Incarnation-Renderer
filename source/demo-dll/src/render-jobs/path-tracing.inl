@@ -79,42 +79,45 @@ namespace RenderJob::PathTracing
 
 			// Raygen shader table
 			const size_t raygenShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FSystemBuffer> raygenShaderTable{ RenderBackend12::CreateNewSystemBuffer(
-				L"raygen_sbt",
-				FResource::AccessMode::CpuWriteOnly,
-				1 * raygenShaderRecordSize,
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> raygenShaderTable{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"raygen_sbt",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = 1 * raygenShaderRecordSize,
+				.uploadCallback = [shaderId = psoInfo->GetShaderIdentifier(L"rgsMain")](uint8_t* pDest)
 				{
 					memcpy(pDest, shaderId, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-				}) };
+				}
+			})};
 
 			// Miss shader table
 			const size_t missShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FSystemBuffer> missShaderTable{ RenderBackend12::CreateNewSystemBuffer(
-				L"miss_sbt",
-				FResource::AccessMode::CpuWriteOnly,
-				3 * missShaderRecordSize,
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[&psoInfo](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> missShaderTable{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"miss_sbt",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = 3 * missShaderRecordSize,
+				.uploadCallback = [&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"msEnvmap"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msDynamicSky"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					memcpy(pDest + 2 * D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"msShadow"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-				}) };
+				}
+			})};
 
 			// Hit shader table
 			const size_t hitGroupShaderRecordSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-			std::unique_ptr<FSystemBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewSystemBuffer(
-				L"hit_sbt",
-				FResource::AccessMode::CpuWriteOnly,
-				2 * hitGroupShaderRecordSize,
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[&psoInfo](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> hitGroupShaderTable{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"hit_sbt",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = 2 * hitGroupShaderRecordSize,
+				.uploadCallback = [&psoInfo](uint8_t* pDest)
 				{
 					memcpy(pDest, psoInfo->GetShaderIdentifier(L"k_hitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					memcpy(pDest + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, psoInfo->GetShaderIdentifier(L"k_shadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-				}) };
+				}
+			})};
 
 			// Descriptor heaps
 			D3DDescriptorHeap_t* descriptorHeaps[] =
@@ -164,12 +167,12 @@ namespace RenderJob::PathTracing
 				float skyBrightness;
 			};
 
-			std::unique_ptr<FSystemBuffer> globalCb{ RenderBackend12::CreateNewSystemBuffer(
-				L"global_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(GlobalCbLayout),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[passDesc, perezConstants](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> globalCb{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"global_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(GlobalCbLayout),
+				.uploadCallback = [passDesc, perezConstants](uint8_t* pDest)
 				{
 					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
 
@@ -208,7 +211,8 @@ namespace RenderJob::PathTracing
 					cbDest->turbidity = passDesc.renderConfig.Turbidity;
 					cbDest->sunDir = Vector3(L);
 					cbDest->skyBrightness = passDesc.renderConfig.SkyBrightness;
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, globalCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->SetComputeRootShaderResourceView(1, passDesc.scene->m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress());

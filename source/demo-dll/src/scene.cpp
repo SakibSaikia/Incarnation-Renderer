@@ -385,15 +385,17 @@ void FModelLoader::LoadMeshBuffers(const tinygltf::Model& model)
 	m_meshBuffers.resize(model.buffers.size());
 	for (int bufferIndex = 0; bufferIndex < model.buffers.size(); ++bufferIndex)
 	{
-		m_meshBuffers[bufferIndex].reset(RenderBackend12::CreateNewShaderBuffer(
-			PrintString(L"scene_mesh_buffer_%d", bufferIndex),
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Persistent(),
-			model.buffers[bufferIndex].data.size(),
-			false,
-			model.buffers[bufferIndex].data.data(),
-			&uploader));
+		m_meshBuffers[bufferIndex].reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = PrintString(L"scene_mesh_buffer_%d", bufferIndex),
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = model.buffers[bufferIndex].data.size(),
+			.upload = {
+				.pData = model.buffers[bufferIndex].data.data(),
+				.context = &uploader 
+			}
+		}));
 
 		FScene::s_loadProgress += progressIncrement;
 	}
@@ -420,15 +422,17 @@ void FModelLoader::LoadMeshBufferViews(const tinygltf::Model& model)
 	const size_t bufferSize = views.size() * sizeof(FMeshBufferView);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMeshBufferViews.reset(RenderBackend12::CreateNewShaderBuffer(
-		L"scene_mesh_buffer_views",
-		FShaderBuffer::Type::Raw,
-		FResource::AccessMode::GpuReadOnly,
-		FResource::Allocation::Persistent(),
-		bufferSize,
-		false,
-		(const uint8_t*)views.data(),
-		&uploader));
+	m_packedMeshBufferViews.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"scene_mesh_buffer_views",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadOnly,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = bufferSize,
+		.upload = {
+			.pData = (const uint8_t*)views.data(),
+			.context = &uploader
+		}
+	}));
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_buffer_views", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
@@ -454,15 +458,17 @@ void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 	const size_t bufferSize = accessors.size() * sizeof(FMeshAccessor);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMeshAccessors.reset(RenderBackend12::CreateNewShaderBuffer(
-		L"scene_mesh_accessors",
-		FShaderBuffer::Type::Raw,
-		FResource::AccessMode::GpuReadOnly,
-		FResource::Allocation::Persistent(),
-		bufferSize,
-		false,
-		(const uint8_t*)accessors.data(),
-		&uploader));
+	m_packedMeshAccessors.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"scene_mesh_accessors",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadOnly,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = bufferSize,
+		.upload = {
+			.pData = (const uint8_t*)accessors.data(),
+			.context = &uploader 
+		}
+	}));
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_mesh_accessors", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
@@ -503,15 +509,17 @@ void FScene::CreateGpuPrimitiveBuffers()
 		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedPrimitives.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"scene_primitives",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Persistent(),
-			bufferSize,
-			false,
-			(const uint8_t*)primitives.data(),
-			&uploader));
+		m_packedPrimitives.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"scene_primitives",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = bufferSize,
+			.upload = {
+				.pData = (const uint8_t*)primitives.data(),
+				.context = &uploader 
+			}
+		}));
 
 		uploader.SubmitUploads(cmdList);
 	}
@@ -527,15 +535,17 @@ void FScene::CreateGpuPrimitiveBuffers()
 		const size_t bufferSize = primitiveCounts.size() * sizeof(uint32_t);
 		FResourceUploadContext uploader{ bufferSize };
 
-		m_packedPrimitiveCounts.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"scene_primitive_counts",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Persistent(),
-			bufferSize,
-			false,
-			(const uint8_t*)primitiveCounts.data(),
-			&uploader));
+		m_packedPrimitiveCounts.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"scene_primitive_counts",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = bufferSize,
+			.upload = {
+				.pData = (const uint8_t*)primitiveCounts.data(),
+				.context = &uploader 
+			}
+		}));
 
 		uploader.SubmitUploads(cmdList);
 	}
@@ -551,15 +561,17 @@ void FScene::CreateGpuLightBuffers()
 		const size_t indexBufferSize = numLights * sizeof(int);
 		FResourceUploadContext uploader{ indexBufferSize };
 
-		m_packedLightIndices.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"scene_light_indices",
-			FShaderBuffer::Type::Raw,
-			FResource::AccessMode::GpuReadOnly,
-			FResource::Allocation::Persistent(),
-			indexBufferSize,
-			false,
-			(const uint8_t*)m_sceneLights.m_entityList.data(),
-			&uploader));
+		m_packedLightIndices.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"scene_light_indices",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = indexBufferSize,
+			.upload = {
+				.pData = (const uint8_t*)m_sceneLights.m_entityList.data(),
+				.context = &uploader 
+			}
+		}));
 
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_lights", D3D12_COMMAND_LIST_TYPE_DIRECT);
 		uploader.SubmitUploads(cmdList);
@@ -647,19 +659,19 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO blasPreBuildInfo = {};
 				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&blasInputsDesc, &blasPreBuildInfo);
 
-				std::unique_ptr<FShaderBuffer> blasScratch{ RenderBackend12::CreateNewShaderBuffer(
-					L"blas_scratch",
-					FShaderBuffer::Type::AccelerationStructure,
-					FResource::AccessMode::GpuWriteOnly,
-					FResource::Allocation::Transient(gpuFinishFence),
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes)) };
+				std::unique_ptr<FShaderBuffer> blasScratch{ RenderBackend12::CreateNewShaderBuffer({
+					.name = L"blas_scratch",
+					.type = FShaderBuffer::Type::AccelerationStructure,
+					.accessMode = FResource::AccessMode::GpuWriteOnly,
+					.alloc = FResource::Allocation::Transient(gpuFinishFence),
+					.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ScratchDataSizeInBytes) })};
 
-				m_blasList[meshName].reset(RenderBackend12::CreateNewShaderBuffer(
-					PrintString(L"%s_blas", s2ws(meshName)),
-					FShaderBuffer::Type::AccelerationStructure,
-					FResource::AccessMode::GpuReadWrite,
-					FResource::Allocation::Persistent(),
-					GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes)));
+				m_blasList[meshName].reset(RenderBackend12::CreateNewShaderBuffer({
+					.name = PrintString(L"%s_blas", s2ws(meshName)),
+					.type = FShaderBuffer::Type::AccelerationStructure,
+					.accessMode = FResource::AccessMode::GpuReadWrite,
+					.alloc = FResource::Allocation::Persistent(),
+					.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, blasPreBuildInfo.ResultDataMaxSizeInBytes) }));
 
 				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 				buildDesc.Inputs = blasInputsDesc;
@@ -699,15 +711,16 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 	// Build TLAS
 	{
 		const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-		std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer(
-			L"instance_descs_buffer",
-			FResource::AccessMode::CpuWriteOnly,
-			instanceDescBufferSize,
-			gpuFinishFence,
-			[pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
+		std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer({
+			.name = L"instance_descs_buffer",
+			.accessMode = FResource::AccessMode::CpuWriteOnly,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = instanceDescBufferSize,
+			.uploadCallback = [pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
 			{
 				memcpy(pDest, pData, instanceDescBufferSize);
-			}) };
+			}
+		})};
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
 		tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
@@ -719,19 +732,19 @@ void FScene::CreateAccelerationStructures(const tinygltf::Model& model)
 		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
 		RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
-		std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer(
-			L"tlas_scratch",
-			FShaderBuffer::Type::AccelerationStructure,
-			FResource::AccessMode::GpuWriteOnly,
-			FResource::Allocation::Transient(gpuFinishFence),
-			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)) };
+		std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"tlas_scratch",
+			.type = FShaderBuffer::Type::AccelerationStructure,
+			.accessMode = FResource::AccessMode::GpuWriteOnly,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes) })};
 
-		m_tlas.reset(RenderBackend12::CreateNewShaderBuffer(
-			L"tlas_buffer",
-			FShaderBuffer::Type::AccelerationStructure,
-			FResource::AccessMode::GpuReadWrite,
-			FResource::Allocation::Persistent(),
-			GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes)));
+		m_tlas.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"tlas_buffer",
+			.type = FShaderBuffer::Type::AccelerationStructure,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ResultDataMaxSizeInBytes) }));
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 		buildDesc.Inputs = tlasInputsDesc;
@@ -764,15 +777,17 @@ void FScene::LoadMaterials(const tinygltf::Model& model)
 	const size_t bufferSize = m_materialList.size() * sizeof(FMaterial);
 	FResourceUploadContext uploader{ bufferSize };
 
-	m_packedMaterials.reset(RenderBackend12::CreateNewShaderBuffer(
-		L"scene_materials",
-		FShaderBuffer::Type::Raw,
-		FResource::AccessMode::GpuReadOnly,
-		FResource::Allocation::Persistent(),
-		bufferSize,
-		false,
-		(const uint8_t*)m_materialList.data(),
-		&uploader));
+	m_packedMaterials.reset(RenderBackend12::CreateNewShaderBuffer({
+		.name = L"scene_materials",
+		.type = FShaderBuffer::Type::Raw,
+		.accessMode = FResource::AccessMode::GpuReadOnly,
+		.alloc = FResource::Allocation::Persistent(),
+		.size = bufferSize,
+		.upload = {
+			.pData = (const uint8_t*)m_materialList.data(),
+			.context = &uploader 
+		}
+	}));
 
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_materials", D3D12_COMMAND_LIST_TYPE_DIRECT);
 	uploader.SubmitUploads(cmdList);
@@ -1091,14 +1106,55 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 	// Create source textures
 	const size_t uploadSize = RenderBackend12::GetResourceSize(normalScratch) + RenderBackend12::GetResourceSize(metallicRoughnessScratch);
 	FResourceUploadContext uploader{ uploadSize };
-	std::unique_ptr<FTexture> srcNormalmap{ RenderBackend12::CreateNewTexture(L"src_normalmap", FTexture::Type::Tex2D, FResource::Allocation::Transient(gpuFinishFence), normalmapImage.format, normalmapImage.width, normalmapImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &normalmapImage, &uploader) };
-	std::unique_ptr<FTexture> srcMetallicRoughnessmap{ RenderBackend12::CreateNewTexture(L"src_metallic_roughness", FTexture::Type::Tex2D, FResource::Allocation::Transient(gpuFinishFence), metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, &metallicRoughnessImage, &uploader) };
+
+	std::unique_ptr<FTexture> srcNormalmap{ RenderBackend12::CreateNewTexture({
+		.name = L"src_normalmap",
+		.type = FTexture::Type::Tex2D,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = normalmapImage.format,
+		.width = normalmapImage.width,
+		.height = normalmapImage.height,
+		.resourceState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		.upload = {
+			.images = &normalmapImage,
+			.context = &uploader 
+		}
+	})};
+
+	std::unique_ptr<FTexture> srcMetallicRoughnessmap{ RenderBackend12::CreateNewTexture({
+		.name = L"src_metallic_roughness",
+		.type = FTexture::Type::Tex2D,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = metallicRoughnessImage.format,
+		.width = metallicRoughnessImage.width,
+		.height = metallicRoughnessImage.height,
+		.resourceState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+		.upload = {
+			.images = &metallicRoughnessImage,
+			.context = &uploader
+		}
+	})};
 
 	// Create UAVs for prefiltering
-	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);
+	size_t normalmapMipCount = RenderUtils12::CalcMipCount(normalmapImage.width, normalmapImage.height, true);	
+	std::unique_ptr<FShaderSurface> normalmapFilterUav{ RenderBackend12::CreateNewShaderSurface({
+		.name = L"dest_normalmap",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = normalmapImage.format,
+		.width = normalmapImage.width,
+		.height = normalmapImage.height,
+		.mipLevels = normalmapMipCount })};
+
 	size_t metallicRoughnessMipCount = RenderUtils12::CalcMipCount(metallicRoughnessImage.width, metallicRoughnessImage.height, true);
-	std::unique_ptr<FShaderSurface> normalmapFilterUav{ RenderBackend12::CreateNewShaderSurface(L"dest_normalmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), normalmapImage.format, normalmapImage.width, normalmapImage.height, normalmapMipCount) };
-	std::unique_ptr<FShaderSurface> metallicRoughnessFilterUav{ RenderBackend12::CreateNewShaderSurface(L"dest_metallicRoughnessmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), metallicRoughnessImage.format, metallicRoughnessImage.width, metallicRoughnessImage.height, metallicRoughnessMipCount) };
+	std::unique_ptr<FShaderSurface> metallicRoughnessFilterUav{ RenderBackend12::CreateNewShaderSurface({
+		.name = L"dest_metallicRoughnessmap",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = metallicRoughnessImage.format,
+		.width = metallicRoughnessImage.width,
+		.height = metallicRoughnessImage.height,
+		.mipLevels = metallicRoughnessMipCount })};
 
 	D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 	SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "prefilter_normal_roughness", 0);
@@ -1453,8 +1509,24 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 	const DXGI_FORMAT radianceFormat = DXGI_FORMAT_R11G11B10_FLOAT;
 	const int cubemapRes = Demo::GetConfig().EnvmapResolution;
 	size_t numMips = RenderUtils12::CalcMipCount(cubemapRes, cubemapRes, false);
-	std::shared_ptr<FShaderSurface> newEnvmap{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_envmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, cubemapRes, cubemapRes, numMips, 1, 6) };
-	std::shared_ptr<FShaderSurface> newSH{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_sh", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), shFormat, numSHCoefficients, 1) };
+
+	std::shared_ptr<FShaderSurface> newEnvmap{ RenderBackend12::CreateNewShaderSurface({
+		.name = L"dynamic_sky_envmap",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = radianceFormat,
+		.width = (size_t)cubemapRes,
+		.height = (size_t) cubemapRes,
+		.mipLevels = numMips,
+		.arraySize = 6 })};
+
+	std::shared_ptr<FShaderSurface> newSH{ RenderBackend12::CreateNewShaderSurface({
+		.name = L"dynamic_sky_sh",
+		.type = FShaderSurface::Type::UAV,
+		.alloc = FResource::Allocation::Transient(gpuFinishFence),
+		.format = shFormat,
+		.width = numSHCoefficients,
+		.height = 1 })};
 
 	{
 		//FScopedGpuCapture capture(cmdList);
@@ -1468,7 +1540,15 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Render dynamic sky to 2D surface to a latlong texture
 		const int resX = 2 * cubemapRes, resY = cubemapRes;
-		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface(L"dynamic_sky_tex", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, resX, resY, numMips) };
+		std::unique_ptr<FShaderSurface> dynamicSkySurface{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"dynamic_sky_tex",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = radianceFormat,
+			.width = (size_t)resX,
+			.height = (size_t)resY,
+			.mipLevels = numMips })};
+
 		Renderer::GenerateDynamicSkyTexture(cmdList, dynamicSkySurface->m_descriptorIndices.UAVs[0], resX, resY, m_sunDir);
 
 		// Downsample to generate mips
@@ -1489,7 +1569,16 @@ void FScene::UpdateDynamicSky(bool bUseAsyncCompute)
 
 		// Convert to cubemap
 		const size_t cubemapSize = cubemapRes;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, cubemapSize, cubemapSize, numMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"src_cubemap",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = radianceFormat,
+			.width = cubemapSize,
+			.height = cubemapSize,
+			.mipLevels = numMips,
+			.arraySize = 6 })};
+
 		Renderer::ConvertLatlong2Cubemap(cmdList, dynamicSkySurface->m_descriptorIndices.SRV, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// Prefilter the cubemap

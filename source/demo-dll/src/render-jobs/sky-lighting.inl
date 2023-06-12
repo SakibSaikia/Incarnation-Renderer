@@ -91,12 +91,12 @@ namespace RenderJob::SkyLightingPass
 				Matrix invViewProjTransform;
 			};
 
-			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
-				L"sky_lighting_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(Constants),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[passDesc](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"sky_lighting_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(Constants),
+				.uploadCallback = [passDesc](uint8_t* pDest)
 				{
 					auto cb = reinterpret_cast<Constants*>(pDest);
 					cb->skylightProbeIndex = passDesc.scene->m_skylight.m_shTextureIndex;
@@ -112,7 +112,8 @@ namespace RenderJob::SkyLightingPass
 					cb->eyePos = passDesc.view->m_position;
 					cb->envBrdfTextureIndex = passDesc.envBRDFTex->m_srvIndex;
 					cb->invViewProjTransform = (passDesc.view->m_viewTransform * passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert();
-				}) };
+				}
+			})};
 
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 

@@ -133,12 +133,12 @@ namespace RenderJob::DynamicSkyPass
 				Vector3 sunDir;
 			};
 
-			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer(
-				L"dynamic_sky_cb",
-				FResource::AccessMode::CpuWriteOnly,
-				sizeof(Constants),
-				cmdList->GetFence(FCommandList::SyncPoint::GpuFinish),
-				[passDesc, perezConstants](uint8_t* pDest)
+			std::unique_ptr<FSystemBuffer> cbuf{ RenderBackend12::CreateNewSystemBuffer({
+				.name = L"dynamic_sky_cb",
+				.accessMode = FResource::AccessMode::CpuWriteOnly,
+				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+				.size = sizeof(Constants),
+				.uploadCallback = [passDesc, perezConstants](uint8_t* pDest)
 				{
 					Matrix parallaxViewMatrix = passDesc.view->m_viewTransform;
 					parallaxViewMatrix.Translation(Vector3::Zero);
@@ -152,7 +152,8 @@ namespace RenderJob::DynamicSkyPass
 					cb->turbidity = passDesc.renderConfig.Turbidity;
 					cb->sunDir = L;
 
-				}) };
+				} 
+			})};
 
 			d3dCmdList->SetGraphicsRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 			d3dCmdList->DrawInstanced(3, 1, 0, 0);

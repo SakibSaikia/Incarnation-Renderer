@@ -36,6 +36,7 @@ using PhysicalAlloc_t = std::vector<uint32_t>;
 struct IDxcBlob;
 struct FResource;
 struct FConfig;
+class FResourceUploadContext;
 
 enum class DescriptorType
 {
@@ -238,6 +239,26 @@ struct FTexture
 		TexCube
 	};
 
+	struct FUploadDesc
+	{
+		const DirectX::Image* images = nullptr;
+		FResourceUploadContext* context = nullptr;
+	};
+
+	struct FResourceDesc
+	{
+		const std::wstring& name;
+		FTexture::Type type;
+		FResource::Allocation alloc;
+		DXGI_FORMAT format;
+		size_t width;
+		size_t height;
+		size_t numMips = 1;
+		size_t numSlices = 1;
+		D3D12_RESOURCE_STATES resourceState;
+		FUploadDesc upload;
+	};
+
 	FResource* m_resource;
 	FResource::Allocation m_alloc;
 	uint32_t m_srvIndex = ~0u;
@@ -267,6 +288,22 @@ struct FShaderSurface
 		UAV = (1 << 3)
 	};
 
+	struct FResourceDesc
+	{
+		const std::wstring& name;
+		uint32_t type;
+		FResource::Allocation alloc;
+		DXGI_FORMAT format;
+		size_t width;
+		size_t height;
+		size_t mipLevels = 1;
+		size_t depth = 1;
+		size_t arraySize = 1;
+		size_t sampleCount = 1;
+		bool bCreateSRV = true;
+		bool bCreateNonShaderVisibleDescriptors = false;
+	};
+
 	struct FDescriptors
 	{
 		uint32_t SRV;
@@ -293,6 +330,27 @@ struct FShaderBuffer
 		AccelerationStructure
 	};
 
+	struct FUploadDesc
+	{
+		const uint8_t* pData = nullptr;
+		FResourceUploadContext* context = nullptr;
+	};
+
+	struct FResourceDesc
+	{
+		const std::wstring& name;
+		Type type;
+		FResource::AccessMode accessMode;
+		FResource::Allocation alloc;
+		size_t size;
+		bool bCreateNonShaderVisibleDescriptor = false;
+		FUploadDesc upload;
+		// Use provided UAV index instead of fetching one from bindless descriptor pool
+		int fixedUavIndex = -1;
+		// Use provided SRV index instead of fetching one from bindless descriptor pool
+		int fixedSrvIndex = -1;
+	};
+
 	struct FDescriptors
 	{
 		uint32_t UAV;
@@ -313,9 +371,18 @@ struct FShaderBuffer
 //--------------------------------------------------------------------
 struct FSystemBuffer
 {
+	struct FResourceDesc
+	{
+		const std::wstring& name;
+		FResource::AccessMode accessMode;
+		FResource::Allocation alloc;
+		size_t size;							
+		std::function<void(uint8_t*)> uploadCallback = nullptr;
+	};
+
 	FResource* m_resource;
 	FResource::AccessMode m_accessMode;
-	FFenceMarker m_fenceMarker;
+	FResource::Allocation m_alloc;
 	~FSystemBuffer();
 };
 
@@ -450,59 +517,17 @@ namespace RenderBackend12
 	// Feature Support
 	uint32_t GetLaneCount();
 
-	// Resource Management
-	FShaderSurface* CreateNewShaderSurface(
-		const std::wstring& name,
-		const uint32_t surfaceType,
-		const FResource::Allocation alloc,
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t mipLevels = 1,
-		const size_t depth = 1,
-		const size_t arraySize = 1,
-		const size_t sampleCount = 1,
-		const bool bCreateSRV = true,
-		const bool bCreateNonShaderVisibleDescriptors = false);
-
-	FTexture* CreateNewTexture(
-		const std::wstring& name, 
-		const FTexture::Type type,
-		const FResource::Allocation alloc,
-		const DXGI_FORMAT format,
-		const size_t width,
-		const size_t height,
-		const size_t numMips,
-		const size_t numSlices,
-		D3D12_RESOURCE_STATES resourceState,
-		const DirectX::Image* images = nullptr,
-		FResourceUploadContext* uploadContext = nullptr);
+	// Resource Management (User owns the memory and is responsible for freeing it)
+	FShaderSurface* CreateNewShaderSurface(const FShaderSurface::FResourceDesc& desc);
+	FShaderBuffer* CreateNewShaderBuffer(const FShaderBuffer::FResourceDesc& desc);
+	FSystemBuffer* CreateNewSystemBuffer(const FSystemBuffer::FResourceDesc& desc);
+	FTexture* CreateNewTexture(const FTexture::FResourceDesc& desc);
 
 	uint32_t CreateSampler(
 		const D3D12_FILTER filter,
 		const D3D12_TEXTURE_ADDRESS_MODE addressU,
 		const D3D12_TEXTURE_ADDRESS_MODE addressV,
 		const D3D12_TEXTURE_ADDRESS_MODE addressW);
-
-	FShaderBuffer* CreateNewShaderBuffer(
-		const std::wstring& name,
-		const FShaderBuffer::Type type,
-		const FResource::AccessMode accessMode,
-		const FResource::Allocation alloc,
-		const size_t size,
-		const bool bCreateNonShaderVisibleDescriptor = false,
-		const uint8_t* pData = nullptr,
-		FResourceUploadContext* uploadContext = nullptr,
-		const int fixedUavIndex = -1,								// Use provided UAV index instead of fetching one from bindless descriptor pool
-		const int fixedSrvIndex = -1								// Use provided SRV index instead of fetching one from bindless descriptor pool
-		);
-
-	FSystemBuffer* CreateNewSystemBuffer(
-		const std::wstring& name,
-		const FResource::AccessMode accessMode,
-		const size_t size,
-		const FFenceMarker retireFence,								// Fence marker that decides whether the buffer is ready to be released. This is usually the fence for the associated command list that uses this buffer.
-		std::function<void(uint8_t*)> uploadFunc = nullptr);
 
 	size_t GetResourceSize(const DirectX::ScratchImage& image);
 

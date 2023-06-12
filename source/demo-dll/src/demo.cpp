@@ -250,7 +250,21 @@ uint32_t FTextureCache::CacheTexture2D(
 	}
 	else
 	{
-		m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture(name, FTexture::Type::Tex2D, FResource::Allocation::Persistent(), format, width, height, imageCount, 1, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, images, uploadContext));
+		m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture({
+			.name = name,
+			.type = FTexture::Type::Tex2D,
+			.alloc = FResource::Allocation::Persistent(),
+			.format = format,
+			.width = (size_t)width,
+			.height = (size_t)height,
+			.numMips = imageCount,
+			.resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			.upload = {
+				.images = images,
+				.context = uploadContext
+			}
+		}));
+
 		return m_cachedTextures[name]->m_srvIndex;
 	}
 }
@@ -262,7 +276,16 @@ uint32_t FTextureCache::CacheEmptyTexture2D(
 	const int height,
 	const size_t mipCount)
 {
-	m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture(name, FTexture::Type::Tex2D, FResource::Allocation::Persistent(), format, width, height, mipCount, 1, D3D12_RESOURCE_STATE_COPY_DEST));
+	m_cachedTextures[name].reset(RenderBackend12::CreateNewTexture({
+		.name = name,
+		.type = FTexture::Type::Tex2D,
+		.alloc = FResource::Allocation::Persistent(),
+		.format = format,
+		.width = (size_t)width,
+		.height = (size_t)height,
+		.numMips = mipCount,
+		.resourceState = D3D12_RESOURCE_STATE_COPY_DEST }));
+
 	return m_cachedTextures[name]->m_srvIndex;
 }
 
@@ -304,9 +327,20 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 
 		// Create the equirectangular source texture
 		FResourceUploadContext uploadContext{ mipchain.GetPixelsSize() };
-		std::unique_ptr<FTexture> srcHdrTex{ RenderBackend12::CreateNewTexture(
-			name, FTexture::Type::Tex2D, FResource::Allocation::Transient(gpuFinishFence), metadata.format, metadata.width, metadata.height, mipchain.GetImageCount(), 1,
-			D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, mipchain.GetImages(), &uploadContext) };
+		std::unique_ptr<FTexture> srcHdrTex{ RenderBackend12::CreateNewTexture({
+			.name = name,
+			.type = FTexture::Type::Tex2D,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = metadata.format,
+			.width = metadata.width,
+			.height = metadata.height,
+			.numMips = mipchain.GetImageCount(),
+			.resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+			.upload = {
+				.images = mipchain.GetImages(),
+				.context = &uploadContext
+			}
+		})};
 
 		D3DCommandList_t* d3dCmdList = cmdList->m_d3dCmdList.get();
 		SCOPED_COMMAND_QUEUE_EVENT(cmdList->m_type, "hdr_preprocess", 0);
@@ -317,7 +351,15 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t cubemapSize = metadata.height;
 		constexpr DXGI_FORMAT radianceFormat = DXGI_FORMAT_R11G11B10_FLOAT;
-		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface(L"src_cubemap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, cubemapSize, cubemapSize, numMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texCubeUav{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"src_cubemap",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = radianceFormat,
+			.width = cubemapSize,
+			.height = cubemapSize,
+			.mipLevels = numMips,
+			.arraySize = 6 })};
 		Renderer::ConvertLatlong2Cubemap(cmdList, srcHdrTex->m_srvIndex, texCubeUav->m_descriptorIndices.UAVs, cubemapSize, numMips);
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -325,14 +367,31 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		const size_t filteredEnvmapSize = cubemapSize >> 1;
 		const int filteredEnvmapMips = numMips - 1;
-		std::unique_ptr<FShaderSurface> texFilteredEnvmapUav{ RenderBackend12::CreateNewShaderSurface(L"filtered_envmap", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), radianceFormat, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 1, 6) };
+		std::unique_ptr<FShaderSurface> texFilteredEnvmapUav{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"filtered_envmap",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = radianceFormat,
+			.width = filteredEnvmapSize,
+			.height = filteredEnvmapSize,
+			.mipLevels = (size_t)filteredEnvmapMips,
+			.arraySize = 6 })};
 		texCubeUav->m_resource->Transition(cmdList, texCubeUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		Renderer::PrefilterCubemap(cmdList, texCubeUav->m_descriptorIndices.SRV, texFilteredEnvmapUav->m_descriptorIndices.UAVs, filteredEnvmapSize, 0, filteredEnvmapMips);
 
 
 		// Copy from UAV to destination cubemap texture
 		texFilteredEnvmapUav->m_resource->Transition(cmdList, texFilteredEnvmapUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		std::unique_ptr<FTexture> filteredEnvmapTex{ RenderBackend12::CreateNewTexture(envmapTextureName, FTexture::Type::TexCube, FResource::Allocation::Persistent(), radianceFormat, filteredEnvmapSize, filteredEnvmapSize, filteredEnvmapMips, 6, D3D12_RESOURCE_STATE_COPY_DEST) };
+		std::unique_ptr<FTexture> filteredEnvmapTex{ RenderBackend12::CreateNewTexture({
+			.name = envmapTextureName,
+			.type = FTexture::Type::TexCube,
+			.alloc = FResource::Allocation::Persistent(),
+			.format = radianceFormat,
+			.width = filteredEnvmapSize,
+			.height = filteredEnvmapSize,
+			.numMips = (size_t)filteredEnvmapMips,
+			.numSlices = 6,
+			.resourceState = D3D12_RESOURCE_STATE_COPY_DEST })};
 		d3dCmdList->CopyResource(filteredEnvmapTex->m_resource->m_d3dResource, texFilteredEnvmapUav->m_resource->m_d3dResource);
 		filteredEnvmapTex->m_resource->Transition(cmdList, filteredEnvmapTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[envmapTextureName] = std::move(filteredEnvmapTex);
@@ -342,12 +401,25 @@ FLightProbe FTextureCache::CacheHDRI(const std::wstring& name)
 		// ---------------------------------------------------------------------------------------------------------
 		constexpr int numCoefficients = 9;
 		constexpr DXGI_FORMAT shFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
-		std::unique_ptr<FShaderSurface> shExportTexureUav{ RenderBackend12::CreateNewShaderSurface(L"ShEncode", FShaderSurface::Type::UAV, FResource::Allocation::Transient(gpuFinishFence), shFormat, numCoefficients, 1) };
+		std::unique_ptr<FShaderSurface> shExportTexureUav{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"ShEncode",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = shFormat,
+			.width = numCoefficients,
+			.height = 1 })};
 		Renderer::ShEncode(cmdList, shExportTexureUav.get(), srcHdrTex->m_srvIndex, shFormat, metadata.width, metadata.height);
 
 		// Copy from UAV to destination texture
 		shExportTexureUav->m_resource->Transition(cmdList, shExportTexureUav->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		std::unique_ptr<FTexture> shTex{ RenderBackend12::CreateNewTexture(shTextureName, FTexture::Type::Tex2D, FResource::Allocation::Persistent(), shFormat, numCoefficients, 1, 1, 1, D3D12_RESOURCE_STATE_COPY_DEST) };
+		std::unique_ptr<FTexture> shTex{ RenderBackend12::CreateNewTexture({
+			.name = shTextureName,
+			.type = FTexture::Type::Tex2D,
+			.alloc = FResource::Allocation::Persistent(),
+			.format = shFormat,
+			.width = numCoefficients,
+			.height = 1,
+			.resourceState = D3D12_RESOURCE_STATE_COPY_DEST })};
 		d3dCmdList->CopyResource(shTex->m_resource->m_d3dResource, shExportTexureUav->m_resource->m_d3dResource);
 		shTex->m_resource->Transition(cmdList, shTex->m_resource->GetTransitionToken(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		m_cachedTextures[shTextureName] = std::move(shTex);

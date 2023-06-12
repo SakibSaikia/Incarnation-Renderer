@@ -747,7 +747,7 @@ public:
 
 	void Retire(const FSystemBuffer* uploadBuffer)
 	{
-		auto waitForFenceTask = concurrency::create_task([this, fence = uploadBuffer->m_fenceMarker]()
+		auto waitForFenceTask = concurrency::create_task([this, fence = uploadBuffer->m_alloc.m_lifetime]()
 		{
 			fence.Wait();
 		});
@@ -801,7 +801,12 @@ FResourceUploadContext::FResourceUploadContext(const size_t uploadBufferSizeInBy
 
 	m_copyCommandlist = FetchCommandlist(L"upload_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
 
-	m_uploadBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"upload_context_buffer", FResource::AccessMode::CpuWriteOnly, m_sizeInBytes, m_copyCommandlist->GetFence(FCommandList::SyncPoint::GpuFinish)));
+	m_uploadBuffer.reset(RenderBackend12::CreateNewSystemBuffer({
+		.name = L"upload_context_buffer",
+		.accessMode = FResource::AccessMode::CpuWriteOnly,
+		.alloc = FResource::Allocation::Transient(m_copyCommandlist->GetFence(FCommandList::SyncPoint::GpuFinish)),
+		.size = m_sizeInBytes }));
+
 	m_uploadBuffer->m_resource->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&m_mappedPtr));
 }
 
@@ -931,7 +936,11 @@ FResourceReadbackContext::FResourceReadbackContext(const FResource* resource) :
 	readbackSizeInBytes = std::max<size_t>(readbackSizeInBytes, 256);
 
 	m_copyCommandlist = FetchCommandlist(L"readback_copy_cl", D3D12_COMMAND_LIST_TYPE_COPY);
-	m_readbackBuffer.reset(RenderBackend12::CreateNewSystemBuffer(L"readback_context_buffer", FResource::AccessMode::CpuReadOnly, readbackSizeInBytes, m_copyCommandlist->GetFence(FCommandList::SyncPoint::GpuFinish)));
+	m_readbackBuffer.reset(RenderBackend12::CreateNewSystemBuffer({
+		.name = L"readback_context_buffer", 
+		.accessMode = FResource::AccessMode::CpuReadOnly,
+		.alloc = FResource::Allocation::Transient(m_copyCommandlist->GetFence(FCommandList::SyncPoint::GpuFinish)),
+		.size = readbackSizeInBytes}));
 }
 
 FFenceMarker FResourceReadbackContext::StageSubresources(const FFenceMarker sourceReadyMarker)
@@ -1201,6 +1210,8 @@ void FResource::UavBarrier(FCommandList* cmdList)
 
 FSystemBuffer::~FSystemBuffer()
 {
+	DebugAssert(m_alloc.m_type == FResource::Allocation::Type::Transient);
+
 	if (m_accessMode == FResource::AccessMode::CpuWriteOnly)
 	{
 		GetUploadResourcePool()->Retire(this);
@@ -2357,18 +2368,15 @@ D3D12_GPU_DESCRIPTOR_HANDLE RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_H
 	return descriptor;
 }
 
-FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
-	const std::wstring& name,
-	const FResource::AccessMode accessMode,
-	const size_t sizeInBytes,
-	const FFenceMarker retireFence,
-	std::function<void(uint8_t*)> uploadFunc)
+FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(const FSystemBuffer::FResourceDesc& desc)
 {
+	DebugAssert(desc.alloc.m_type == FResource::Allocation::Type::Transient);
+
 	SCOPED_CPU_EVENT("create_upload_buffer", PIX_COLOR_DEFAULT);
-	DebugAssert(sizeInBytes != 0);
+	DebugAssert(desc.size != 0);
 
 	DWORD n;
-	_BitScanReverse64(&n, sizeInBytes);
+	_BitScanReverse64(&n, desc.size);
 	const size_t powOf2Size = (1 << (n + 1));
 
 	D3D12_RESOURCE_DESC bufferDesc = {};
@@ -2383,78 +2391,66 @@ FSystemBuffer* RenderBackend12::CreateNewSystemBuffer(
 
 	FResource* buffer;
 	
-	if (accessMode == FResource::AccessMode::CpuWriteOnly)
+	if (desc.accessMode == FResource::AccessMode::CpuWriteOnly)
 	{
 		// Upload Buffer
-		buffer = s_uploadResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ);
+		buffer = s_uploadResourcePool.GetOrCreate(desc.name, bufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ);
 
 		uint8_t* pData;
 		buffer->m_d3dResource->Map(0, nullptr, reinterpret_cast<void**>(&pData));
 		memset(pData, 0, powOf2Size);
 
-		if (uploadFunc)
+		if (desc.uploadCallback)
 		{
-			uploadFunc(pData);
+			desc.uploadCallback(pData);
 			buffer->m_d3dResource->Unmap(0, nullptr);
 		}
 	}
-	else if (accessMode == FResource::AccessMode::CpuReadOnly)
+	else if (desc.accessMode == FResource::AccessMode::CpuReadOnly)
 	{
 		// Readback Buffer
-		buffer = s_readbackResourcePool.GetOrCreate(name, bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST);
+		buffer = s_readbackResourcePool.GetOrCreate(desc.name, bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST);
 	}
 
 	auto newBuffer = new FSystemBuffer;
 	newBuffer->m_resource = buffer;
-	newBuffer->m_accessMode = accessMode;
-	newBuffer->m_fenceMarker = retireFence;
+	newBuffer->m_accessMode = desc.accessMode;
+	newBuffer->m_alloc = desc.alloc;
 
 	return newBuffer;
 }
 
-FShaderSurface* RenderBackend12::CreateNewShaderSurface(
-	const std::wstring& name,
-	const uint32_t surfaceType,
-	const FResource::Allocation alloc,
-	const DXGI_FORMAT format,
-	const size_t width,
-	const size_t height,
-	const size_t mipLevels,
-	const size_t depth,
-	const size_t arraySize,
-	const size_t sampleCount,
-	const bool bCreateSRV,
-	const bool bCreateNonShaderVisibleDescriptors)
+FShaderSurface* RenderBackend12::CreateNewShaderSurface(const FShaderSurface::FResourceDesc& desc)
 {
 	SCOPED_CPU_EVENT("create_surface", PIX_COLOR_DEFAULT);
 
 	// Default clear color for RTVs
 	D3D12_CLEAR_VALUE defaultClearColor = {};
-	defaultClearColor.Format = format;
+	defaultClearColor.Format = desc.format;
 	defaultClearColor.Color[0] = defaultClearColor.Color[1] = defaultClearColor.Color[2] = defaultClearColor.Color[3] = 0.f;
 
 	// Default clear value for DSVs
 	D3D12_CLEAR_VALUE defaultClearDSV = {};
-	defaultClearDSV.Format = format;
+	defaultClearDSV.Format = desc.format;
 	defaultClearDSV.DepthStencil.Depth = 0.f;
 	defaultClearDSV.DepthStencil.Stencil = 0;
 
 	// Initialize settings based on surface type
 	D3D12_RESOURCE_FLAGS surfaceFlags = {};
-	DXGI_FORMAT surfaceFormat = format;
+	DXGI_FORMAT surfaceFormat = desc.format;
 	D3D12_CLEAR_VALUE* clearValue = {};
 	D3D12_RESOURCE_STATES initialState = {};
 	std::vector<uint32_t> renderTextureDescriptorIndices;
 	std::vector<uint32_t> uavDescriptorIndices;
 	std::vector<uint32_t> nonShaderVisibleUavIndices;
 
-	if (surfaceType & FShaderSurface::Type::RenderTarget)
+	if (desc.type & FShaderSurface::Type::RenderTarget)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		clearValue = &defaultClearColor;
 		initialState = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
-		for (int mip = 0; mip < mipLevels; ++mip)
+		for (int mip = 0; mip < desc.mipLevels; ++mip)
 		{
 			uint32_t id;
 			bool ok = s_rtvIndexPool.try_pop(id);
@@ -2462,14 +2458,14 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 			renderTextureDescriptorIndices.push_back(id);
 		}
 	}
-	else if (surfaceType & FShaderSurface::Type::DepthStencil)
+	else if (desc.type & FShaderSurface::Type::DepthStencil)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-		surfaceFormat = GetTypelessDepthStencilFormat(format);
+		surfaceFormat = GetTypelessDepthStencilFormat(desc.format);
 		clearValue = &defaultClearDSV;
 		initialState = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 
-		for (int mip = 0; mip < mipLevels; ++mip)
+		for (int mip = 0; mip < desc.mipLevels; ++mip)
 		{
 			uint32_t id;
 			bool ok = s_dsvIndexPool.try_pop(id);
@@ -2478,18 +2474,18 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 		}
 	}
 
-	if (surfaceType & FShaderSurface::Type::UAV)
+	if (desc.type & FShaderSurface::Type::UAV)
 	{
 		surfaceFlags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 		initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-		FResource::Type descriptorType = arraySize > 1 ? FResource::Type::RWTexture2DArray : FResource::Type::RWTexture2D;
-		for (int mip = 0; mip < mipLevels; ++mip)
+		FResource::Type descriptorType = desc.arraySize > 1 ? FResource::Type::RWTexture2DArray : FResource::Type::RWTexture2D;
+		for (int mip = 0; mip < desc.mipLevels; ++mip)
 		{
 			uint32_t id = GetBindlessPool()->FetchIndex(descriptorType);
 			uavDescriptorIndices.push_back(id);
 
-			if (bCreateNonShaderVisibleDescriptors)
+			if (desc.bCreateNonShaderVisibleDescriptors)
 			{
 				uint32_t id2;
 				bool ok = s_nonShaderVisibleDescriptorPool.try_pop(id2);
@@ -2502,21 +2498,21 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	// Create resource 
 	FResource* resource = {};
 	D3D12_RESOURCE_DESC surfaceDesc = {};
-	surfaceDesc.Dimension = depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	surfaceDesc.Width = width;
-	surfaceDesc.Height = (UINT)height;
-	surfaceDesc.DepthOrArraySize = (UINT16)(depth > 1 ? depth : arraySize);
-	surfaceDesc.MipLevels = (UINT16)mipLevels;
+	surfaceDesc.Dimension = desc.depth > 1 ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	surfaceDesc.Width = desc.width;
+	surfaceDesc.Height = (UINT)desc.height;
+	surfaceDesc.DepthOrArraySize = (UINT16)(desc.depth > 1 ? desc.depth : desc.arraySize);
+	surfaceDesc.MipLevels = (UINT16)desc.mipLevels;
 	surfaceDesc.Format = surfaceFormat;
-	surfaceDesc.SampleDesc.Count = sampleCount;
+	surfaceDesc.SampleDesc.Count = desc.sampleCount;
 	surfaceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	surfaceDesc.Flags = surfaceFlags;
 
-	if (alloc.m_type == FResource::Allocation::Type::Transient)
+	if (desc.alloc.m_type == FResource::Allocation::Type::Transient)
 	{
-		resource = s_defaultResourcePool.GetOrCreate(name, surfaceDesc, initialState);
+		resource = s_defaultResourcePool.GetOrCreate(desc.name, surfaceDesc, initialState);
 	}
-	else if (alloc.m_type == FResource::Allocation::Type::Persistent)
+	else if (desc.alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2524,20 +2520,20 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 		resource = new FResource;
-		AssertIfFailed(resource->InitCommittedResource(name, heapProps, surfaceDesc, initialState));
+		AssertIfFailed(resource->InitCommittedResource(desc.name, heapProps, surfaceDesc, initialState));
 	}
 
 	// Create render texture descriptors
-	if (surfaceType & FShaderSurface::Type::RenderTarget)
+	if (desc.type & FShaderSurface::Type::RenderTarget)
 	{
-		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
+		for (int mipIndex = 0; mipIndex < desc.mipLevels; ++mipIndex)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE rtv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, renderTextureDescriptorIndices[mipIndex]);
 			D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-			rtvDesc.Format = format;
-			if (depth == 1)
+			rtvDesc.Format = desc.format;
+			if (desc.depth == 1)
 			{
-				if (sampleCount > 1)
+				if (desc.sampleCount > 1)
 				{
 					rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
 				}
@@ -2556,15 +2552,15 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 			GetDevice()->CreateRenderTargetView(resource->m_d3dResource, &rtvDesc, rtv);
 		}
 	}
-	else if (surfaceType & FShaderSurface::Type::DepthStencil)
+	else if (desc.type & FShaderSurface::Type::DepthStencil)
 	{
-		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
+		for (int mipIndex = 0; mipIndex < desc.mipLevels; ++mipIndex)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE dsv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, renderTextureDescriptorIndices[mipIndex]);
 			D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-			dsvDesc.Format = format;
+			dsvDesc.Format = desc.format;
 
-			if (sampleCount > 1)
+			if (desc.sampleCount > 1)
 			{
 				dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
 			}
@@ -2579,21 +2575,21 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	}
 
 	// Create UAV descriptors
-	if (surfaceType & FShaderSurface::Type::UAV)
+	if (desc.type & FShaderSurface::Type::UAV)
 	{
-		for (int mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
+		for (int mipIndex = 0; mipIndex < desc.mipLevels; ++mipIndex)
 		{
 			D3D12_CPU_DESCRIPTOR_HANDLE uav = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavDescriptorIndices[mipIndex]);
 
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-			uavDesc.Format = format;
+			uavDesc.Format = desc.format;
 
-			if (arraySize > 1)
+			if (desc.arraySize > 1)
 			{
 				uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 				uavDesc.Texture2DArray.MipSlice = mipIndex;
 				uavDesc.Texture2DArray.FirstArraySlice = 0;
-				uavDesc.Texture2DArray.ArraySize = arraySize;
+				uavDesc.Texture2DArray.ArraySize = desc.arraySize;
 				uavDesc.Texture2DArray.PlaneSlice = 0;
 			}
 			else
@@ -2605,7 +2601,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 
 			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, uav);
 
-			if (bCreateNonShaderVisibleDescriptors)
+			if (desc.bCreateNonShaderVisibleDescriptors)
 			{
 				D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, nonShaderVisibleUavIndices[mipIndex], false);
 				GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
@@ -2616,35 +2612,35 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 
 	// Create SRV descriptor
 	uint32_t srvIndex = ~0u;
-	if(bCreateSRV)
+	if(desc.bCreateSRV)
 	{
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = (surfaceType & FShaderSurface::Type::DepthStencil) ? GetSrvDepthFormat(format) : format;
+		srvDesc.Format = (desc.type & FShaderSurface::Type::DepthStencil) ? GetSrvDepthFormat(desc.format) : desc.format;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		FResource::Type resourceType;
 
-		if (depth == 1)
+		if (desc.depth == 1)
 		{
-			if (arraySize == 6)
+			if (desc.arraySize == 6)
 			{
 				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-				srvDesc.TextureCube.MipLevels = mipLevels;
+				srvDesc.TextureCube.MipLevels = desc.mipLevels;
 				srvDesc.TextureCube.MostDetailedMip = 0;
 				resourceType = FResource::Type::TextureCube;
 			}
-			else if (arraySize > 1)
+			else if (desc.arraySize > 1)
 			{
 				srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-				srvDesc.Texture2DArray.MipLevels = mipLevels;
+				srvDesc.Texture2DArray.MipLevels = desc.mipLevels;
 				srvDesc.Texture2DArray.FirstArraySlice = 0;
-				srvDesc.Texture2DArray.ArraySize = arraySize;
+				srvDesc.Texture2DArray.ArraySize = desc.arraySize;
 				srvDesc.Texture2DArray.MostDetailedMip = 0;
 				srvDesc.Texture2DArray.PlaneSlice = 0;
 				resourceType = FResource::Type::Texture2DArray;
 			}
 			else
 			{
-				if (sampleCount > 1)
+				if (desc.sampleCount > 1)
 				{
 					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
 					resourceType = FResource::Type::Texture2DMultisample;
@@ -2652,7 +2648,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 				else
 				{
 					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-					srvDesc.Texture2D.MipLevels = mipLevels;
+					srvDesc.Texture2D.MipLevels = desc.mipLevels;
 					srvDesc.Texture2D.MostDetailedMip = 0;
 					resourceType = FResource::Type::Texture2D;
 				}
@@ -2661,7 +2657,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 		else
 		{
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
-			srvDesc.Texture3D.MipLevels = mipLevels;
+			srvDesc.Texture3D.MipLevels = desc.mipLevels;
 			srvDesc.Texture3D.MostDetailedMip = 0;
 			resourceType = FResource::Type::Texture3D;
 		}
@@ -2672,8 +2668,8 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	}
 
 	auto newSurface = new FShaderSurface;
-	newSurface->m_type = surfaceType;
-	newSurface->m_alloc = alloc;
+	newSurface->m_type = desc.type;
+	newSurface->m_alloc = desc.alloc;
 	newSurface->m_resource = resource;
 	newSurface->m_descriptorIndices.RTVorDSVs = std::move(renderTextureDescriptorIndices);
 	newSurface->m_descriptorIndices.UAVs = std::move(uavDescriptorIndices);
@@ -2683,45 +2679,34 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(
 	return newSurface;
 }
 
-FTexture* RenderBackend12::CreateNewTexture(
-	const std::wstring& name,
-	const FTexture::Type type,
-	const FResource::Allocation alloc,
-	const DXGI_FORMAT format,
-	const size_t width,
-	const size_t height,
-	const size_t numMips,
-	const size_t numSlices,
-	D3D12_RESOURCE_STATES resourceState,
-	const DirectX::Image* images,
-	FResourceUploadContext* uploadContext)
+FTexture* RenderBackend12::CreateNewTexture(const FTexture::FResourceDesc& desc)
 {
 	SCOPED_CPU_EVENT("create_texture", PIX_COLOR_DEFAULT);
 
 	// Create resource 
 	FResource* resource = {};
-	D3D12_RESOURCE_DESC desc = {};
-	desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	desc.Alignment = 0;
-	desc.Width = width;
-	desc.Height = height;
-	desc.DepthOrArraySize = numSlices;
-	desc.MipLevels = numMips;
-	desc.Format = format;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	D3D12_RESOURCE_DESC d3dDesc = {};
+	d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	d3dDesc.Alignment = 0;
+	d3dDesc.Width = desc.width;
+	d3dDesc.Height = desc.height;
+	d3dDesc.DepthOrArraySize = desc.numSlices;
+	d3dDesc.MipLevels = desc.numMips;
+	d3dDesc.Format = desc.format;
+	d3dDesc.SampleDesc.Count = 1;
+	d3dDesc.SampleDesc.Quality = 0;
+	d3dDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	d3dDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 	// Use implicit state transition for uploads.
 	// The resource will decay back to COMMON state after the commandlist is submitted and will be ready for reuse.
-	const D3D12_RESOURCE_STATES initialState = images && uploadContext ? D3D12_RESOURCE_STATE_COMMON : resourceState;
+	const D3D12_RESOURCE_STATES initialState = desc.upload.images && desc.upload.context ? D3D12_RESOURCE_STATE_COMMON : desc.resourceState;
 
-	if (alloc.m_type == FResource::Allocation::Type::Transient)
+	if (desc.alloc.m_type == FResource::Allocation::Type::Transient)
 	{
-		resource = s_defaultResourcePool.GetOrCreate(name, desc, initialState);
+		resource = s_defaultResourcePool.GetOrCreate(desc.name, d3dDesc, initialState);
 	}
-	else if (alloc.m_type == FResource::Allocation::Type::Persistent)
+	else if (desc.alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2729,25 +2714,25 @@ FTexture* RenderBackend12::CreateNewTexture(
 		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 		resource = new FResource;
-		AssertIfFailed(resource->InitCommittedResource(name, heapProps, desc, initialState));
+		AssertIfFailed(resource->InitCommittedResource(desc.name, heapProps, d3dDesc, initialState));
 	}
 
 	// Upload texture data
-	if(images && uploadContext)
+	if(desc.upload.images && desc.upload.context)
 	{
-		std::vector<D3D12_SUBRESOURCE_DATA> srcData(numMips * numSlices);
-		for (int sliceIndex = 0; sliceIndex < numSlices; ++sliceIndex)
+		std::vector<D3D12_SUBRESOURCE_DATA> srcData(desc.numMips * desc.numSlices);
+		for (int sliceIndex = 0; sliceIndex < desc.numSlices; ++sliceIndex)
 		{
-			for (int mipIndex = 0; mipIndex < numMips; ++mipIndex)
+			for (int mipIndex = 0; mipIndex < desc.numMips; ++mipIndex)
 			{
-				const uint32_t subresourceIndex = sliceIndex * numMips + mipIndex;
-				srcData[subresourceIndex].pData = images[subresourceIndex].pixels;
-				srcData[subresourceIndex].RowPitch = images[subresourceIndex].rowPitch;
-				srcData[subresourceIndex].SlicePitch = images[subresourceIndex].slicePitch;
+				const uint32_t subresourceIndex = sliceIndex * desc.numMips + mipIndex;
+				srcData[subresourceIndex].pData = desc.upload.images[subresourceIndex].pixels;
+				srcData[subresourceIndex].RowPitch = desc.upload.images[subresourceIndex].rowPitch;
+				srcData[subresourceIndex].SlicePitch = desc.upload.images[subresourceIndex].slicePitch;
 			}
 		}
 
-		uploadContext->UpdateSubresources(
+		desc.upload.context->UpdateSubresources(
 			resource,
 			srcData,
 			[](FCommandList* cmdList)
@@ -2758,39 +2743,39 @@ FTexture* RenderBackend12::CreateNewTexture(
 
 	// Descriptor
 	uint32_t srvIndex;
-	if (type == FTexture::Type::Tex2D)
+	if (desc.type == FTexture::Type::Tex2D)
 	{
 		srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::Texture2D);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = format;
+		srvDesc.Format = desc.format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = numMips;
+		srvDesc.Texture2D.MipLevels = desc.numMips;
 		srvDesc.Texture2D.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
-	else if (type == FTexture::Type::TexCube)
+	else if (desc.type == FTexture::Type::TexCube)
 	{
 		srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::TextureCube);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = format;
+		srvDesc.Format = desc.format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-		srvDesc.TextureCube.MipLevels = numMips;
+		srvDesc.TextureCube.MipLevels = desc.numMips;
 		srvDesc.TextureCube.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 	}
-	else if (type == FTexture::Type::Tex2DArray)
+	else if (desc.type == FTexture::Type::Tex2DArray)
 	{
 		srvIndex = GetBindlessPool()->FetchIndex(FResource::Type::Texture2DArray);
 		D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = format;
+		srvDesc.Format = desc.format;
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
-		srvDesc.Texture2DArray.ArraySize = numSlices;
-		srvDesc.Texture2DArray.MipLevels = numMips;
+		srvDesc.Texture2DArray.ArraySize = desc.numSlices;
+		srvDesc.Texture2DArray.MipLevels = desc.numMips;
 		srvDesc.Texture2DArray.MostDetailedMip = 0;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
@@ -2801,33 +2786,23 @@ FTexture* RenderBackend12::CreateNewTexture(
 	}
 
 	auto newTexture = new FTexture;
-	newTexture->m_alloc = alloc;
+	newTexture->m_alloc = desc.alloc;
 	newTexture->m_resource = resource;
 	newTexture->m_srvIndex = srvIndex;
 
 	return newTexture;
 }
 
-FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
-	const std::wstring& name,
-	const FShaderBuffer::Type type,
-	const FResource::AccessMode accessMode,
-	const FResource::Allocation alloc,
-	const size_t size,
-	const bool bCreateNonShaderVisibleDescriptor,
-	const uint8_t* pData,
-	FResourceUploadContext* uploadContext,
-	const int fixedUavIndex,
-	const int fixedSrvIndex)
+FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(const FShaderBuffer::FResourceDesc& desc)
 {
 	SCOPED_CPU_EVENT("create_buffer", PIX_COLOR_DEFAULT);
 
 	// Resource Flags & State
 	D3D12_RESOURCE_FLAGS resourceFlags = {};
 	D3D12_RESOURCE_STATES resourceState = {};
-	if (accessMode == FResource::AccessMode::GpuReadWrite)
+	if (desc.accessMode == FResource::AccessMode::GpuReadWrite)
 	{
-		if (type == FShaderBuffer::Type::AccelerationStructure)
+		if (desc.type == FShaderBuffer::Type::AccelerationStructure)
 		{
 			resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			resourceState = D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
@@ -2838,33 +2813,33 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 			resourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 		}
 	}
-	else if (accessMode == FResource::AccessMode::GpuReadOnly)
+	else if (desc.accessMode == FResource::AccessMode::GpuReadOnly)
 	{
 		resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 		resourceState = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 	}
 
 	// Resource Description
-	D3D12_RESOURCE_DESC desc = {};
-	desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Alignment = 0;
-	desc.Width = size;
-	desc.Height = 1;
-	desc.DepthOrArraySize = 1;
-	desc.MipLevels = 1;
-	desc.Format = DXGI_FORMAT_UNKNOWN;
-	desc.SampleDesc.Count = 1;
-	desc.SampleDesc.Quality = 0;
-	desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	desc.Flags = resourceFlags;
+	D3D12_RESOURCE_DESC d3dDesc = {};
+	d3dDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	d3dDesc.Alignment = 0;
+	d3dDesc.Width = desc.size;
+	d3dDesc.Height = 1;
+	d3dDesc.DepthOrArraySize = 1;
+	d3dDesc.MipLevels = 1;
+	d3dDesc.Format = DXGI_FORMAT_UNKNOWN;
+	d3dDesc.SampleDesc.Count = 1;
+	d3dDesc.SampleDesc.Quality = 0;
+	d3dDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	d3dDesc.Flags = resourceFlags;
 
 	// Create Resource
 	FResource* resource = {};
-	if (alloc.m_type == FResource::Allocation::Type::Transient)
+	if (desc.alloc.m_type == FResource::Allocation::Type::Transient)
 	{
-		resource = s_defaultResourcePool.GetOrCreate(name, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState);
+		resource = s_defaultResourcePool.GetOrCreate(desc.name, d3dDesc, desc.upload.pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState);
 	}
-	else if (alloc.m_type == FResource::Allocation::Type::Persistent)
+	else if (desc.alloc.m_type == FResource::Allocation::Type::Persistent)
 	{
 		D3D12_HEAP_PROPERTIES heapProps = {};
 		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -2872,17 +2847,17 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 		heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 		resource = new FResource;
-		AssertIfFailed(resource->InitCommittedResource(name, heapProps, desc, pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
+		AssertIfFailed(resource->InitCommittedResource(desc.name, heapProps, d3dDesc, desc.upload.pData ? D3D12_RESOURCE_STATE_COPY_DEST : resourceState));
 	}
 
 	// Upload buffer data if specified
-	if (pData)
+	if (desc.upload.pData)
 	{
 		std::vector<D3D12_SUBRESOURCE_DATA> srcData(1);
-		srcData[0].pData = pData;
-		srcData[0].RowPitch = size;
-		srcData[0].SlicePitch = size;
-		uploadContext->UpdateSubresources(
+		srcData[0].pData = desc.upload.pData;
+		srcData[0].RowPitch = desc.size;
+		srcData[0].SlicePitch = desc.size;
+		desc.upload.context->UpdateSubresources(
 			resource,
 			srcData,
 			[resource, resourceState](FCommandList* cmdList)
@@ -2894,23 +2869,23 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 	// UAV Descriptor
 	uint32_t uavIndex = ~0u;
 	uint32_t nonShaderVisibleUavIndex = ~0u;
-	if (accessMode != FResource::AccessMode::GpuReadOnly)
+	if (desc.accessMode != FResource::AccessMode::GpuReadOnly)
 	{
-		if (type == FShaderBuffer::Type::Raw)
+		if (desc.type == FShaderBuffer::Type::Raw)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 			uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 			uavDesc.Buffer.FirstElement = 0;
-			uavDesc.Buffer.NumElements = size / 4; // number of R32 elements
+			uavDesc.Buffer.NumElements = desc.size / 4; // number of R32 elements
 			uavDesc.Buffer.StructureByteStride = 0;
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 
-			uavIndex = (fixedUavIndex == -1 ? GetBindlessPool()->FetchIndex(FResource::Type::Buffer) : fixedUavIndex);
+			uavIndex = (desc.fixedUavIndex == -1 ? GetBindlessPool()->FetchIndex(FResource::Type::Buffer) : desc.fixedUavIndex);
 			D3D12_CPU_DESCRIPTOR_HANDLE descriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, uavIndex);
 			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, descriptor);
 
-			if (bCreateNonShaderVisibleDescriptor)
+			if (desc.bCreateNonShaderVisibleDescriptor)
 			{
 				bool ok = s_nonShaderVisibleDescriptorPool.try_pop(nonShaderVisibleUavIndex);
 				DebugAssert(ok, "Ran out of non shader visible descriptors");
@@ -2923,9 +2898,9 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 
 	// SRV Descriptor
 	uint32_t srvIndex = ~0u;
-	if (accessMode != FResource::AccessMode::GpuWriteOnly)
+	if (desc.accessMode != FResource::AccessMode::GpuWriteOnly)
 	{
-		if (type == FShaderBuffer::Type::AccelerationStructure)
+		if (desc.type == FShaderBuffer::Type::AccelerationStructure)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 			srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -2944,19 +2919,19 @@ FShaderBuffer* RenderBackend12::CreateNewShaderBuffer(
 			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			srvDesc.Buffer.FirstElement = 0;
-			srvDesc.Buffer.NumElements = size / 4;
+			srvDesc.Buffer.NumElements = desc.size / 4;
 			srvDesc.Buffer.StructureByteStride = 0;
 			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 
-			srvIndex = (fixedSrvIndex == -1 ? GetBindlessPool()->FetchIndex(FResource::Type::Buffer) : fixedSrvIndex);
+			srvIndex = (desc.fixedSrvIndex == -1 ? GetBindlessPool()->FetchIndex(FResource::Type::Buffer) : desc.fixedSrvIndex);
 			D3D12_CPU_DESCRIPTOR_HANDLE srv = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvIndex);
 			GetDevice()->CreateShaderResourceView(resource->m_d3dResource, &srvDesc, srv);
 		}
 	}
 
 	auto newBuffer = new FShaderBuffer;
-	newBuffer->m_accessMode = accessMode;
-	newBuffer->m_alloc = alloc;
+	newBuffer->m_accessMode = desc.accessMode;
+	newBuffer->m_alloc = desc.alloc;
 	newBuffer->m_resource = resource;
 	newBuffer->m_descriptorIndices.UAV = uavIndex;
 	newBuffer->m_descriptorIndices.NonShaderVisibleUAV = nonShaderVisibleUavIndex;
