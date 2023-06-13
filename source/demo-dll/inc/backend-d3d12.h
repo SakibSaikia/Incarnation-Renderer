@@ -301,7 +301,8 @@ struct FShaderSurface
 		size_t arraySize = 1;
 		size_t sampleCount = 1;
 		bool bCreateSRV = true;
-		bool bCreateNonShaderVisibleDescriptors = false;
+		// A non-shadervisible UAV index is required for ClearUAV operations
+		bool bRequiresClear = false;
 	};
 
 	struct FDescriptors

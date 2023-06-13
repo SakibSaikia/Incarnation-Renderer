@@ -1387,7 +1387,7 @@ void Renderer::Render(const FRenderState& renderState)
 			.format = hdrFormat,
 			.width = resX,
 			.height = resY,
-			.bCreateNonShaderVisibleDescriptors = true })};
+			.bRequiresClear = true })};
 
 		std::unique_ptr<FShaderSurface> depthBuffer{ RenderBackend12::CreateNewShaderSurface({
 			.name = L"depth_buffer_raster",
@@ -1404,7 +1404,7 @@ void Renderer::Render(const FRenderState& renderState)
 			.format = DXGI_FORMAT_R16G16B16A16_FLOAT,
 			.width = resX,
 			.height = resY,
-			.bCreateNonShaderVisibleDescriptors = true })};
+			.bRequiresClear = true })};
 
 		std::unique_ptr<FShaderSurface> visBuffer{ RenderBackend12::CreateNewShaderSurface({
 			.name = L"vis_buffer_raster",

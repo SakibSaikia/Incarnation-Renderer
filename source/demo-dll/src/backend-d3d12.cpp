@@ -2485,7 +2485,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(const FShaderSurface::FR
 			uint32_t id = GetBindlessPool()->FetchIndex(descriptorType);
 			uavDescriptorIndices.push_back(id);
 
-			if (desc.bCreateNonShaderVisibleDescriptors)
+			if (desc.bRequiresClear)
 			{
 				uint32_t id2;
 				bool ok = s_nonShaderVisibleDescriptorPool.try_pop(id2);
@@ -2601,7 +2601,7 @@ FShaderSurface* RenderBackend12::CreateNewShaderSurface(const FShaderSurface::FR
 
 			GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, uav);
 
-			if (desc.bCreateNonShaderVisibleDescriptors)
+			if (desc.bRequiresClear)
 			{
 				D3D12_CPU_DESCRIPTOR_HANDLE nonShaderVisibleDescriptor = GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, nonShaderVisibleUavIndices[mipIndex], false);
 				GetDevice()->CreateUnorderedAccessView(resource->m_d3dResource, nullptr, &uavDesc, nonShaderVisibleDescriptor);
