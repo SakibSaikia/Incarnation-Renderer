@@ -70,7 +70,7 @@ namespace RenderJob::HighlightPass
 			psoDesc.SampleMask = UINT_MAX;
 			psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 			psoDesc.NumRenderTargets = 1;
-			psoDesc.RTVFormats[0] = passDesc.renderConfig.BackBufferFormat;
+			psoDesc.RTVFormats[0] = passDesc.colorTarget->m_resource->m_d3dResource->GetDesc().Format;
 			psoDesc.SampleDesc.Count = 1;
 			psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 

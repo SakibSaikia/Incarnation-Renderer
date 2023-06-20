@@ -1855,8 +1855,8 @@ void Renderer::Render(const FRenderState& renderState)
 				sceneRenderJobs.push_back(dynamicSkyJob.m_task);
 			}
 
-			if (c.Viewmode != (int)Viewmode::Normal &&
-				c.Viewmode != (int)Viewmode::LightingOnly)
+			const bool bDebugView = (c.Viewmode != (int)Viewmode::Normal && c.Viewmode != (int)Viewmode::LightingOnly);
+			if (bDebugView)
 			{
 				// Debug Viz
 				RenderJob::DebugVizPass::Desc desc = {};
@@ -1864,7 +1864,7 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.gbuffers[0] = gbuffer_basecolor.get();
 				desc.gbuffers[1] = gbuffer_normals.get();
 				desc.gbuffers[2] = gbuffer_metallicRoughnessAo.get();
-				desc.target = RenderBackend12::GetBackBuffer();
+				desc.target = hdrRasterSceneColor.get();
 				desc.depthBuffer = depthBuffer.get();
 				desc.aoBuffer = aoBuffer.get();
 				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
@@ -1880,10 +1880,11 @@ void Renderer::Render(const FRenderState& renderState)
 				RenderJob::Result debugVizJob = RenderJob::DebugVizPass::Execute(s_jobSync.get(), desc);
 				sceneRenderJobs.push_back(debugVizJob.m_task);
 
+				// Highlight
 				if (c.Viewmode == (int)Viewmode::ObjectIds || c.Viewmode == (int)Viewmode::TriangleIds)
 				{
 					RenderJob::HighlightPass::Desc desc = {};
-					desc.colorTarget = RenderBackend12::GetBackBuffer();
+					desc.colorTarget = hdrRasterSceneColor.get();
 					desc.depthStencilTarget = depthBuffer.get();
 					desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 					desc.resX = resX;
@@ -1896,52 +1897,40 @@ void Renderer::Render(const FRenderState& renderState)
 					sceneRenderJobs.push_back(highlightJob.m_task);
 				}
 			}
-			else
+			
+			if (c.EnableTAA)
 			{
-				if (c.EnableTAA)
-				{
-					const FView& view = renderState.m_view;
-					Matrix viewProjectionTransform = view.m_viewTransform * view.m_projectionTransform;
+				const FView& view = renderState.m_view;
+				Matrix viewProjectionTransform = view.m_viewTransform * view.m_projectionTransform;
 
-					// TAA Resolve
-					RenderJob::TAAResolvePass::Desc resolveDesc = {};
-					resolveDesc.source = hdrRasterSceneColor.get();
-					resolveDesc.target = s_taaAccumulationBuffer.get();
-					resolveDesc.resX = resX;
-					resolveDesc.resY = resY;
-					resolveDesc.historyIndex = (uint32_t)frameIndex;
-					resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
-					resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
-					resolveDesc.depthTextureIndex = depthBuffer->m_descriptorIndices.SRV;
-					resolveDesc.renderConfig = c;
+				// TAA Resolve
+				RenderJob::TAAResolvePass::Desc resolveDesc = {};
+				resolveDesc.source = hdrRasterSceneColor.get();
+				resolveDesc.target = s_taaAccumulationBuffer.get();
+				resolveDesc.resX = resX;
+				resolveDesc.resY = resY;
+				resolveDesc.historyIndex = (uint32_t)frameIndex;
+				resolveDesc.prevViewProjectionTransform = s_prevViewProjectionTransform;
+				resolveDesc.invViewProjectionTransform = viewProjectionTransform.Invert();
+				resolveDesc.depthTextureIndex = depthBuffer->m_descriptorIndices.SRV;
+				resolveDesc.renderConfig = c;
 
-					RenderJob::Result resolveJob = RenderJob::TAAResolvePass::Execute(s_jobSync.get(), resolveDesc);
-					sceneRenderJobs.push_back(resolveJob.m_task);
+				RenderJob::Result resolveJob = RenderJob::TAAResolvePass::Execute(s_jobSync.get(), resolveDesc);
+				sceneRenderJobs.push_back(resolveJob.m_task);
 
-					// Tonemap
-					RenderJob::TonemapPass::Desc tonemapDesc = {};
-					tonemapDesc.source = s_taaAccumulationBuffer.get();
-					tonemapDesc.target = RenderBackend12::GetBackBuffer();
-					tonemapDesc.renderConfig = c;
-
-					RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
-					sceneRenderJobs.push_back(tonemapJob.m_task);
-
-					// Save view projection transform for next frame's reprojection
-					s_prevViewProjectionTransform = viewProjectionTransform;
-				}
-				else
-				{
-					// Tonemap
-					RenderJob::TonemapPass::Desc tonemapDesc = {};
-					tonemapDesc.source = hdrRasterSceneColor.get();
-					tonemapDesc.target = RenderBackend12::GetBackBuffer();
-					tonemapDesc.renderConfig = c;
-
-					RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
-					sceneRenderJobs.push_back(tonemapJob.m_task);
-				}
+				// Save view projection transform for next frame's reprojection
+				s_prevViewProjectionTransform = viewProjectionTransform;
 			}
+
+
+			// Tonemap
+			RenderJob::TonemapPass::Desc tonemapDesc = {};
+			tonemapDesc.source = c.EnableTAA ? s_taaAccumulationBuffer.get() : hdrRasterSceneColor.get();
+			tonemapDesc.target = RenderBackend12::GetBackBuffer();
+			tonemapDesc.renderConfig = c;
+
+			RenderJob::Result tonemapJob = RenderJob::TonemapPass::Execute(s_jobSync.get(), tonemapDesc);
+			sceneRenderJobs.push_back(tonemapJob.m_task);
 		}
 
 		// Wait for all scene render jobs to finish
