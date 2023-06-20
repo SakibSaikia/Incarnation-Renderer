@@ -1766,6 +1766,7 @@ void Renderer::Render(const FRenderState& renderState)
 				skyLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
 				skyLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
 				skyLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+				skyLightingDesc.ambientOcclusionTex = aoBuffer.get();
 				skyLightingDesc.renderConfig = c;
 				skyLightingDesc.scene = renderState.m_scene;
 				skyLightingDesc.view = &renderState.m_view;

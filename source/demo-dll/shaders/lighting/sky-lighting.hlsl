@@ -24,10 +24,11 @@ cbuffer cb : register(b0)
     uint g_gbufferBaseColorSrvIndex;
     uint g_gbufferNormalsSrvIndex;
     uint g_gbufferMetallicRoughnessAoSrvIndex;
+    uint g_ambientOcclusionSrvIndex;
     uint g_resX;
     uint g_resY;
     float g_skyBrightness;
-    uint2 __pad;
+    uint __pad;
     float3 g_eyePos;
     int g_envBrdfTextureIndex;
     float4x4 g_invViewProjTransform;
@@ -119,9 +120,12 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         }
 #endif
 
+        // HBAO 
+        Texture2D<float> ambientOcclusionTex = ResourceDescriptorHeap[g_ambientOcclusionSrvIndex];
+        float hbao = ambientOcclusionTex[dispatchThreadId.xy];
 
         // Output radiance
         RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_colorTargetUavIndex];
-        colorTarget[dispatchThreadId.xy] += radiance;
+        colorTarget[dispatchThreadId.xy] += hbao * radiance;
     }
 }

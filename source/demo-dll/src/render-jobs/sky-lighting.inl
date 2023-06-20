@@ -7,6 +7,7 @@ namespace RenderJob::SkyLightingPass
 		FShaderSurface* gbufferBaseColorTex;
 		FShaderSurface* gbufferNormalsTex;
 		FShaderSurface* gbufferMetallicRoughnessAoTex;
+		FShaderSurface* ambientOcclusionTex;
 		FTexture* envBRDFTex;
 		FConfig renderConfig;
 		const FScene* scene;
@@ -23,6 +24,7 @@ namespace RenderJob::SkyLightingPass
 		size_t gbufferBaseColorTransitionToken = passDesc.gbufferBaseColorTex->m_resource->GetTransitionToken();
 		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormalsTex->m_resource->GetTransitionToken();
 		size_t gbufferMetallicRoughnessAoTransitionToken = passDesc.gbufferMetallicRoughnessAoTex->m_resource->GetTransitionToken();
+		size_t ambientOcclusionTransitionToken = passDesc.ambientOcclusionTex->m_resource->GetTransitionToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"sky_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		Result passResult;
@@ -38,6 +40,7 @@ namespace RenderJob::SkyLightingPass
 			passDesc.gbufferBaseColorTex->m_resource->Transition(cmdList, gbufferBaseColorTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			passDesc.gbufferNormalsTex->m_resource->Transition(cmdList, gbufferNormalsTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			passDesc.gbufferMetallicRoughnessAoTex->m_resource->Transition(cmdList, gbufferMetallicRoughnessAoTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			passDesc.ambientOcclusionTex->m_resource->Transition(cmdList, ambientOcclusionTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 			// Descriptor Heaps
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
@@ -82,10 +85,11 @@ namespace RenderJob::SkyLightingPass
 				uint32_t gbufferBaseColorSrvIndex;
 				uint32_t gbufferNormalsSrvIndex;
 				uint32_t gbufferMetallicRoughnessAoSrvIndex;
+				uint32_t ambientOcclusionSrvIndex;
 				uint32_t resX;
 				uint32_t resY;
 				float skyBrightness;
-				uint32_t __pad[2];
+				uint32_t __pad;
 				Vector3 eyePos;
 				int envBrdfTextureIndex;
 				Matrix invViewProjTransform;
@@ -106,6 +110,7 @@ namespace RenderJob::SkyLightingPass
 					cb->gbufferBaseColorSrvIndex = passDesc.gbufferBaseColorTex->m_descriptorIndices.SRV;
 					cb->gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_descriptorIndices.SRV;
 					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_descriptorIndices.SRV;
+					cb->ambientOcclusionSrvIndex = passDesc.ambientOcclusionTex->m_descriptorIndices.SRV;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
 					cb->skyBrightness = passDesc.renderConfig.SkyBrightness;
