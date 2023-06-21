@@ -1444,7 +1444,8 @@ void Renderer::Render(const FRenderState& renderState)
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
 			.format = DXGI_FORMAT_R8_UNORM,
 			.width = resX,
-			.height = resY })};
+			.height = resY,
+			.bRequiresClear = true })};
 
 		std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer({
 			.name = L"mesh_highlight_indirect_args",
@@ -1755,6 +1756,24 @@ void Renderer::Render(const FRenderState& renderState)
 
 				RenderJob::Result hbaoJob = RenderJob::HBAO::Execute(s_jobSync.get(), hbaoDesc);
 				sceneRenderJobs.push_back(hbaoJob.m_task);
+			}
+			else
+			{
+				FCommandList* clearCL = RenderBackend12::FetchCommandlist(L"clear_ao", D3D12_COMMAND_LIST_TYPE_DIRECT);
+
+				D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
+				clearCL->m_d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
+				aoBuffer->m_resource->Transition(clearCL, aoBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+				const float clearValue[] = { 1.f, 1.f, 1.f, 1.f };
+				clearCL->m_d3dCmdList->ClearUnorderedAccessViewFloat(
+					RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, aoBuffer->m_descriptorIndices.UAVs[0]),
+					RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, aoBuffer->m_descriptorIndices.NonShaderVisibleUAVs[0], false),
+					aoBuffer->m_resource->m_d3dResource,
+					clearValue, 0, nullptr);
+
+				RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { clearCL });
+
 			}
 
 			// Sky Lighting
