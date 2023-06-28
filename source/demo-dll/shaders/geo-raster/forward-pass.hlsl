@@ -17,21 +17,6 @@ struct LightProbeData
 	int shTextureIndex;
 };
 
-struct FrameCbLayout
-{
-	float4x4 sceneRotation;
-	int sceneMeshAccessorsIndex;
-	int sceneMeshBufferViewsIndex;
-	int sceneMaterialBufferIndex;
-	int envBrdfTextureIndex;
-	LightProbeData sceneLightProbe;
-	int sceneBvhIndex;
-	int lightCount;
-	int sceneLightPropertiesBufferIndex;
-	int sceneLightIndicesBufferIndex;
-	int sceneLightsTransformsBufferIndex;
-};
-
 struct ViewCbLayout
 {
 	float4x4 viewTransform;
@@ -54,8 +39,8 @@ struct PrimitiveCbLayout
 SamplerState g_trilinearSampler : register(s1, space1);
 SamplerState g_anisotropicSampler : register(s2, space1);
 ConstantBuffer<PrimitiveCbLayout> g_primitiveConstants : register(b0);
-ConstantBuffer<ViewCbLayout> g_viewConstants : register(b1);
-ConstantBuffer<FrameCbLayout> g_frameConstants : register(b2);
+ConstantBuffer<FViewConstants> g_viewCb : register(b1);
+ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 struct vs_to_ps
 {
@@ -71,27 +56,26 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 {
 	vs_to_ps o;
 
-	float4x4 localToWorld = mul(g_primitiveConstants.localToWorld, g_frameConstants.sceneRotation);
-	float4x4 viewProjTransform = mul(g_viewConstants.viewTransform, g_viewConstants.projectionTransform);
+	float4x4 localToWorld = mul(g_primitiveConstants.localToWorld, g_sceneCb.m_sceneRotation);
 
 	// index
-	uint vertIndex = MeshMaterial::GetUint(index, g_primitiveConstants.indexAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	uint vertIndex = MeshMaterial::GetUint(index, g_primitiveConstants.indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 
 	// position
-	float3 position = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.positionAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float3 position = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	o.worldPos = worldPos;
-	o.pos = mul(worldPos, viewProjTransform);
+	o.pos = mul(worldPos, g_viewCb.m_viewProjTransform);
 
 	// uv
-	o.uv = MeshMaterial::GetFloat2(vertIndex, g_primitiveConstants.uvAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	o.uv = MeshMaterial::GetFloat2(vertIndex, g_primitiveConstants.uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 
 	// normal
-	float3 normal = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.normalAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float3 normal = MeshMaterial::GetFloat3(vertIndex, g_primitiveConstants.normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	o.normal = mul(float4(normal, 0.f), localToWorld);
 
 	// tangent
-	float4 packedTangent = MeshMaterial::GetFloat4(vertIndex, g_primitiveConstants.tangentAccessor, g_frameConstants.sceneMeshAccessorsIndex, g_frameConstants.sceneMeshBufferViewsIndex);
+	float4 packedTangent = MeshMaterial::GetFloat4(vertIndex, g_primitiveConstants.tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float3 tangent = packedTangent.xyz;
 	o.tangent = mul(float4(tangent, 0.f), localToWorld);
 
@@ -104,7 +88,7 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 
 float4 ps_main(vs_to_ps input) : SV_Target
 {
-	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_frameConstants.sceneMaterialBufferIndex);
+	FMaterial material = MeshMaterial::GetMaterial(g_primitiveConstants.materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
 	FMaterialProperties p = EvaluateMaterialProperties(material, input.uv, g_anisotropicSampler);
 	clip(p.opacity - 0.5);
 
@@ -131,13 +115,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		N = normalize(mul(p.normalmap, tangentToWorld));
 	}
 
-	float3 V = normalize(g_viewConstants.eyePos - input.worldPos.xyz / input.worldPos.w);
+	float3 V = normalize(g_viewCb.m_eyePos - input.worldPos.xyz / input.worldPos.w);
 	float3 radiance = p.emissive * 20000;
 
 #if VIEWMODE == 7 // Reflections
-	if (g_frameConstants.sceneLightProbe.envmapTextureIndex != -1)
+	if (g_sceneCb.m_envmapTextureIndex != -1)
 	{
-		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.envmapTextureIndex];
+		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_sceneCb.m_envmapTextureIndex];
 		float3 R = normalize(reflect(-V, N));
 		float3 reflectionColor = prefilteredEnvMap.SampleLevel(g_trilinearSampler, R, 0).rgb;
 		return float4(reflectionColor, 0.f);
@@ -145,12 +129,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 #endif
 	
 #if DIRECT_LIGHTING
-	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_frameConstants.sceneBvhIndex];
+	RaytracingAccelerationStructure sceneBvh = ResourceDescriptorHeap[g_sceneCb.m_sceneBvhIndex];
 
-	ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_frameConstants.sceneLightIndicesBufferIndex];
-	ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_frameConstants.sceneLightPropertiesBufferIndex];
-	ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_frameConstants.sceneLightsTransformsBufferIndex];
-	for (int lightIndex = 0; lightIndex < g_frameConstants.lightCount; ++lightIndex)
+	ByteAddressBuffer lightIndicesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedLightIndicesBufferIndex];
+	ByteAddressBuffer lightPropertiesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedGlobalLightPropertiesBufferIndex];
+	ByteAddressBuffer lightTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedLightTransformsBufferIndex];
+
+	for (int lightIndex = 0; lightIndex < g_sceneCb.m_lightCount; ++lightIndex)
 	{
 		int lightId = lightIndicesBuffer.Load<int>(lightIndex * sizeof(int));
 		FLight light = lightPropertiesBuffer.Load<FLight>(lightId * sizeof(FLight));
@@ -161,13 +146,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 	// Diffuse IBL
 #if DIFFUSE_IBL
-	if (g_frameConstants.sceneLightProbe.shTextureIndex != -1)
+	if (g_sceneCb.m_skylightProbeIndex != -1)
 	{
-		SH9Color shRadiance;
-		Texture2D shTex = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.shTextureIndex];
+		SH9ColorCoefficient shRadiance;
+		Texture2D shTex = ResourceDescriptorHeap[g_sceneCb.m_skylightProbeIndex];
 
 		[UNROLL]
-		for (int i = 0; i < SH_COEFFICIENTS; ++i)
+		for (int i = 0; i < SH_NUM_COEFFICIENTS; ++i)
 		{
 			shRadiance.c[i] = shTex.Load(int3(i, 0, 0)).rgb;
 		}
@@ -180,11 +165,11 @@ float4 ps_main(vs_to_ps input) : SV_Target
 
 	// Specular IBL
 #if SPECULAR_IBL
-	if (g_frameConstants.sceneLightProbe.envmapTextureIndex != -1 &&
-		g_frameConstants.envBrdfTextureIndex != -1)
+	if (g_sceneCb.m_envmapTextureIndex != -1 &&
+		g_sceneCb.m_envBrdfTextureIndex != -1)
 	{
-		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_frameConstants.sceneLightProbe.envmapTextureIndex];
-		Texture2D envBrdfTex = ResourceDescriptorHeap[g_frameConstants.envBrdfTextureIndex];
+		TextureCube prefilteredEnvMap = ResourceDescriptorHeap[g_sceneCb.m_envmapTextureIndex];
+		Texture2D envBrdfTex = ResourceDescriptorHeap[g_sceneCb.m_envBrdfTextureIndex];
 
 		float texWidth, texHeight, mipCount;
 		prefilteredEnvMap.GetDimensions(0, texWidth, texHeight, mipCount);

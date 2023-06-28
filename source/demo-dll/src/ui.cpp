@@ -302,11 +302,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 		ImGui::SetNextWindowSize(optionsWindowSize, ImGuiCond_Always);
 
 		ImGui::Begin("Options", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
-		ImGui::Checkbox("TAA", &settings->EnableTAA);
-		ImGui::SameLine();
 		ImGui::Checkbox("Pathtracing", &settings->PathTrace);
-		ImGui::SameLine();
-		ImGui::Checkbox("HBAO", &settings->EnableHBAO);
 
 		// --------------------------------------------------------------------------------------------------------------------------------------------
 		// Model
@@ -342,6 +338,21 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 					bResetPathtracelAccumulation |= ImGui::SliderInt("Max. Sample Count", (int*)&settings->MaxSampleCount, 1, 1024);
 					bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Aperture", &settings->Pathtracing_CameraAperture, 0.f, 0.1f);
 					bResetPathtracelAccumulation |= ImGui::SliderFloat("Camera Focal Length", &settings->Pathtracing_CameraFocalLength, 1.f, 15.f);
+				}
+			});
+
+		// --------------------------------------------------------------------------------------------------------------------------------------------
+		// Raster Options
+		ImGuiExt::EditCondition(!settings->PathTrace,
+			[&]()
+			{
+				if (ImGui::CollapsingHeader("Raster"))
+				{
+					ImGui::Checkbox("TAA", &settings->EnableTAA);
+					ImGui::SameLine();
+					ImGui::Checkbox("HBAO", &settings->EnableHBAO);
+					ImGui::SameLine();
+					ImGui::Checkbox("Forward Lighting", &settings->ForwardLighting);
 				}
 			});
 

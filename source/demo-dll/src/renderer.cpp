@@ -44,6 +44,7 @@ namespace Renderer
 #include "render-jobs/sky-lighting.inl"
 #include "render-jobs/direct-lighting.inl"
 #include "render-jobs/clustered-lighting.inl"
+#include "render-jobs/forward-pass.inl"
 #include "render-jobs/dynamic-sky.inl"
 #include "render-jobs/hbao.inl"
 
@@ -1798,47 +1799,67 @@ void Renderer::Render(const FRenderState& renderState)
 				sceneRenderJobs.push_back(skylightJob.m_task);
 			}
 
-			// Direct Lighting
-			int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
-			if (directionalLightIndex != -1 && c.EnableDirectLighting)
+			if (c.ForwardLighting)
 			{
-				RenderJob::DirectLightingPass::Desc directLightingDesc = {};
-				directLightingDesc.directionalLightIndex = directionalLightIndex;
-				directLightingDesc.colorTarget = hdrRasterSceneColor.get();
-				directLightingDesc.depthStencilTex = depthBuffer.get();
-				directLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
-				directLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
-				directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-				directLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
-				directLightingDesc.viewConstantBuffer = cbViewConstants.get();
-				directLightingDesc.renderConfig = c;
-				directLightingDesc.resX = resX;
-				directLightingDesc.resY = resY;
+				// Forward Lighting
+				RenderJob::ForwardLightingPass::Desc forwardDesc = {};
+				forwardDesc.colorTarget = hdrRasterSceneColor.get();
+				forwardDesc.depthStencilTarget = depthBuffer.get();
+				forwardDesc.format = hdrFormat;
+				forwardDesc.resX = resX;
+				forwardDesc.resY = resY;
+				forwardDesc.scene = renderState.m_scene;
+				forwardDesc.sceneConstantBuffer = cbSceneConstants.get();
+				forwardDesc.viewConstantBuffer = cbViewConstants.get();
+				forwardDesc.renderConfig = c;
 
-				RenderJob::Result directLightingJob = RenderJob::DirectLightingPass::Execute(s_jobSync.get(), directLightingDesc);
-				sceneRenderJobs.push_back(directLightingJob.m_task);
+				RenderJob::Result forwardLightingJob = RenderJob::ForwardLightingPass::Execute(s_jobSync.get(), forwardDesc);
+				sceneRenderJobs.push_back(forwardLightingJob.m_task);
 			}
-
-			// Clustered Lighting
-			const bool bRequiresClear = directionalLightIndex == -1;
-			if (punctualLightCount > 0 && c.EnableDirectLighting)
+			else
 			{
-				RenderJob::ClusteredLightingPass::Desc clusteredLightingDesc = {};
-				clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
-				clusteredLightingDesc.lightGridBuffer = lightGridBuffer.get();
-				clusteredLightingDesc.colorTarget = hdrRasterSceneColor.get();
-				clusteredLightingDesc.depthStencilTex = depthBuffer.get();
-				clusteredLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
-				clusteredLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
-				clusteredLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
-				clusteredLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
-				clusteredLightingDesc.viewConstantBuffer = cbViewConstants.get();
-				clusteredLightingDesc.renderConfig = c;
-				clusteredLightingDesc.resX = resX;
-				clusteredLightingDesc.resY = resY;
+				// Deferred Direct Lighting
+				int directionalLightIndex = renderState.m_scene->GetDirectionalLight();
+				if (directionalLightIndex != -1 && c.EnableDirectLighting)
+				{
+					RenderJob::DirectLightingPass::Desc directLightingDesc = {};
+					directLightingDesc.directionalLightIndex = directionalLightIndex;
+					directLightingDesc.colorTarget = hdrRasterSceneColor.get();
+					directLightingDesc.depthStencilTex = depthBuffer.get();
+					directLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+					directLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+					directLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+					directLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
+					directLightingDesc.viewConstantBuffer = cbViewConstants.get();
+					directLightingDesc.renderConfig = c;
+					directLightingDesc.resX = resX;
+					directLightingDesc.resY = resY;
 
-				RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLightingPass::Execute(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
-				sceneRenderJobs.push_back(clusteredLightingJob.m_task);
+					RenderJob::Result directLightingJob = RenderJob::DirectLightingPass::Execute(s_jobSync.get(), directLightingDesc);
+					sceneRenderJobs.push_back(directLightingJob.m_task);
+				}
+
+				// Deferred Clustered Lighting
+				const bool bRequiresClear = directionalLightIndex == -1;
+				if (punctualLightCount > 0 && c.EnableDirectLighting)
+				{
+					RenderJob::ClusteredLightingPass::Desc clusteredLightingDesc = {};
+					clusteredLightingDesc.lightListsBuffer = culledLightListsBuffer.get();
+					clusteredLightingDesc.lightGridBuffer = lightGridBuffer.get();
+					clusteredLightingDesc.colorTarget = hdrRasterSceneColor.get();
+					clusteredLightingDesc.depthStencilTex = depthBuffer.get();
+					clusteredLightingDesc.gbufferBaseColorTex = gbuffer_basecolor.get();
+					clusteredLightingDesc.gbufferNormalsTex = gbuffer_normals.get();
+					clusteredLightingDesc.gbufferMetallicRoughnessAoTex = gbuffer_metallicRoughnessAo.get();
+					clusteredLightingDesc.sceneConstantBuffer = cbSceneConstants.get();
+					clusteredLightingDesc.viewConstantBuffer = cbViewConstants.get();
+					clusteredLightingDesc.renderConfig = c;
+					clusteredLightingDesc.resX = resX;
+					clusteredLightingDesc.resY = resY;
+
+					RenderJob::Result clusteredLightingJob = RenderJob::ClusteredLightingPass::Execute(s_jobSync.get(), clusteredLightingDesc, bRequiresClear);
+					sceneRenderJobs.push_back(clusteredLightingJob.m_task);
+				}
 			}
 
 			if (c.EnvSkyMode == (int)EnvSkyMode::HDRI)

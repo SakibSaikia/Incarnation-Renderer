@@ -22,6 +22,7 @@ struct FConfig
 	bool EnableDiffuseIBL = true;
 	bool EnableSpecularIBL = true;
 	bool PathTrace = false;
+	bool ForwardLighting = false;
 	bool EnableTAA = true;
 	bool EnableHBAO = false;
 	bool FreezeCulling = false;

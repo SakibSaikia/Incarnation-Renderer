@@ -4,12 +4,12 @@ namespace RenderJob::ForwardLightingPass
 	{
 		FShaderSurface* colorTarget;
 		FShaderSurface* depthStencilTarget;
+		FSystemBuffer* sceneConstantBuffer;
+		FSystemBuffer* viewConstantBuffer;
 		DXGI_FORMAT format;
 		uint32_t resX;
 		uint32_t resY;
 		const FScene* scene;
-		const FView* view;
-		Vector2 jitter;
 		FConfig renderConfig;
 	};
 
@@ -47,81 +47,16 @@ namespace RenderJob::ForwardLightingPass
 				FRootSignature::Desc{ L"geo-raster/forward-pass.hlsl", L"rootsig", L"rootsig_1_1" });
 			d3dCmdList->SetGraphicsRootSignature(rootsig->m_rootsig);
 
-			// Frame constant buffer
-			struct FrameCbLayout
-			{
-				Matrix sceneRotation;
-				int sceneMeshAccessorsIndex;
-				int sceneMeshBufferViewsIndex;
-				int sceneMaterialBufferIndex;
-				int envBrdfTextureIndex;
-				FLightProbe sceneProbeData;
-				int sceneBvhIndex;
-				int lightCount;
-				int sceneLightPropertiesBufferIndex;
-				int sceneLightIndicesBufferIndex;
-				int sceneLightsTransformsBufferIndex;
-			};
-
-			std::unique_ptr<FSystemBuffer> frameCb{ RenderBackend12::CreateNewSystemBuffer({
-				.name = L"frame_cb",
-				.accessMode = FResource::AccessMode::CpuWriteOnly,
-				.alloc = FResource::Allocation::Transient(cmdList->GetFence()),
-				.size = sizeof(FrameCbLayout),
-				.uploadCallback = [passDesc](uint8_t* pDest)
-				{
-					const int lightCount = passDesc.scene->m_sceneLights.GetCount();
-
-					auto cbDest = reinterpret_cast<FrameCbLayout*>(pDest);
-					cbDest->sceneRotation = passDesc.scene->m_rootTransform;
-					cbDest->sceneMeshAccessorsIndex = passDesc.scene->m_packedMeshAccessors->m_srvIndex;
-					cbDest->sceneMeshBufferViewsIndex = passDesc.scene->m_packedMeshBufferViews->m_srvIndex;
-					cbDest->sceneMaterialBufferIndex = passDesc.scene->m_packedMaterials->m_srvIndex;
-					cbDest->envBrdfTextureIndex = Renderer::s_envBRDF->m_srvIndex;
-					cbDest->sceneProbeData = passDesc.scene->m_skylight;
-					cbDest->sceneBvhIndex = passDesc.scene->m_tlas->m_srvIndex;
-					cbDest->lightCount = lightCount;
-					cbDest->sceneLightPropertiesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedGlobalLightProperties->m_srvIndex : -1;
-					cbDest->sceneLightIndicesBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightIndices->m_srvIndex : -1;
-					cbDest->sceneLightsTransformsBufferIndex = lightCount > 0 ? passDesc.scene->m_packedLightTransforms->m_srvIndex : -1;
-				}
-			})};
-
-			d3dCmdList->SetGraphicsRootConstantBufferView(2, frameCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
-
-			// View constant buffer
-			struct ViewCbLayout
-			{
-				Matrix viewTransform;
-				Matrix projectionTransform;
-				Vector3 eyePos;
-				float exposure;
-			};
-
-			std::unique_ptr<FSystemBuffer> viewCb{ RenderBackend12::CreateNewSystemBuffer({
-				.name = L"view_cb",
-				.accessMode = FResource::AccessMode::CpuWriteOnly,
-				.alloc = FResource::Allocation::Transient(cmdList->GetFence()),
-				.size = sizeof(ViewCbLayout),
-				.uploadCallback = [passDesc](uint8_t* pDest)
-				{
-					auto cbDest = reinterpret_cast<ViewCbLayout*>(pDest);
-					cbDest->viewTransform = passDesc.view->m_viewTransform;
-					cbDest->projectionTransform = passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f);
-					cbDest->eyePos = passDesc.view->m_position;
-					cbDest->exposure = passDesc.renderConfig.Exposure;
-				}
-			})};
-
-			d3dCmdList->SetGraphicsRootConstantBufferView(1, viewCb->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			D3D12_VIEWPORT viewport{ 0.f, 0.f, (float)passDesc.resX, (float)passDesc.resY, 0.f, 1.f };
 			D3D12_RECT screenRect{ 0, 0, (LONG)passDesc.resX, (LONG)passDesc.resY };
 			d3dCmdList->RSSetViewports(1, &viewport);
 			d3dCmdList->RSSetScissorRects(1, &screenRect);
 
-			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_renderTextureIndices[0]) };
-			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthStencilTarget->m_renderTextureIndices[0]);
+			D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = { RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, passDesc.colorTarget->m_descriptorIndices.RTVorDSVs[0]) };
+			D3D12_CPU_DESCRIPTOR_HANDLE dsv = RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, passDesc.depthStencilTarget->m_descriptorIndices.RTVorDSVs[0]);
 			d3dCmdList->OMSetRenderTargets(1, rtvs, FALSE, &dsv);
 
 			float clearColor[] = { .8f, .8f, 1.f, 0.f };
