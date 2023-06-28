@@ -119,12 +119,12 @@ void FScene::ReloadModel(const std::wstring& filename)
 		{
 			if (!warnings.empty())
 			{
-				printf("Warn: %s\n", warnings.c_str());
+				Print("Warn: %s\n", warnings.c_str());
 			}
 
 			if (!errors.empty())
 			{
-				printf("Error: %s\n", errors.c_str());
+				Print("Error: %s\n", errors.c_str());
 				DebugAssert(ok, "Failed to parse glTF");
 			}
 		}
