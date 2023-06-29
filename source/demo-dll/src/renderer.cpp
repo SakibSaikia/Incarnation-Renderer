@@ -1455,19 +1455,29 @@ void Renderer::Render(const FRenderState& renderState)
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
 			.size = sizeof(FIndirectDrawWithRootConstants) })};
 
-		std::unique_ptr<FShaderBuffer> batchArgsBuffer{ RenderBackend12::CreateNewShaderBuffer({
+		// Create separate args buffer for each ExecuteIndirect dispatch. This is required for PSO state changes.
+		std::unique_ptr<FShaderBuffer> batchArgsBuffer_Default{ RenderBackend12::CreateNewShaderBuffer({
 			.name = L"batch_args_buffer",
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadWrite,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
 			.size = totalPrimitives * sizeof(FIndirectDrawWithRootConstants) })};
 
+		// Args buffer for double-sided primitives
+		std::unique_ptr<FShaderBuffer> batchArgsBuffer_DoubleSided{ RenderBackend12::CreateNewShaderBuffer({
+			.name = L"batch_args_buffer",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadWrite,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.size = totalPrimitives * sizeof(FIndirectDrawWithRootConstants) }) };
+
+		// Single counts buffer for default and double sided primitives. Respective counts accessed via an offset.
 		std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer({
 			.name = L"batch_counts_buffer",
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadWrite,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
-			.size = sizeof(uint32_t),
+			.size = 2 * sizeof(uint32_t),
 			.bCreateNonShaderVisibleDescriptor = true })};
 
 		std::unique_ptr<FShaderBuffer> culledLightCountBuffer{ RenderBackend12::CreateNewShaderBuffer({
@@ -1663,7 +1673,8 @@ void Renderer::Render(const FRenderState& renderState)
 		{
 			// Cull Pass & Draw Call Generation
 			RenderJob::BatchCullingPass::Desc batchCullDesc = {};
-			batchCullDesc.batchArgsBuffer = batchArgsBuffer.get();
+			batchCullDesc.batchArgsBuffer_Default = batchArgsBuffer_Default.get();
+			batchCullDesc.batchArgsBuffer_DoubleSided = batchArgsBuffer_DoubleSided.get();
 			batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
 			batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
 			batchCullDesc.viewConstantBuffer = cbViewConstants.get();
@@ -1696,7 +1707,8 @@ void Renderer::Render(const FRenderState& renderState)
 			RenderJob::VisibilityPass::Desc visDesc = {};
 			visDesc.visBufferTarget = visBuffer.get();
 			visDesc.depthStencilTarget = depthBuffer.get();
-			visDesc.indirectArgsBuffer = batchArgsBuffer.get();
+			visDesc.indirectArgsBuffer_Default = batchArgsBuffer_Default.get();
+			visDesc.indirectArgsBuffer_DoubleSided = batchArgsBuffer_DoubleSided.get();
 			visDesc.indirectCountsBuffer = batchCountsBuffer.get();
 			visDesc.sceneConstantBuffer = cbSceneConstants.get();
 			visDesc.viewConstantBuffer = cbViewConstants.get();

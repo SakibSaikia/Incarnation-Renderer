@@ -4,7 +4,8 @@ namespace RenderJob::VisibilityPass
 	{
 		FShaderSurface* visBufferTarget;
 		FShaderSurface* depthStencilTarget;
-		FShaderBuffer* indirectArgsBuffer;
+		FShaderBuffer* indirectArgsBuffer_Default;
+		FShaderBuffer* indirectArgsBuffer_DoubleSided;
 		FShaderBuffer* indirectCountsBuffer;
 		FSystemBuffer* sceneConstantBuffer;
 		FSystemBuffer* viewConstantBuffer;
@@ -19,8 +20,9 @@ namespace RenderJob::VisibilityPass
 		size_t renderToken = jobSync->GetToken();
 		size_t visBufferTransitionToken = passDesc.visBufferTarget->m_resource->GetTransitionToken();
 		size_t depthStencilTransitionToken = passDesc.depthStencilTarget->m_resource->GetTransitionToken();
-		size_t indirectArgsToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
-		size_t indirectCountToken = passDesc.indirectArgsBuffer->m_resource->GetTransitionToken();
+		size_t defaultIndirectArgsToken = passDesc.indirectArgsBuffer_Default->m_resource->GetTransitionToken();
+		size_t doubleSidedIndirectArgsToken = passDesc.indirectArgsBuffer_DoubleSided->m_resource->GetTransitionToken();
+		size_t indirectCountToken = passDesc.indirectCountsBuffer->m_resource->GetTransitionToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"visibility_pass_job", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		Result passResult;
@@ -33,8 +35,9 @@ namespace RenderJob::VisibilityPass
 
 			passDesc.visBufferTarget->m_resource->Transition(cmdList, visBufferTransitionToken, 0, D3D12_RESOURCE_STATE_RENDER_TARGET);
 			passDesc.depthStencilTarget->m_resource->Transition(cmdList, depthStencilTransitionToken, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-			passDesc.indirectArgsBuffer->m_resource->Transition(cmdList, indirectArgsToken, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
-			passDesc.indirectArgsBuffer->m_resource->Transition(cmdList, indirectCountToken, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+			passDesc.indirectArgsBuffer_Default->m_resource->Transition(cmdList, defaultIndirectArgsToken, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+			passDesc.indirectArgsBuffer_DoubleSided->m_resource->Transition(cmdList, doubleSidedIndirectArgsToken, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+			passDesc.indirectCountsBuffer->m_resource->Transition(cmdList, indirectCountToken, 0, D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
 
 			// Descriptor heaps need to be set before setting the root signature when using HLSL Dynamic Resources
 			// https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_DynamicResources.html
@@ -151,13 +154,34 @@ namespace RenderJob::VisibilityPass
 			// Command signature
 			D3DCommandSignature_t* commandSignature = FIndirectDrawWithRootConstants::GetCommandSignature(rootsig->m_rootsig);
 
-			d3dCmdList->ExecuteIndirect(
-				commandSignature,
-				passDesc.scenePrimitiveCount,
-				passDesc.indirectArgsBuffer->m_resource->m_d3dResource,
-				0,
-				passDesc.indirectCountsBuffer->m_resource->m_d3dResource,
-				0);
+			{
+				SCOPED_COMMAND_LIST_EVENT(cmdList, "default", 0);
+				const size_t defaultArgsCountOffset = 0;
+				d3dCmdList->ExecuteIndirect(
+					commandSignature,
+					passDesc.scenePrimitiveCount,
+					passDesc.indirectArgsBuffer_Default->m_resource->m_d3dResource,
+					0,
+					passDesc.indirectCountsBuffer->m_resource->m_d3dResource,
+					defaultArgsCountOffset);
+			}
+
+			{
+				psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+				D3DPipelineState_t* pso = RenderBackend12::FetchGraphicsPipelineState(psoDesc);
+				d3dCmdList->SetPipelineState(pso);
+
+				const size_t doubleSidedArgsCountOffset = sizeof(uint32_t);
+
+				SCOPED_COMMAND_LIST_EVENT(cmdList, "double_sided", 0);
+				d3dCmdList->ExecuteIndirect(
+					commandSignature,
+					passDesc.scenePrimitiveCount,
+					passDesc.indirectArgsBuffer_DoubleSided->m_resource->m_d3dResource,
+					0,
+					passDesc.indirectCountsBuffer->m_resource->m_d3dResource,
+					doubleSidedArgsCountOffset);
+			}
 
 			return cmdList;
 

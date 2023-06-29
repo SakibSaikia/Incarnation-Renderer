@@ -1,4 +1,5 @@
 #include "gpu-shared-types.h"
+#include "common/mesh-material.hlsli"
 
 #ifndef THREAD_GROUP_SIZE_X
     #define THREAD_GROUP_SIZE_X 1
@@ -6,13 +7,14 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "RootConstants(b0, num32BitConstants=2)," \
+    "RootConstants(b0, num32BitConstants=3)," \
     "CBV(b1)," \
     "CBV(b2)"
 
 struct FPassConstants
 {
-    uint m_argsBufferIndex;
+    uint m_defaultArgsBufferIndex;
+    uint m_doubleSidedArgsBufferIndex;
     uint m_countsBufferIndex;
 };
 
@@ -71,13 +73,31 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             cmd.m_drawArguments.m_startVertexLocation = 0;
             cmd.m_drawArguments.m_startInstanceLocation = 0;
 
-            uint currentIndex;
-            RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
-            countsBuffer.InterlockedAdd(0, 1, currentIndex);
+            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
+            if (material.m_doubleSided)
+            {
+                // Append to double-sided args buffer
+                uint currentIndex;
+                const uint doubleSidedArgsCountOffset = sizeof(uint);
+                RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
+                countsBuffer.InterlockedAdd(doubleSidedArgsCountOffset, 1, currentIndex);
 
-            RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_argsBufferIndex];
-            uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
-            argsBuffer.Store(destAddress, cmd);
+                RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_doubleSidedArgsBufferIndex];
+                uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
+                argsBuffer.Store(destAddress, cmd);
+            }
+            else
+            {
+                // Append to default args buffer
+                uint currentIndex;
+                const uint defaultArgsCountOffset = 0;
+                RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
+                countsBuffer.InterlockedAdd(defaultArgsCountOffset, 1, currentIndex);
+
+                RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_defaultArgsBufferIndex];
+                uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
+                argsBuffer.Store(destAddress, cmd);
+            }
         }
         else
         {

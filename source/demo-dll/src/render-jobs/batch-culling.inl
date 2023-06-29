@@ -2,7 +2,8 @@ namespace RenderJob::BatchCullingPass
 {
 	struct Desc
 	{
-		FShaderBuffer* batchArgsBuffer;
+		FShaderBuffer* batchArgsBuffer_Default;
+		FShaderBuffer* batchArgsBuffer_DoubleSided;
 		FShaderBuffer* batchCountsBuffer;
 		FSystemBuffer* sceneConstantBuffer;
 		FSystemBuffer* viewConstantBuffer;
@@ -12,7 +13,8 @@ namespace RenderJob::BatchCullingPass
 	Result Execute(Sync* jobSync, const Desc& passDesc)
 	{
 		size_t renderToken = jobSync->GetToken();
-		size_t batchArgsBufferTransitionToken = passDesc.batchArgsBuffer->m_resource->GetTransitionToken();
+		size_t defaultBatchArgsBufferTransitionToken = passDesc.batchArgsBuffer_Default->m_resource->GetTransitionToken();
+		size_t doubleSidedBatchArgsBufferTransitionToken = passDesc.batchArgsBuffer_DoubleSided->m_resource->GetTransitionToken();
 		size_t batchCountsBufferTransitionToken = passDesc.batchCountsBuffer->m_resource->GetTransitionToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"batch_culling", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -25,7 +27,8 @@ namespace RenderJob::BatchCullingPass
 			SCOPED_COMMAND_LIST_EVENT(cmdList, "batch_culling", 0);
 
 			// Transitions
-			passDesc.batchArgsBuffer->m_resource->Transition(cmdList, batchArgsBufferTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			passDesc.batchArgsBuffer_Default->m_resource->Transition(cmdList, defaultBatchArgsBufferTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			passDesc.batchArgsBuffer_DoubleSided->m_resource->Transition(cmdList, doubleSidedBatchArgsBufferTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			passDesc.batchCountsBuffer->m_resource->Transition(cmdList, batchCountsBufferTransitionToken, 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 			// Descriptor Heaps
@@ -58,12 +61,14 @@ namespace RenderJob::BatchCullingPass
 
 			struct FPassConstants
 			{
-				uint32_t m_argsBufferIndex;
+				uint32_t m_defaultArgsBufferIndex;
+				uint32_t m_doubleSidedArgsBufferIndex;
 				uint32_t m_countsBufferIndex;
 			};
 
 			FPassConstants cb = {};
-			cb.m_argsBufferIndex = passDesc.batchArgsBuffer->m_descriptorIndices.UAV;
+			cb.m_defaultArgsBufferIndex = passDesc.batchArgsBuffer_Default->m_descriptorIndices.UAV;
+			cb.m_doubleSidedArgsBufferIndex = passDesc.batchArgsBuffer_DoubleSided->m_descriptorIndices.UAV;
 			cb.m_countsBufferIndex = passDesc.batchCountsBuffer->m_descriptorIndices.UAV;
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, std::max<uint32_t>(1, sizeof(FPassConstants) / 4), &cb, 0);
