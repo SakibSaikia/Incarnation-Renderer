@@ -72,7 +72,11 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         uint visibility = meshVisibilityBuffer.Load<uint>(primitive.m_meshIndex * sizeof(uint));
         if (visibility != 0)
         {
+#if FRUSTUM_CULLING
             if (FrustumCull(primitive))
+#else
+            if(true)
+#endif
             {
                 FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
                 cmd.m_rootConstants[0] = primId;

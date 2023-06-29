@@ -23,6 +23,7 @@ struct FConfig
 	bool EnableSpecularIBL = true;
 	bool PathTrace = false;
 	bool ForwardLighting = false;
+	bool FrustumCulling = true;
 	bool EnableTAA = true;
 	bool EnableHBAO = false;
 	bool FreezeCulling = false;

@@ -1703,6 +1703,7 @@ void Renderer::Render(const FRenderState& renderState)
 			batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
 			batchCullDesc.viewConstantBuffer = cbViewConstants.get();
 			batchCullDesc.primitiveCount = totalPrimitives;
+			batchCullDesc.renderConfig = c;
 
 			RenderJob::Result batchCullJob = RenderJob::BatchCullingPass::Execute(s_jobSync.get(), batchCullDesc);
 			sceneRenderJobs.push_back(batchCullJob.m_task);

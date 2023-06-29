@@ -8,6 +8,7 @@ namespace RenderJob::BatchCullingPass
 		FSystemBuffer* sceneConstantBuffer;
 		FSystemBuffer* viewConstantBuffer;
 		size_t primitiveCount;
+		FConfig renderConfig;
 	};
 
 	Result Execute(Sync* jobSync, const Desc& passDesc)
@@ -43,11 +44,15 @@ namespace RenderJob::BatchCullingPass
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
+			std::wstring shaderMacros = PrintString(
+				L"THREAD_GROUP_SIZE_X=128 FRUSTUM_CULLING=%d",
+				passDesc.renderConfig.FrustumCulling ? 1 : 0);
+
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"culling/batch-culling.hlsl",
 				L"cs_main",
-				L"THREAD_GROUP_SIZE_X=128",
+				shaderMacros,
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};

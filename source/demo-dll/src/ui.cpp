@@ -353,6 +353,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 					ImGui::Checkbox("HBAO", &settings->EnableHBAO);
 					ImGui::SameLine();
 					ImGui::Checkbox("Forward Lighting", &settings->ForwardLighting);
+					ImGui::Checkbox("Frustum Culling", &settings->FrustumCulling);
 				}
 			});
 
