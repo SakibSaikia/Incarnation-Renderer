@@ -24,10 +24,13 @@ ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 bool FrustumCull(FGpuPrimitive primitive)
 {
+    ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
+    float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+    localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
+
     // Gribb-Hartmann frustum plane extraction
     // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
-    float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
     float4x4 M = transpose(mul(localToWorld, g_viewCb.m_cullViewProjTransform));
     float4 nPlane = M[3] - M[2];
     float4 lPlane = M[3] + M[0];
@@ -61,48 +64,54 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
     uint primId = dispatchThreadId.x;
     if (primId < g_sceneCb.m_primitiveCount)
     {
-        ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
+        ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
         const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(primId * sizeof(FGpuPrimitive));
 
-        if (FrustumCull(primitive))
+        // Check if the mesh is hidden by user
+        ByteAddressBuffer meshVisibilityBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshVisibilityBufferIndex];
+        uint visibility = meshVisibilityBuffer.Load<uint>(primitive.m_meshIndex * sizeof(uint));
+        if (visibility != 0)
         {
-            FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
-            cmd.m_rootConstants[0] = primId;
-            cmd.m_drawArguments.m_vertexCount = primitive.m_indexCount;
-            cmd.m_drawArguments.m_instanceCount = 1;
-            cmd.m_drawArguments.m_startVertexLocation = 0;
-            cmd.m_drawArguments.m_startInstanceLocation = 0;
-
-            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
-            if (material.m_doubleSided)
+            if (FrustumCull(primitive))
             {
-                // Append to double-sided args buffer
-                uint currentIndex;
-                const uint doubleSidedArgsCountOffset = sizeof(uint);
-                RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
-                countsBuffer.InterlockedAdd(doubleSidedArgsCountOffset, 1, currentIndex);
+                FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
+                cmd.m_rootConstants[0] = primId;
+                cmd.m_drawArguments.m_vertexCount = primitive.m_indexCount;
+                cmd.m_drawArguments.m_instanceCount = 1;
+                cmd.m_drawArguments.m_startVertexLocation = 0;
+                cmd.m_drawArguments.m_startInstanceLocation = 0;
 
-                RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_doubleSidedArgsBufferIndex];
-                uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
-                argsBuffer.Store(destAddress, cmd);
+                FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
+                if (material.m_doubleSided)
+                {
+                    // Append to double-sided args buffer
+                    uint currentIndex;
+                    const uint doubleSidedArgsCountOffset = sizeof(uint);
+                    RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
+                    countsBuffer.InterlockedAdd(doubleSidedArgsCountOffset, 1, currentIndex);
+
+                    RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_doubleSidedArgsBufferIndex];
+                    uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
+                    argsBuffer.Store(destAddress, cmd);
+                }
+                else
+                {
+                    // Append to default args buffer
+                    uint currentIndex;
+                    const uint defaultArgsCountOffset = 0;
+                    RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
+                    countsBuffer.InterlockedAdd(defaultArgsCountOffset, 1, currentIndex);
+
+                    RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_defaultArgsBufferIndex];
+                    uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
+                    argsBuffer.Store(destAddress, cmd);
+                }
             }
             else
             {
-                // Append to default args buffer
-                uint currentIndex;
-                const uint defaultArgsCountOffset = 0;
-                RWByteAddressBuffer countsBuffer = ResourceDescriptorHeap[g_passCb.m_countsBufferIndex];
-                countsBuffer.InterlockedAdd(defaultArgsCountOffset, 1, currentIndex);
-
-                RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_passCb.m_defaultArgsBufferIndex];
-                uint destAddress = currentIndex * sizeof(FIndirectDrawWithRootConstants);
-                argsBuffer.Store(destAddress, cmd);
+                int previousValue;
+                renderStatsBuffer.InterlockedAdd(0, 1, previousValue);
             }
-        }
-        else
-        {
-            int previousValue;
-            renderStatsBuffer.InterlockedAdd(0, 1, previousValue);
         }
     }
 }

@@ -210,7 +210,7 @@ void FScene::ReloadModel(const std::wstring& filename)
 	}
 
 	CreateAccelerationStructures(model);
-	CreateGpuPrimitiveBuffers();
+	CreateGpuGeometryBuffers();
 	CreateGpuLightBuffers();
 
 	// Wait for all loading jobs to finish
@@ -363,6 +363,7 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 	}
 
 	sceneCollection->m_entityList.push_back(newMesh);
+	sceneCollection->m_visibleList.push_back(1);
 	sceneCollection->m_transformList.push_back(parentTransform);
 	sceneCollection->m_entityNames.push_back(mesh.name);
 	sceneCollection->m_objectSpaceBoundsList.push_back(meshBounds);
@@ -477,7 +478,7 @@ void FModelLoader::LoadMeshAccessors(const tinygltf::Model& model)
 	FScene::s_loadProgress += FScene::s_meshAccessorsLoadTimeFrac;
 }
 
-void FScene::CreateGpuPrimitiveBuffers()
+void FScene::CreateGpuGeometryBuffers()
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_primitives", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
@@ -487,12 +488,11 @@ void FScene::CreateGpuPrimitiveBuffers()
 		for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
 		{
 			const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
-			for (int primitiveIndex = 0; primitiveIndex < mesh.m_primitives.size(); ++primitiveIndex)
+			for (const FMeshPrimitive& primitive : mesh.m_primitives)
 			{
-				const FMeshPrimitive& primitive = mesh.m_primitives[primitiveIndex];
 				const DirectX::BoundingSphere& bounds = primitive.m_boundingSphere;
 				FGpuPrimitive newPrimitive = {};
-				newPrimitive.m_localToWorld = m_sceneMeshes.m_transformList[meshIndex];
+				newPrimitive.m_meshIndex = meshIndex;
 				newPrimitive.m_boundingSphere = Vector4(bounds.Center.x, bounds.Center.y, bounds.Center.z, bounds.Radius);
 				newPrimitive.m_indexAccessor = primitive.m_indexAccessor;
 				newPrimitive.m_positionAccessor = primitive.m_positionAccessor;
@@ -546,6 +546,27 @@ void FScene::CreateGpuPrimitiveBuffers()
 				.context = &uploader 
 			}
 		}));
+
+		uploader.SubmitUploads(cmdList);
+	}
+
+	// Buffer that contains LocalToWorld transforms for each mesh in the scene. GpuPrimitives index into this to lookup their transform.
+	{
+
+		const size_t bufferSize = m_sceneMeshes.GetCount() * sizeof(Matrix);
+		FResourceUploadContext uploader{ bufferSize };
+
+		m_packedMeshTransforms.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"scene_mesh_transforms",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = bufferSize,
+			.upload = {
+				.pData = (const uint8_t*)m_sceneMeshes.m_transformList.data(),
+				.context = &uploader
+			}
+			}));
 
 		uploader.SubmitUploads(cmdList);
 	}

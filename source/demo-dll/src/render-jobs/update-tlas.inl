@@ -20,27 +20,32 @@ namespace RenderJob::UpdateTLASPass
 			for (int meshIndex = 0; meshIndex < scene->m_sceneMeshes.GetCount(); ++meshIndex)
 			{
 				const FMesh& mesh = scene->m_sceneMeshes.m_entityList[meshIndex];
-				const std::string& meshName = scene->m_sceneMeshes.m_entityNames[meshIndex];
 
-				const auto& search = scene->m_blasList.find(meshName);
-				DebugAssert(search != scene->m_blasList.end());
+				const bool bVisible = scene->m_sceneMeshes.m_visibleList[meshIndex];
+				if (bVisible)
+				{
+					const std::string& meshName = scene->m_sceneMeshes.m_entityNames[meshIndex];
 
-				D3D12_RAYTRACING_INSTANCE_DESC instance = {};
-				instance.InstanceID = 0;
-				instance.InstanceContributionToHitGroupIndex = 0; // specify 0 because we will use InstanceIndex() in shader directly
-				instance.InstanceMask = 1;
-				instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-				instance.AccelerationStructure = search->second->m_resource->m_d3dResource->GetGPUVirtualAddress();
+					const auto& search = scene->m_blasList.find(meshName);
+					DebugAssert(search != scene->m_blasList.end());
 
-				// Transpose and convert to 3x4 matrix
-				const Matrix& localToWorld = scene->m_sceneMeshes.m_transformList[meshIndex] * scene->m_rootTransform;
-				decltype(instance.Transform)& dest = instance.Transform;
-				dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
-				dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
-				dest[0][2] = localToWorld._31;	dest[1][2] = localToWorld._32;	dest[2][2] = localToWorld._33;
-				dest[0][3] = localToWorld._41;	dest[1][3] = localToWorld._42;	dest[2][3] = localToWorld._43;
+					D3D12_RAYTRACING_INSTANCE_DESC instance = {};
+					instance.InstanceID = 0;
+					instance.InstanceContributionToHitGroupIndex = 0; // specify 0 because we will use InstanceIndex() in shader directly
+					instance.InstanceMask = 1;
+					instance.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+					instance.AccelerationStructure = search->second->m_resource->m_d3dResource->GetGPUVirtualAddress();
 
-				instanceDescs.push_back(instance);
+					// Transpose and convert to 3x4 matrix
+					const Matrix& localToWorld = scene->m_sceneMeshes.m_transformList[meshIndex] * scene->m_rootTransform;
+					decltype(instance.Transform)& dest = instance.Transform;
+					dest[0][0] = localToWorld._11;	dest[1][0] = localToWorld._12;	dest[2][0] = localToWorld._13;
+					dest[0][1] = localToWorld._21;	dest[1][1] = localToWorld._22;	dest[2][1] = localToWorld._23;
+					dest[0][2] = localToWorld._31;	dest[1][2] = localToWorld._32;	dest[2][2] = localToWorld._33;
+					dest[0][3] = localToWorld._41;	dest[1][3] = localToWorld._42;	dest[2][3] = localToWorld._43;
+
+					instanceDescs.push_back(instance);
+				}
 			}
 
 			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);

@@ -78,6 +78,7 @@ struct GlobalCbLayout
     float turbidity;
     float3 sunDir;
     float skyBrightness;
+    int sceneMeshTransformsBufferIndex;
 };
 
 ConstantBuffer<GlobalCbLayout> g_globalConstants : register(b0);
@@ -127,7 +128,9 @@ void chsMain(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     const FGpuPrimitive primitive = MeshMaterial::GetPrimitive(InstanceIndex(), GeometryIndex(), g_globalConstants.scenePrimitivesIndex, g_globalConstants.scenePrimitiveCountsIndex);
 
-    float4x4 localToWorld = mul(primitive.m_localToWorld, g_globalConstants.sceneRotation);
+    ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_globalConstants.sceneMeshTransformsBufferIndex];
+    float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+    localToWorld = mul(localToWorld, g_globalConstants.sceneRotation);
 
     float3 hitPosition = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 

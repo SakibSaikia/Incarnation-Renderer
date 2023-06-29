@@ -362,6 +362,18 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 		{
 			if (ImGui::BeginTabBar("SceneTabs", ImGuiTabBarFlags_None))
 			{
+				if (ImGui::BeginTabItem("Geo"))
+				{
+					int meshCount = scene->m_sceneMeshes.GetCount();
+					for (int i = 0; i < meshCount; ++i)
+					{
+						bool bVisible = scene->m_sceneMeshes.m_visibleList[i];
+						bResetPathtracelAccumulation |= ImGui::Selectable(scene->m_sceneMeshes.m_entityNames[i].c_str(), &bVisible);
+						scene->m_sceneMeshes.m_visibleList[i] = bVisible;
+					}
+					ImGui::EndTabItem();
+				}
+
 				if (ImGui::BeginTabItem("Environment/Sky"))
 				{
 					int currentSkyMode = settings->EnvSkyMode;

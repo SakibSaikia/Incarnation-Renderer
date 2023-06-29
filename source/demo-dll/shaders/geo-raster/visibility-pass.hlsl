@@ -33,10 +33,12 @@ vs_to_ps vs_main(uint index : SV_VertexID)
 	vs_to_ps o;
 
 	// Load the primitive from the packed primitives buffer using the primitive id
-	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
+	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
 	FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_passCb.primId * sizeof(FGpuPrimitive));
 
-	float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
+	ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
+	float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+	localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
 
 	uint vertIndex = MeshMaterial::GetUint(index, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);

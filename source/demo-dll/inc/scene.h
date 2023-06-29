@@ -28,6 +28,7 @@ struct TSceneEntities
 {
 	std::vector<T> m_entityList;
 	std::vector<std::string> m_entityNames;
+	std::vector<uint32_t> m_visibleList;
 	std::vector<Matrix> m_transformList;
 	std::vector<DirectX::BoundingBox> m_objectSpaceBoundsList;
 	size_t GetCount() const { return m_entityList.size(); }
@@ -35,6 +36,7 @@ struct TSceneEntities
 	{
 		m_entityList.clear();
 		m_entityNames.clear();
+		m_visibleList.clear();
 		m_transformList.clear();
 		m_objectSpaceBoundsList.clear();
 	}
@@ -96,6 +98,7 @@ struct FScene : public FModelLoader
 	// Scene geo
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
+	std::unique_ptr<FShaderBuffer> m_packedMeshTransforms;
 	std::unordered_map<std::string, std::unique_ptr<FShaderBuffer>> m_blasList;
 	std::unique_ptr<FShaderBuffer> m_tlas;
 	std::unique_ptr<FShaderBuffer> m_packedMaterials;
@@ -134,7 +137,7 @@ struct FScene : public FModelLoader
 private:
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
-	void CreateGpuPrimitiveBuffers();
+	void CreateGpuGeometryBuffers();
 	void CreateGpuLightBuffers();
 	void LoadMaterials(const tinygltf::Model& model);
 	FMaterial LoadMaterial(const tinygltf::Model& model, const int materialIndex);

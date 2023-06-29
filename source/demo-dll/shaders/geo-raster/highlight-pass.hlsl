@@ -23,10 +23,12 @@ ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 float4 vs_main(uint index : SV_VertexID) : SV_POSITION
 {
 	// Use object id to retrieve the primitive info
-	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
+	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
 	const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_passCb.m_objectId * sizeof(FGpuPrimitive));
 
-	float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
+	ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
+	float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+	localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
 
 	// index
 	uint vertIndex = MeshMaterial::GetUint(g_passCb.m_indexOffset + index, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);

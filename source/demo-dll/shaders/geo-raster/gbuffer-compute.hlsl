@@ -139,14 +139,16 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             DecodeVisibilityBuffer(visBufferValue, objectId, triangleId);
 
             // Use object id to retrieve the primitive info
-            ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_scenePrimitivesIndex];
+            ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
             const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
 
             // Fill the vertex data for the triangle
             FTriangleData tri = GetTriangleData(triangleId, primitive);
 
             // Transform the triangle verts to ndc space
-            float4x4 localToWorld = mul(primitive.m_localToWorld, g_sceneCb.m_sceneRotation);
+            ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
+            float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+            localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
             float4x4 localToClip = mul(localToWorld, g_viewCb.m_viewProjTransform);
             float4 p[3] = {
                 mul(float4(tri.m_vertices[0].m_position, 1.f), localToClip),

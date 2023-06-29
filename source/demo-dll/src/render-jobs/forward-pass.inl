@@ -64,8 +64,15 @@ namespace RenderJob::ForwardLightingPass
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 0.f, 0, 0, nullptr);
 
 			// Issue scene draws
+			int count = 0;
 			for (int meshIndex = 0; meshIndex < passDesc.scene->m_sceneMeshes.GetCount(); ++meshIndex)
 			{
+				const bool bHidden = passDesc.scene->m_sceneMeshes.m_visibleList[meshIndex] == 0;
+				if (bHidden)
+				{
+					continue;
+				}
+
 				const FMesh& mesh = passDesc.scene->m_sceneMeshes.m_entityList[meshIndex];
 				SCOPED_COMMAND_LIST_EVENT(cmdList, passDesc.scene->m_sceneMeshes.m_entityNames[meshIndex].c_str(), 0);
 
@@ -170,6 +177,7 @@ namespace RenderJob::ForwardLightingPass
 					d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(PrimitiveCbLayout) / 4, &primCb, 0);
 
 					d3dCmdList->DrawInstanced(primitive.m_indexCount, 1, 0, 0);
+					count++;
 				}
 			}
 

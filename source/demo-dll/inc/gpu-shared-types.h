@@ -73,8 +73,8 @@ struct FMeshAccessor
 
 struct FGpuPrimitive
 {
-	Matrix m_localToWorld;
 	Vector4 m_boundingSphere;
+	int m_meshIndex;
 	int m_indexAccessor;
 	int m_positionAccessor;
 	int m_uvAccessor;
@@ -128,7 +128,9 @@ struct FSceneConstants
 	uint32_t m_primitiveCount;
 	uint32_t m_sceneMeshAccessorsIndex;
 	uint32_t m_sceneMeshBufferViewsIndex;
-	uint32_t m_scenePrimitivesIndex;
+	uint32_t m_packedScenePrimitivesBufferIndex;
+	uint32_t m_packedSceneMeshTransformsBufferIndex;
+	uint32_t m_packedSceneMeshVisibilityBufferIndex;
 	uint32_t m_sceneMaterialBufferIndex;
 	uint32_t m_lightCount;
 	uint32_t m_packedLightIndicesBufferIndex;

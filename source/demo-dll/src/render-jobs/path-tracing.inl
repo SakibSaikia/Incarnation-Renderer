@@ -165,6 +165,7 @@ namespace RenderJob::PathTracing
 				float turbidity;
 				Vector3 sunDir;
 				float skyBrightness;
+				int sceneMeshTransformsBufferIndex;
 			};
 
 			std::unique_ptr<FSystemBuffer> globalCb{ RenderBackend12::CreateNewSystemBuffer({
@@ -211,6 +212,7 @@ namespace RenderJob::PathTracing
 					cbDest->turbidity = passDesc.renderConfig.Turbidity;
 					cbDest->sunDir = Vector3(L);
 					cbDest->skyBrightness = passDesc.renderConfig.SkyBrightness;
+					cbDest->sceneMeshTransformsBufferIndex = passDesc.scene->m_packedMeshTransforms->m_descriptorIndices.SRV;
 				}
 			})};
 

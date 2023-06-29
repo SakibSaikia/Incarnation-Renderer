@@ -826,7 +826,6 @@ void FDebugDraw::Initialize()
 		{
 			const FMeshPrimitive& primitive = m_shapePrimitives[primitiveIndex];
 			FGpuPrimitive newPrimitive = {};
-			newPrimitive.m_localToWorld = Matrix::Identity;
 			newPrimitive.m_boundingSphere = Vector4(0.f, 0.f, 0.f, 1.f);
 			newPrimitive.m_indexAccessor = primitive.m_indexAccessor;
 			newPrimitive.m_positionAccessor = primitive.m_positionAccessor;
@@ -1529,7 +1528,7 @@ void Renderer::Render(const FRenderState& renderState)
 			uploader.SubmitUploads(cmdList);
 		}
 
-		// Light Tranforms
+		// Light Transforms
 		std::unique_ptr<FShaderBuffer> packedLightTransformsBuffer;
 		const size_t sceneLightCount = renderState.m_scene->m_sceneLights.GetCount();
 		if (sceneLightCount > 0)
@@ -1552,6 +1551,29 @@ void Renderer::Render(const FRenderState& renderState)
 			uploader.SubmitUploads(cmdList);
 		}
 
+		// Buffer that contains visibility for each mesh in the scene. GpuPrimitives index into this to lookup their visibility.
+		std::unique_ptr<FShaderBuffer> packedMeshVisibilityBuffer;
+		const size_t sceneMeshCount = renderState.m_scene->m_sceneMeshes.GetCount();
+		if (sceneMeshCount > 0)
+		{
+			const size_t bufferSize = sceneMeshCount * sizeof(uint32_t);
+			FResourceUploadContext uploader{ bufferSize };
+
+			packedMeshVisibilityBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+				.name = L"scene_mesh_visibility",
+				.type = FShaderBuffer::Type::Raw,
+				.accessMode = FResource::AccessMode::GpuReadOnly,
+				.alloc = FResource::Allocation::Transient(gpuFinishFence),
+				.size = bufferSize,
+				.upload = {
+					.pData = (const uint8_t*)renderState.m_scene->m_sceneMeshes.m_visibleList.data(),
+					.context = &uploader
+				}
+				}));
+
+			uploader.SubmitUploads(cmdList);
+		}
+
 		// Submit uploads
 		RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { cmdList });
 
@@ -1561,7 +1583,7 @@ void Renderer::Render(const FRenderState& renderState)
 			.accessMode = FResource::AccessMode::CpuWriteOnly,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
 			.size = sizeof(FSceneConstants),
-			.uploadCallback = [scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get()](uint8_t* pDest)
+			.uploadCallback = [scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get(), meshVisibilityBuf = packedMeshVisibilityBuffer.get()](uint8_t* pDest)
 			{
 				const size_t lightCount = scene->m_sceneLights.GetCount();
 
@@ -1575,7 +1597,9 @@ void Renderer::Render(const FRenderState& renderState)
 				cb->m_primitiveCount = totalPrimitives;
 				cb->m_sceneMeshAccessorsIndex = scene->m_packedMeshAccessors->m_descriptorIndices.SRV;
 				cb->m_sceneMeshBufferViewsIndex = scene->m_packedMeshBufferViews->m_descriptorIndices.SRV;
-				cb->m_scenePrimitivesIndex = scene->m_packedPrimitives->m_descriptorIndices.SRV;
+				cb->m_packedScenePrimitivesBufferIndex = scene->m_packedPrimitives->m_descriptorIndices.SRV;
+				cb->m_packedSceneMeshTransformsBufferIndex = scene->m_packedMeshTransforms->m_descriptorIndices.SRV;
+				cb->m_packedSceneMeshVisibilityBufferIndex = meshVisibilityBuf->m_descriptorIndices.SRV;
 				cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_descriptorIndices.SRV;
 				cb->m_lightCount = scene->m_sceneLights.GetCount();
 				cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_descriptorIndices.SRV : -1;
