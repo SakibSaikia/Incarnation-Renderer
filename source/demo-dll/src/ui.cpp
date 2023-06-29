@@ -365,6 +365,26 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 				if (ImGui::BeginTabItem("Geo"))
 				{
 					int meshCount = scene->m_sceneMeshes.GetCount();
+					if (ImGui::Button("Hide All"))
+					{
+						for (int i = 0; i < meshCount; ++i)
+						{
+							scene->m_sceneMeshes.m_visibleList[i] = 0;
+							bResetPathtracelAccumulation |= true;
+						}
+					}
+
+					ImGui::SameLine();
+
+					if (ImGui::Button("Show All"))
+					{
+						for (int i = 0; i < meshCount; ++i)
+						{
+							scene->m_sceneMeshes.m_visibleList[i] = 1;
+							bResetPathtracelAccumulation |= true;
+						}
+					}
+
 					for (int i = 0; i < meshCount; ++i)
 					{
 						bool bVisible = scene->m_sceneMeshes.m_visibleList[i];

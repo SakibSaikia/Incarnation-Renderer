@@ -48,44 +48,47 @@ namespace RenderJob::UpdateTLASPass
 				}
 			}
 
-			const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
-			std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer({
-				.name = L"instance_descs_buffer",
-				.accessMode = FResource::AccessMode::CpuWriteOnly,
-				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
-				.size = instanceDescBufferSize,
-				.uploadCallback = [pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
-				{
-					memcpy(pDest, pData, instanceDescBufferSize);
-				}
-			})};
+			if (!instanceDescs.empty())
+			{
+				const size_t instanceDescBufferSize = instanceDescs.size() * sizeof(D3D12_RAYTRACING_INSTANCE_DESC);
+				std::unique_ptr<FSystemBuffer> instanceDescBuffer{ RenderBackend12::CreateNewSystemBuffer({
+					.name = L"instance_descs_buffer",
+					.accessMode = FResource::AccessMode::CpuWriteOnly,
+					.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+					.size = instanceDescBufferSize,
+					.uploadCallback = [pData = instanceDescs.data(), instanceDescBufferSize](uint8_t* pDest)
+					{
+						memcpy(pDest, pData, instanceDescBufferSize);
+					}
+				}) };
 
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
-			tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-			tlasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-			tlasInputsDesc.InstanceDescs = instanceDescBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			tlasInputsDesc.NumDescs = instanceDescs.size();
-			tlasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlasInputsDesc = {};
+				tlasInputsDesc.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+				tlasInputsDesc.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+				tlasInputsDesc.InstanceDescs = instanceDescBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				tlasInputsDesc.NumDescs = instanceDescs.size();
+				tlasInputsDesc.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
-			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
-			RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
+				D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO tlasPreBuildInfo = {};
+				RenderBackend12::GetDevice()->GetRaytracingAccelerationStructurePrebuildInfo(&tlasInputsDesc, &tlasPreBuildInfo);
 
-			// TLAS scratch buffer
-			std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer({
-				.name = L"tlas_scratch",
-				.type = FShaderBuffer::Type::AccelerationStructure,
-				.accessMode = FResource::AccessMode::GpuWriteOnly,
-				.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
-				.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)}) };
+				// TLAS scratch buffer
+				std::unique_ptr<FShaderBuffer> tlasScratch{ RenderBackend12::CreateNewShaderBuffer({
+					.name = L"tlas_scratch",
+					.type = FShaderBuffer::Type::AccelerationStructure,
+					.accessMode = FResource::AccessMode::GpuWriteOnly,
+					.alloc = FResource::Allocation::Transient(cmdList->GetFence(FCommandList::SyncPoint::GpuFinish)),
+					.size = GetAlignedSize(D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT, tlasPreBuildInfo.ScratchDataSizeInBytes)}) };
 
-			// Build TLAS
-			scene->m_tlas->m_resource->UavBarrier(cmdList);
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-			buildDesc.Inputs = tlasInputsDesc;
-			buildDesc.ScratchAccelerationStructureData = tlasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			buildDesc.DestAccelerationStructureData = scene->m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress();
-			cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-			scene->m_tlas->m_resource->UavBarrier(cmdList);
+				// Build TLAS
+				scene->m_tlas->m_resource->UavBarrier(cmdList);
+				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+				buildDesc.Inputs = tlasInputsDesc;
+				buildDesc.ScratchAccelerationStructureData = tlasScratch->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				buildDesc.DestAccelerationStructureData = scene->m_tlas->m_resource->m_d3dResource->GetGPUVirtualAddress();
+				cmdList->m_d3dCmdList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+				scene->m_tlas->m_resource->UavBarrier(cmdList);
+			}
 
 			return cmdList;
 
