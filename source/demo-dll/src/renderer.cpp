@@ -1456,7 +1456,7 @@ void Renderer::Render(const FRenderState& renderState)
 
 		// Create separate args buffer for each ExecuteIndirect dispatch. This is required for PSO state changes.
 		std::unique_ptr<FShaderBuffer> batchArgsBuffer_Default{ RenderBackend12::CreateNewShaderBuffer({
-			.name = L"batch_args_buffer",
+			.name = L"batch_args_buffer_default",
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadWrite,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
@@ -1464,7 +1464,7 @@ void Renderer::Render(const FRenderState& renderState)
 
 		// Args buffer for double-sided primitives
 		std::unique_ptr<FShaderBuffer> batchArgsBuffer_DoubleSided{ RenderBackend12::CreateNewShaderBuffer({
-			.name = L"batch_args_buffer",
+			.name = L"batch_args_buffer_doublesided",
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadWrite,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
