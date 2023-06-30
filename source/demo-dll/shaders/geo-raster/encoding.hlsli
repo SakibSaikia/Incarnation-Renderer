@@ -1,7 +1,7 @@
 #ifndef __ENCODING_HLSLI_
 #define __ENCODING_HLSLI_
 
-#define NUM_TRIANGLE_BITS (17)
+#define NUM_TRIANGLE_BITS (20)
 #define TRIANGLE_MASK ((1 << NUM_TRIANGLE_BITS) - 1)
 
 uint EncodeVisibilityBuffer(uint objectId, uint triangleId)
