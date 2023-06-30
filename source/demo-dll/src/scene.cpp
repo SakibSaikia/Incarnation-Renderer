@@ -1236,8 +1236,8 @@ std::pair<int, int> FScene::PrefilterNormalRoughnessTextures(const tinygltf::Ima
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
 			// Dispatch
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(mipWidth / 16), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(mipHeight / 16), 1);
+			const size_t threadGroupCountX = GetDispatchSize(mipWidth, 16);
+			const size_t threadGroupCountY = GetDispatchSize(mipHeight, 16);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 
 			mipWidth = mipWidth >> 1;

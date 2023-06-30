@@ -100,8 +100,8 @@ namespace
 			cb.m_exposure = settings->Exposure;
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(texSize.x / 16), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(texSize.y / 16), 1);
+			const size_t threadGroupCountX = GetDispatchSize(texSize.x, 16);
+			const size_t threadGroupCountY = GetDispatchSize(texSize.y, 16);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 		}
 
@@ -174,8 +174,8 @@ namespace
 			cb.m_exposure = settings->Exposure;
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(texSize.x / 16), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(texSize.y / 16), 1);
+			const size_t threadGroupCountX = GetDispatchSize(texSize.x, 16);
+			const size_t threadGroupCountY = GetDispatchSize(texSize.y, 16);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 		}
 

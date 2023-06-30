@@ -130,9 +130,9 @@ namespace RenderJob::LightCullingPass
 				clearValue, 0, nullptr);
 
 			// Dispatch - one thread per cluster
-			const uint32_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.renderConfig.LightClusterDimX / threadGroupSize[0]), 1);
-			const uint32_t threadGroupCountY = std::max<size_t>(std::ceil(passDesc.renderConfig.LightClusterDimY / threadGroupSize[1]), 1);
-			const uint32_t threadGroupCountZ = std::max<size_t>(std::ceil(passDesc.renderConfig.LightClusterDimZ / threadGroupSize[2]), 1);
+			const uint32_t threadGroupCountX = GetDispatchSize(passDesc.renderConfig.LightClusterDimX, threadGroupSize[0]);
+			const uint32_t threadGroupCountY = GetDispatchSize(passDesc.renderConfig.LightClusterDimY, threadGroupSize[1]);
+			const uint32_t threadGroupCountZ = GetDispatchSize(passDesc.renderConfig.LightClusterDimZ, threadGroupSize[2]);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
 
 			return cmdList;

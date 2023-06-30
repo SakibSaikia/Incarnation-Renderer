@@ -89,7 +89,7 @@ namespace RenderJob::BatchCullingPass
 				clearValue, 0, nullptr);
 
 			// Dispatch
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.primitiveCount / 128), 1);
+			size_t threadGroupCountX = GetDispatchSize(passDesc.primitiveCount, 128);
 			d3dCmdList->Dispatch(threadGroupCountX, 1, 1);
 
 			return cmdList;

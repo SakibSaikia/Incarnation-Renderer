@@ -222,7 +222,7 @@ std::unique_ptr<FTexture> Renderer::GenerateEnvBrdfTexture(const uint32_t width,
 		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
 		// Dispatch
-		size_t threadGroupCount = std::max<size_t>(std::ceil(width / 16), 1);
+		const size_t threadGroupCount = GetDispatchSize(width, 16);
 		d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
 	}
 
@@ -353,8 +353,8 @@ void Renderer::GenerateDynamicSkyTexture(FCommandList* cmdList, const uint32_t o
 	cb.m_uavIndex = outputUavIndex;
 	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
-	size_t threadGroupCountX = std::max<size_t>(std::ceil(resX / 16), 1);
-	size_t threadGroupCountY = std::max<size_t>(std::ceil(resY / 16), 1);
+	const size_t threadGroupCountX = GetDispatchSize(resX, 16);
+	const size_t threadGroupCountY = GetDispatchSize(resY, 16);
 	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 }
 
@@ -407,8 +407,8 @@ void Renderer::DownsampleUav(FCommandList* cmdList, const int srvUavIndex, const
 	cb.m_dstUavIndex = dstUavIndex;
 	d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(FConstants) / 4, &cb, 0);
 
-	size_t threadGroupCountX = std::max<size_t>(std::ceil(dstResX / 16), 1);
-	size_t threadGroupCountY = std::max<size_t>(std::ceil(dstResY / 16), 1);
+	const size_t threadGroupCountX = GetDispatchSize(dstResX, 16);
+	const size_t threadGroupCountY = GetDispatchSize(dstResY, 16);
 	d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 }
 
@@ -462,7 +462,7 @@ void Renderer::ConvertLatlong2Cubemap(FCommandList* cmdList, const uint32_t srcS
 		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
 		// Dispatch
-		size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
+		const size_t threadGroupCount = GetDispatchSize(mipSize, 16);
 		d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
 	}
 }
@@ -522,7 +522,7 @@ void Renderer::PrefilterCubemap(FCommandList* cmdList, const uint32_t srcCubemap
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
 			// Dispatch
-			size_t threadGroupCount = std::max<size_t>(std::ceil(mipSize / 16), 1);
+			const size_t threadGroupCount = GetDispatchSize(mipSize, 16);
 			d3dCmdList->Dispatch(threadGroupCount, threadGroupCount, 1);
 		}
 	}
@@ -594,8 +594,8 @@ void Renderer::ShEncode(FCommandList* cmdList, FShaderSurface* destSurface, cons
 
 		d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
 
-		size_t threadGroupCountX = std::max<size_t>(std::ceil(baseMipWidth / 16), 1);
-		size_t threadGroupCountY = std::max<size_t>(std::ceil(baseMipHeight / 16), 1);
+		const size_t threadGroupCountX = GetDispatchSize(baseMipWidth, 16);
+		const size_t threadGroupCountY = GetDispatchSize(baseMipHeight, 16);
 		d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 	}
 
@@ -665,8 +665,8 @@ void Renderer::ShEncode(FCommandList* cmdList, FShaderSurface* destSurface, cons
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(CbLayout) / 4, &cb, 0);
 
 			// Reduce by 2 x 2 on each iteration
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(destMipWidth / threadGroupSizeX), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(destMipHeight / threadGroupSizeY), 1);
+			const size_t threadGroupCountX = GetDispatchSize(destMipWidth, threadGroupSizeX);
+			const size_t threadGroupCountY = GetDispatchSize(destMipHeight, threadGroupSizeY);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, numCoefficients);
 		}
 	}
@@ -1016,7 +1016,7 @@ void FDebugDraw::Flush(const PassDesc& passDesc)
 			d3dCmdList->SetComputeRootConstantBufferView(0, cbuf->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Dispatch
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(MaxCommands / 32), 1);
+			const size_t threadGroupCountX = GetDispatchSize(MaxCommands, 32);
 			d3dCmdList->Dispatch(threadGroupCountX, 1, 1);
 
 			// Transition back to expected state to avoid having to transition on the copy queue later

@@ -220,3 +220,8 @@ constexpr size_t GetAlignedSize(const size_t alignment, const size_t size)
 {
 	return (size + (alignment - 1)) & ~(alignment - 1);
 }
+
+constexpr size_t GetDispatchSize(const size_t workgroupSize, const size_t threadGroupSize)
+{
+	return std::max<size_t>(std::ceil(workgroupSize / (float)threadGroupSize), 1);
+}

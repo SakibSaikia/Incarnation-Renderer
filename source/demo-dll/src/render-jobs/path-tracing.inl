@@ -284,8 +284,8 @@ namespace RenderJob::PathTracing
 			};
 
 			d3dCmdList->SetComputeRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
-			size_t threadGroupCountX = std::max<size_t>(std::ceil(passDesc.resX / 16), 1);
-			size_t threadGroupCountY = std::max<size_t>(std::ceil(passDesc.resY / 16), 1);
+			const size_t threadGroupCountX = GetDispatchSize(passDesc.resX, 16);
+			const size_t threadGroupCountY = GetDispatchSize(passDesc.resY, 16);
 			d3dCmdList->Dispatch(threadGroupCountX, threadGroupCountY, 1);
 
 			return cmdList;
