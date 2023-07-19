@@ -3,6 +3,7 @@ namespace RenderJob::HBAO
 	struct Desc
 	{
 		FShaderSurface* aoTarget;
+		FShaderSurface* bentNormalTarget;
 		FShaderSurface* depthStencil;
 		FShaderSurface* gbufferNormals;
 		FSystemBuffer* sceneConstantBuffer;
@@ -63,12 +64,14 @@ namespace RenderJob::HBAO
 			struct FPassConstants
 			{
 				uint32_t m_aoTargetUavIndex;
+				uint32_t m_bentNormalTargetUavIndex;
 				uint32_t m_depthTargetSrvIndex;
 				uint32_t m_gbufferNormalsSrvIndex;
 			};
 
 			FPassConstants cb = {};
 			cb.m_aoTargetUavIndex = passDesc.aoTarget->m_descriptorIndices.UAVs[0];
+			cb.m_bentNormalTargetUavIndex = passDesc.bentNormalTarget->m_descriptorIndices.UAVs[0];
 			cb.m_depthTargetSrvIndex = passDesc.depthStencil->m_descriptorIndices.SRV;
 			cb.m_gbufferNormalsSrvIndex = passDesc.gbufferNormals->m_descriptorIndices.SRV;
 

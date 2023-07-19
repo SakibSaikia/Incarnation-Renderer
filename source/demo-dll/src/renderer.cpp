@@ -1447,6 +1447,15 @@ void Renderer::Render(const FRenderState& renderState)
 			.height = resY,
 			.bRequiresClear = true })};
 
+		std::unique_ptr<FShaderSurface> bentNormalsBuffer{ RenderBackend12::CreateNewShaderSurface({
+			.name = L"bent_normals",
+			.type = FShaderSurface::Type::UAV,
+			.alloc = FResource::Allocation::Transient(gpuFinishFence),
+			.format = DXGI_FORMAT_R16G16_FLOAT,
+			.width = resX,
+			.height = resY,
+			.bRequiresClear = true }) };
+
 		std::unique_ptr<FShaderBuffer> meshHighlightIndirectArgs{ RenderBackend12::CreateNewShaderBuffer({
 			.name = L"mesh_highlight_indirect_args",
 			.type = FShaderBuffer::Type::Raw,
@@ -1785,6 +1794,7 @@ void Renderer::Render(const FRenderState& renderState)
 			{
 				RenderJob::HBAO::Desc hbaoDesc = {};
 				hbaoDesc.aoTarget = aoBuffer.get();
+				hbaoDesc.bentNormalTarget = bentNormalsBuffer.get();
 				hbaoDesc.depthStencil = depthBuffer.get();
 				hbaoDesc.gbufferNormals = gbuffer_normals.get();
 				hbaoDesc.sceneConstantBuffer = cbSceneConstants.get();
@@ -1802,12 +1812,19 @@ void Renderer::Render(const FRenderState& renderState)
 				D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
 				clearCL->m_d3dCmdList->SetDescriptorHeaps(1, descriptorHeaps);
 				aoBuffer->m_resource->Transition(clearCL, aoBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+				bentNormalsBuffer->m_resource->Transition(clearCL, bentNormalsBuffer->m_resource->GetTransitionToken(), 0, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 				const float clearValue[] = { 1.f, 1.f, 1.f, 1.f };
 				clearCL->m_d3dCmdList->ClearUnorderedAccessViewFloat(
 					RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, aoBuffer->m_descriptorIndices.UAVs[0]),
 					RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, aoBuffer->m_descriptorIndices.NonShaderVisibleUAVs[0], false),
 					aoBuffer->m_resource->m_d3dResource,
+					clearValue, 0, nullptr);
+
+				clearCL->m_d3dCmdList->ClearUnorderedAccessViewFloat(
+					RenderBackend12::GetGPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, bentNormalsBuffer->m_descriptorIndices.UAVs[0]),
+					RenderBackend12::GetCPUDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, bentNormalsBuffer->m_descriptorIndices.NonShaderVisibleUAVs[0], false),
+					bentNormalsBuffer->m_resource->m_d3dResource,
 					clearValue, 0, nullptr);
 
 				RenderBackend12::ExecuteCommandlists(D3D12_COMMAND_LIST_TYPE_DIRECT, { clearCL });
@@ -1945,6 +1962,7 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.target = hdrRasterSceneColor.get();
 				desc.depthBuffer = depthBuffer.get();
 				desc.aoBuffer = aoBuffer.get();
+				desc.bentNormalsBuffer = bentNormalsBuffer.get();
 				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 				desc.jitter = pixelJitter;
 				desc.renderConfig = c;

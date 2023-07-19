@@ -16,7 +16,7 @@
 
 #define rootsig \
     "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
-    "RootConstants(b0, num32BitConstants=3)," \
+    "RootConstants(b0, num32BitConstants=4)," \
     "CBV(b1)," \
     "CBV(b2)"
 
@@ -29,6 +29,7 @@ static const float MaxTraceLength = 1.f;
 struct FPassConstants
 {
     uint m_aoTargetUavIndex;
+    uint m_bentNormalTargetUavIndex;
     uint m_depthTargetSrvIndex;
     uint m_gbufferNormalsSrvIndex;
 };
@@ -61,7 +62,7 @@ bool RayHit(float3 origin, float3 dir)
     }
 }
 
-float ComputeHorizonAngle(float horizonAngleStart, float3 pixelWorldPos, float3 sliceBitangent, float3 sliceTangent)
+float ComputeHorizonAngle(float horizonAngleStart, float3 ws_pixelPos, float3 lcs_sliceX, float3 lcs_sliceY, float3x3 lcs2ws)
 {
     float minHorizonAngle = 0.f;
     float maxHorizonAngle = horizonAngleStart;
@@ -72,9 +73,10 @@ float ComputeHorizonAngle(float horizonAngleStart, float3 pixelWorldPos, float3 
     while (traceIdx < MaxTracesPerSlice && (maxHorizonAngle - minHorizonAngle) > TerminateTraceThreshold)
     {
         newHorizonAngle = minHorizonAngle + 0.5f * (maxHorizonAngle - minHorizonAngle);
-        float3 rayDir = cos(newHorizonAngle) * sliceBitangent + sin(newHorizonAngle) * sliceTangent;
+        float3 lcs_rayDir = cos(newHorizonAngle) * lcs_sliceY + sin(newHorizonAngle) * lcs_sliceX;
+        float3 ws_rayDir = mul(lcs_rayDir, lcs2ws);
 
-        if (RayHit(pixelWorldPos, rayDir))
+        if (RayHit(ws_pixelPos, ws_rayDir))
         {
             maxHorizonAngle = newHorizonAngle;
         }
@@ -89,11 +91,16 @@ float ComputeHorizonAngle(float horizonAngleStart, float3 pixelWorldPos, float3 
     return maxHorizonAngle;
 }
 
-float GatherAO(float horizonAngleStart, float3 pixelWorldPos, float3 sliceBitangent, float3 sliceTangent)
+void GatherAO(float horizonAngleStart, float3 ws_pixelPos, float3 lcs_sliceX, float3 lcs_sliceY, float3x3 lcs2ws, out float ao, out float3 bentNormal)
 {
-    float frontHorizonAngle = ComputeHorizonAngle(horizonAngleStart, pixelWorldPos, sliceBitangent, sliceTangent);
-    float backHorizonAngle = ComputeHorizonAngle(horizonAngleStart, pixelWorldPos, sliceBitangent, -sliceTangent);
-    return cos(frontHorizonAngle) + cos(backHorizonAngle);
+    float theta1 = ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, lcs_sliceX, lcs_sliceY, lcs2ws);     // front horizon angle
+    float theta0 = -ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, -lcs_sliceX, lcs_sliceY, lcs2ws);   // back horizon angle
+    ao = cos(theta1) + cos(theta0);
+
+    float ss_nx = 0.5f * (theta1 - theta0 + sin(theta0) * cos(theta0) - sin(theta1) * cos(theta1));
+    float ss_ny = 0.5f * (2.f - cos(theta0) * cos(theta0) - cos(theta1) * cos(theta1));
+
+    bentNormal = normalize(mul(lcs_sliceX * ss_nx + lcs_sliceY * ss_ny, lcs2ws));
 }
 
 
@@ -112,44 +119,52 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float pixelDepth = depthTex[dispatchThreadId.xy];
 
         // Pixel Position
-        float4 pixelPos = float4(pixelNDC.xy, pixelDepth, 1.f);
-        float4 pixelWorldPos = mul(pixelPos, g_viewCb.m_invViewProjTransform);
-        pixelWorldPos /= pixelWorldPos.w;
+        float4 ndc_pixelPos = float4(pixelNDC.xy, pixelDepth, 1.f);
+        float4 ws_pixelPos = mul(ndc_pixelPos, g_viewCb.m_invViewProjTransform);
+        ws_pixelPos /= ws_pixelPos.w;
         
         // Construct local "camera" space around pixel
         // Referred to as ω0, ωx, ωy in the paper
-        float3 localAt = normalize(g_viewCb.m_eyePos - pixelWorldPos.xyz);
-        float3 localRight = normalize(cross(localAt, g_viewCb.m_cameraUpVector));
-        float3 localUp = cross(localRight, localAt);
+        float3 ws_localAt = normalize(g_viewCb.m_eyePos - ws_pixelPos.xyz);
+        float3 ws_localRight = normalize(cross(ws_localAt, g_viewCb.m_cameraUpVector));
+        float3 ws_localUp = cross(ws_localRight, ws_localAt);
+        float3x3 lcs2ws = { ws_localRight, ws_localUp, ws_localAt };
 
         // Pixel Normal - n
         Texture2D<float2> gbufferNormals = ResourceDescriptorHeap[g_passCb.m_gbufferNormalsSrvIndex];
-        const float3 worldNormal = OctDecode(gbufferNormals[dispatchThreadId.xy]);
+        const float3 ws_normal = OctDecode(gbufferNormals[dispatchThreadId.xy]);
 
         // Azimuth angle φ
         float azimuthAngle = 0.f;
 
         float sumAO = 0.f;
+        float3 avgBentNormal = 0.f;
         for (uint i = 0; i < NumSlices; ++i)
         {
             // Tangent vector for the slice plane that represents fixed angle offsets to sample AO around the hemisphere
             // D(φ) = cos(φ)ωx + sin(φ)ωy
-            float3 sliceTangentVec = cos(azimuthAngle) * localRight + sin(azimuthAngle) * localUp;
+            float3 lcs_sliceTangentVec = float3(cos(azimuthAngle), sin(azimuthAngle), 0);
+            float3 ws_sliceTangentVec = mul(lcs_sliceTangentVec, lcs2ws);
 
             // Projection of the world normal onto the slice plane 
             // n' = {n.D(φ), n.ω0}
             float2 sliceProjectedNormal;
-            sliceProjectedNormal.x = dot(worldNormal, sliceTangentVec);
-            sliceProjectedNormal.y = dot(worldNormal, localAt);
+            sliceProjectedNormal.x = dot(ws_normal, ws_sliceTangentVec);
+            sliceProjectedNormal.y = dot(ws_normal, ws_localAt);
 
             // Project slice direction vector D(φ) onto world normal plane
-            float t = -dot(sliceTangentVec, worldNormal) / dot(localAt, worldNormal);
+            float t = -dot(ws_sliceTangentVec, ws_normal) / dot(ws_localAt, ws_normal);
 
-            // Horizon angle is the angle between localUp and the projected slice vector into the normal plane
+            // Horizon angle is the angle between ws_localUp and the projected slice vector into the normal plane
             // Note: that front and back horizon angles are the same, just different sign. (although the perspective distorts the perception in Fig 6 of the paper)
             float horizonAngle = acos(t * rsqrt(1 + t * t));
 
-            sumAO += GatherAO(horizonAngle, pixelWorldPos.xyz, localAt, sliceTangentVec);
+            float outAO;
+            float3 outBentNormal;
+            GatherAO(horizonAngle, ws_pixelPos.xyz, lcs_sliceTangentVec, float3(0,0,1), lcs2ws, outAO, outBentNormal);
+
+            sumAO += outAO;
+            avgBentNormal += outBentNormal;
 
             azimuthAngle += AzimuthalSliceAngle;
         }
@@ -158,5 +173,8 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         // So, we have to divide the total AO by two times the number of slices.
         RWTexture2D<float> aoTarget = ResourceDescriptorHeap[g_passCb.m_aoTargetUavIndex];
         aoTarget[dispatchThreadId.xy] = 1.f - saturate(sumAO / (2.f * NumSlices));
+
+        RWTexture2D<float2> bentNormalTarget = ResourceDescriptorHeap[g_passCb.m_bentNormalTargetUavIndex];
+        bentNormalTarget[dispatchThreadId.xy] = OctEncode(normalize(avgBentNormal));
     }
 }

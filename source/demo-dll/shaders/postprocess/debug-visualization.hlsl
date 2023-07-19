@@ -8,7 +8,7 @@
 #define rootsig \
 	"RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED)," \
     "StaticSampler(s0, visibility = SHADER_VISIBILITY_PIXEL, filter = FILTER_MIN_MAG_MIP_POINT, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP), " \
-    "RootConstants(b0, num32BitConstants=32, visibility = SHADER_VISIBILITY_PIXEL)"
+    "RootConstants(b0, num32BitConstants=36, visibility = SHADER_VISIBILITY_PIXEL)"
 
 SamplerState g_pointSampler : register(s0);
 
@@ -20,6 +20,7 @@ cbuffer cb : register(b0)
 	int g_gbuffer2TextureIndex;
 	int g_depthBufferTextureIndex;
 	int g_aoTextureIndex;
+	int g_bentNormalsTextureIndex;
 	int g_indirectArgsBufferIndex;
 	int g_sceneMeshAccessorsIndex;
 	int g_sceneMeshBufferViewsIndex;
@@ -30,6 +31,7 @@ cbuffer cb : register(b0)
 	uint g_mouseX;
 	uint g_mouseY;
 	uint g_lightClusterSlices;
+	uint3 __padding;
 	float4x4 g_invProjectionTransform;
 }
 
@@ -162,6 +164,13 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	{
 		Texture2D aoTex = ResourceDescriptorHeap[g_aoTextureIndex];
 		return aoTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)).rrrr;
+	}
+	// Bent Normals
+	else if (g_viewmode == 13)
+	{
+		Texture2D<float2> bentNormalsTex = ResourceDescriptorHeap[g_bentNormalsTextureIndex];
+		float2 bentNormal = bentNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
+		return OctDecode(bentNormal).xyzx;
 	}
 
 	return 0.xxxx;

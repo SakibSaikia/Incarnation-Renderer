@@ -18,7 +18,8 @@ enum class Viewmode
 	TriangleIds = 9,
 	Normalmap = 10,
 	LightClusterSlices = 11,
-	AmbientOcclusion = 12
+	AmbientOcclusion = 12,
+	BentNormals = 13
 };
 
 enum class EnvSkyMode
