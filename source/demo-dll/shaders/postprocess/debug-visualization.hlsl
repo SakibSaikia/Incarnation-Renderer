@@ -169,8 +169,9 @@ float4 ps_main(vs_to_ps input) : SV_Target
 	else if (g_viewmode == 13)
 	{
 		Texture2D<float2> bentNormalsTex = ResourceDescriptorHeap[g_bentNormalsTextureIndex];
-		float2 bentNormal = bentNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
-		return OctDecode(bentNormal).xyzx;
+		float3 bentNormal = OctDecode(bentNormalsTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0)));
+		bentNormal = bentNormal * 0.5f + 0.5.xxx;
+		return float4(bentNormal, 1.f);
 	}
 
 	return 0.xxxx;
