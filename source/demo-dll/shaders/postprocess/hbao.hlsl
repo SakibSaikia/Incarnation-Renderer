@@ -62,7 +62,7 @@ bool RayHit(float3 origin, float3 dir)
     }
 }
 
-float ComputeHorizonAngle(float horizonAngleStart, float3 ws_pixelPos, float3 lcs_sliceX, float3 lcs_sliceY, float3x3 lcs2ws)
+float ComputeHorizonAngle(float horizonAngleStart, float3 ws_pixelPos, float3 ws_sliceX, float3 ws_sliceY)
 {
     float minHorizonAngle = 0.f;
     float maxHorizonAngle = horizonAngleStart;
@@ -73,8 +73,7 @@ float ComputeHorizonAngle(float horizonAngleStart, float3 ws_pixelPos, float3 lc
     while (traceIdx < MaxTracesPerSlice && (maxHorizonAngle - minHorizonAngle) > TerminateTraceThreshold)
     {
         newHorizonAngle = minHorizonAngle + 0.5f * (maxHorizonAngle - minHorizonAngle);
-        float3 lcs_rayDir = cos(newHorizonAngle) * lcs_sliceY + sin(newHorizonAngle) * lcs_sliceX;
-        float3 ws_rayDir = mul(lcs_rayDir, lcs2ws);
+        float3 ws_rayDir = cos(newHorizonAngle) * ws_sliceY + sin(newHorizonAngle) * ws_sliceX;
 
         if (RayHit(ws_pixelPos, ws_rayDir))
         {
@@ -91,16 +90,16 @@ float ComputeHorizonAngle(float horizonAngleStart, float3 ws_pixelPos, float3 lc
     return maxHorizonAngle;
 }
 
-void GatherAO(float horizonAngleStart, float3 ws_pixelPos, float3 lcs_sliceX, float3 lcs_sliceY, float3x3 lcs2ws, out float ao, out float3 bentNormal)
+void GatherAO(float horizonAngleStart, float3 ws_pixelPos, float3 ws_sliceX, float3 ws_sliceY, out float ao, out float3 bentNormal)
 {
-    float theta1 = ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, lcs_sliceX, lcs_sliceY, lcs2ws);     // front horizon angle
-    float theta0 = -ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, -lcs_sliceX, lcs_sliceY, lcs2ws);   // back horizon angle
+    float theta1 = ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, ws_sliceX, ws_sliceY);     // front horizon angle
+    float theta0 = -ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, -ws_sliceX, ws_sliceY);   // back horizon angle
     ao = cos(theta1) + cos(theta0);
 
     float ss_nx = 0.5f * (theta1 - theta0 + sin(theta0) * cos(theta0) - sin(theta1) * cos(theta1));
     float ss_ny = 0.5f * (2.f - cos(theta0) * cos(theta0) - cos(theta1) * cos(theta1));
 
-    bentNormal = normalize(mul(lcs_sliceX * ss_nx + lcs_sliceY * ss_ny, lcs2ws));
+    bentNormal = normalize(ws_sliceX * ss_nx + ws_sliceY * ss_ny);
 }
 
 
@@ -128,7 +127,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         float3 ws_localAt = normalize(g_viewCb.m_eyePos - ws_pixelPos.xyz);
         float3 ws_localRight = normalize(cross(ws_localAt, g_viewCb.m_cameraUpVector));
         float3 ws_localUp = cross(ws_localRight, ws_localAt);
-        float3x3 lcs2ws = { ws_localRight, ws_localUp, ws_localAt };
 
         // Pixel Normal - n
         Texture2D<float2> gbufferNormals = ResourceDescriptorHeap[g_passCb.m_gbufferNormalsSrvIndex];
@@ -143,8 +141,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
             // Tangent vector for the slice plane that represents fixed angle offsets to sample AO around the hemisphere
             // D(φ) = cos(φ)ωx + sin(φ)ωy
-            float3 lcs_sliceTangentVec = float3(cos(azimuthAngle), sin(azimuthAngle), 0);
-            float3 ws_sliceTangentVec = mul(lcs_sliceTangentVec, lcs2ws);
+            float3 ws_sliceTangentVec = cos(azimuthAngle) * ws_localRight + sin(azimuthAngle) * ws_localUp;
 
             // Projection of the world normal onto the slice plane 
             // n' = {n.D(φ), n.ω0}
@@ -161,7 +158,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             float outAO;
             float3 outBentNormal;
-            GatherAO(horizonAngle, ws_pixelPos.xyz, lcs_sliceTangentVec, float3(0,0,1), lcs2ws, outAO, outBentNormal);
+            GatherAO(horizonAngle, ws_pixelPos.xyz, ws_sliceTangentVec, ws_localAt, outAO, outBentNormal);
 
             sumAO += outAO;
             avgBentNormal += outBentNormal;
