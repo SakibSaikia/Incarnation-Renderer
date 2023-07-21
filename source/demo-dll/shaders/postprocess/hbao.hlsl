@@ -90,15 +90,15 @@ float ComputeHorizonAngle(float horizonAngleStart, float3 ws_pixelPos, float3 ws
     return maxHorizonAngle;
 }
 
-void GatherAO(float horizonAngleStart, float3 ws_pixelPos, float3 ws_sliceX, float3 ws_sliceY, out float ao, out float3 bentNormal)
+void GatherAO(float horizonAngleStart, float3 ws_pixelPos, float3 ws_sliceX, float3 ws_sliceY, float2 ss_projectedNormal, out float ao, out float3 bentNormal)
 {
     float theta1 = ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, ws_sliceX, ws_sliceY);     // front horizon angle
     float theta0 = -ComputeHorizonAngle(horizonAngleStart, ws_pixelPos, -ws_sliceX, ws_sliceY);   // back horizon angle
-    ao = cos(theta1) + cos(theta0);
 
     float ss_nx = 0.5f * (theta1 - theta0 + sin(theta0) * cos(theta0) - sin(theta1) * cos(theta1));
     float ss_ny = 0.5f * (2.f - cos(theta0) * cos(theta0) - cos(theta1) * cos(theta1));
 
+    ao = ss_projectedNormal.x * ss_nx + ss_projectedNormal.y * ss_ny;
     bentNormal = normalize(ws_sliceX * ss_nx + ws_sliceY * ss_ny);
 }
 
@@ -145,9 +145,9 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             // Projection of the world normal onto the slice plane 
             // n' = {n.D(φ), n.ω0}
-            float2 sliceProjectedNormal;
-            sliceProjectedNormal.x = dot(ws_normal, ws_sliceTangentVec);
-            sliceProjectedNormal.y = dot(ws_normal, ws_localAt);
+            float2 ss_projectedNormal;
+            ss_projectedNormal.x = dot(ws_normal, ws_sliceTangentVec);
+            ss_projectedNormal.y = dot(ws_normal, ws_localAt);
 
             // Project slice direction vector D(φ) onto world normal plane
             float t = -dot(ws_sliceTangentVec, ws_normal) / dot(ws_localAt, ws_normal);
@@ -158,7 +158,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             float outAO;
             float3 outBentNormal;
-            GatherAO(horizonAngle, ws_pixelPos.xyz, ws_sliceTangentVec, ws_localAt, outAO, outBentNormal);
+            GatherAO(horizonAngle, ws_pixelPos.xyz, ws_sliceTangentVec, ws_localAt, ss_projectedNormal, outAO, outBentNormal);
 
             sumAO += outAO;
             avgBentNormal += outBentNormal;
@@ -169,7 +169,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         // For each slice we are computing AO for both front and back horizon angles.
         // So, we have to divide the total AO by two times the number of slices.
         RWTexture2D<float> aoTarget = ResourceDescriptorHeap[g_passCb.m_aoTargetUavIndex];
-        aoTarget[dispatchThreadId.xy] = 1.f - saturate(sumAO / (2.f * NumSlices));
+        aoTarget[dispatchThreadId.xy] = saturate(sumAO / (float)NumSlices);
 
         RWTexture2D<float2> bentNormalTarget = ResourceDescriptorHeap[g_passCb.m_bentNormalTargetUavIndex];
         bentNormalTarget[dispatchThreadId.xy] = OctEncode(normalize(avgBentNormal));
