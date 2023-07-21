@@ -26,6 +26,7 @@ struct FConfig
 	bool FrustumCulling = true;
 	bool EnableTAA = true;
 	bool EnableHBAO = false;
+	bool UseBentNormals = EnableHBAO;
 	bool FreezeCulling = false;
 	bool ShowLightBounds = false;
 	int LightClusterDimX = 16;

@@ -8,6 +8,7 @@ namespace RenderJob::SkyLightingPass
 		FShaderSurface* gbufferNormalsTex;
 		FShaderSurface* gbufferMetallicRoughnessAoTex;
 		FShaderSurface* ambientOcclusionTex;
+		FShaderSurface* bentNormalsTex;
 		FTexture* envBRDFTex;
 		FConfig renderConfig;
 		const FScene* scene;
@@ -25,6 +26,7 @@ namespace RenderJob::SkyLightingPass
 		size_t gbufferNormalsTransitionToken = passDesc.gbufferNormalsTex->m_resource->GetTransitionToken();
 		size_t gbufferMetallicRoughnessAoTransitionToken = passDesc.gbufferMetallicRoughnessAoTex->m_resource->GetTransitionToken();
 		size_t ambientOcclusionTransitionToken = passDesc.ambientOcclusionTex->m_resource->GetTransitionToken();
+		size_t bentNormalsTransitionToken = passDesc.bentNormalsTex->m_resource->GetTransitionToken();
 		FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"sky_lighting", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		Result passResult;
@@ -41,6 +43,7 @@ namespace RenderJob::SkyLightingPass
 			passDesc.gbufferNormalsTex->m_resource->Transition(cmdList, gbufferNormalsTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			passDesc.gbufferMetallicRoughnessAoTex->m_resource->Transition(cmdList, gbufferMetallicRoughnessAoTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			passDesc.ambientOcclusionTex->m_resource->Transition(cmdList, ambientOcclusionTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			passDesc.bentNormalsTex->m_resource->Transition(cmdList, bentNormalsTransitionToken, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 			// Descriptor Heaps
 			D3DDescriptorHeap_t* descriptorHeaps[] = { RenderBackend12::GetDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV) };
@@ -55,10 +58,11 @@ namespace RenderJob::SkyLightingPass
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
 			std::wstring shaderMacros = PrintString(
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 DIFFUSE_IBL=%d SPECULAR_IBL=%d LIGHTING_ONLY=%d",
+				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 DIFFUSE_IBL=%d SPECULAR_IBL=%d LIGHTING_ONLY=%d USE_BENT_NORMALS=%d",
 				passDesc.renderConfig.EnableDiffuseIBL ? 1 : 0,
 				passDesc.renderConfig.EnableSpecularIBL ? 1 : 0,
-				passDesc.renderConfig.Viewmode == (int)Viewmode::LightingOnly ? 1 : 0);
+				passDesc.renderConfig.Viewmode == (int)Viewmode::LightingOnly ? 1 : 0,
+				passDesc.renderConfig.UseBentNormals ? 1 : 0);
 
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 			L"lighting/sky-lighting.hlsl",
@@ -86,10 +90,10 @@ namespace RenderJob::SkyLightingPass
 				uint32_t gbufferNormalsSrvIndex;
 				uint32_t gbufferMetallicRoughnessAoSrvIndex;
 				uint32_t ambientOcclusionSrvIndex;
+				uint32_t bentNormalsSrvIndex;
 				uint32_t resX;
 				uint32_t resY;
 				float skyBrightness;
-				uint32_t __pad;
 				Vector3 eyePos;
 				int envBrdfTextureIndex;
 				Matrix invViewProjTransform;
@@ -111,6 +115,7 @@ namespace RenderJob::SkyLightingPass
 					cb->gbufferNormalsSrvIndex = passDesc.gbufferNormalsTex->m_descriptorIndices.SRV;
 					cb->gbufferMetallicRoughnessAoSrvIndex = passDesc.gbufferMetallicRoughnessAoTex->m_descriptorIndices.SRV;
 					cb->ambientOcclusionSrvIndex = passDesc.ambientOcclusionTex->m_descriptorIndices.SRV;
+					cb->bentNormalsSrvIndex = passDesc.bentNormalsTex->m_descriptorIndices.SRV;
 					cb->resX = passDesc.resX;
 					cb->resY = passDesc.resY;
 					cb->skyBrightness = passDesc.renderConfig.SkyBrightness;

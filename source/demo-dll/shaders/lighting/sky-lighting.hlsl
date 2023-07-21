@@ -25,10 +25,10 @@ cbuffer cb : register(b0)
     uint g_gbufferNormalsSrvIndex;
     uint g_gbufferMetallicRoughnessAoSrvIndex;
     uint g_ambientOcclusionSrvIndex;
+    uint g_bentNormalSrvIndex;
     uint g_resX;
     uint g_resY;
     float g_skyBrightness;
-    uint __pad;
     float3 g_eyePos;
     int g_envBrdfTextureIndex;
     float4x4 g_invViewProjTransform;
@@ -84,6 +84,13 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 #if DIFFUSE_IBL
         if (g_skylightProbeIndex != -1)
         {
+            float3 samplingNormal = N;
+
+#if USE_BENT_NORMALS
+            Texture2D<float2> bentNormalsTex = ResourceDescriptorHeap[g_bentNormalSrvIndex];
+            samplingNormal = OctDecode(bentNormalsTex[dispatchThreadId.xy]);
+#endif
+
             SH9ColorCoefficient shRadiance;
             Texture2D shTex = ResourceDescriptorHeap[g_skylightProbeIndex];
 
@@ -94,7 +101,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             }
 
             float3 albedo = (1.f - metallic) * basecolor;
-            float3 shDiffuse = /*(1.f - F) **/ albedo * Fd_Lambert() * ShIrradiance(N, shRadiance) * 5.f;
+            float3 shDiffuse = /*(1.f - F) **/ albedo * Fd_Lambert() * ShIrradiance(samplingNormal, shRadiance) * 5.f;
             radiance += g_skyBrightness * lerp(shDiffuse, ao * shDiffuse, aoBlend);
         }
 #endif

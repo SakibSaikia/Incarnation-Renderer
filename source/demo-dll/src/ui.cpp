@@ -352,6 +352,7 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 					ImGui::SameLine();
 					ImGui::Checkbox("HBAO", &settings->EnableHBAO);
 					ImGui::SameLine();
+					ImGuiExt::EditCondition(settings->EnableHBAO, [&]() { ImGui::Checkbox("Bent Normals", &settings->UseBentNormals); });
 					ImGui::Checkbox("Forward Lighting", &settings->ForwardLighting);
 					ImGui::Checkbox("Frustum Culling", &settings->FrustumCulling);
 				}
