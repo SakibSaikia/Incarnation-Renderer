@@ -175,7 +175,7 @@ bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32
 	windowHandle = CreateWindowEx(
 		WS_EX_APPWINDOW,
 		L"demo_window",
-		TEXT("demo"),
+		TEXT("Incarnation Renderer"),
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
