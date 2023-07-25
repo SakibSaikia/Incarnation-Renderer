@@ -23,7 +23,7 @@ add_compile_definitions(
 
 target_link_directories(demo PRIVATE "${project_bin_dir}")
 
-target_link_libraries(demo PRIVATE tracy.lib)
+target_link_libraries(demo PRIVATE tracy.lib Dwmapi.lib)
 
 # Ensure that tracy.lib is built before trying to link the exe
 add_dependencies(demo tracy)

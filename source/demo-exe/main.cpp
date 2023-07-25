@@ -5,6 +5,11 @@
 #include <filesystem>
 #include <cassert>
 #include <Tracy.hpp>
+#include <dwmapi.h>
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
 
 // D3D12 Agility SDK hooks
 extern "C" { __declspec(dllexport) extern const UINT D3D12SDKVersion = 602; }
@@ -181,6 +186,11 @@ bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32
 		instanceHandle,
 		nullptr
 	);
+
+	// Dark mode support
+	BOOL value = TRUE;
+	::DwmSetWindowAttribute(windowHandle, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+
 
 	if (!windowHandle)
 	{
