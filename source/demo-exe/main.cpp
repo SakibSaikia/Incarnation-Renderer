@@ -160,7 +160,7 @@ bool InitializeWindow(HINSTANCE instanceHandle, HWND& windowHandle, const uint32
 	desc.cbClsExtra = 0;
 	desc.cbWndExtra = 0;
 	desc.hInstance = instanceHandle;
-	desc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+	desc.hIcon = (HICON)LoadImage(nullptr, PROJECT_ICON_DIR L"application.ico", IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_LOADTRANSPARENT | LR_DEFAULTSIZE);
 	desc.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	desc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW);
 	desc.lpszMenuName = nullptr;

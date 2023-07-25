@@ -16,6 +16,7 @@ add_compile_definitions(
 	NOMINMAX																				# Disable Windows.h from defining max() min() macros which collide with other code include the standard library
 	LIB_DEMO_NAME=L"libdemo" 
 	PROJECT_BIN_DIR=L"${project_bin_dir}"
+	PROJECT_ICON_DIR="${project_content_dir}/icons/"
 	SPOOKYHASH_BIN_DIR=L"${project_ext_dir}/spookyhash/bin"
 	DXC_BIN_DIR=L"${project_ext_dir}/dxc/bin/x64"
 	PIX_BIN_DIR=L"${project_ext_dir}/winpixeventruntime.1.0.210818001/bin/x64"

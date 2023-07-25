@@ -54,7 +54,7 @@ add_compile_definitions(
     NOMINMAX                                                                                # Disable Windows.h from defining max() min() macros which collide with other code include the standard library
     SHADER_DIR=L"${project_src_dir}/demo-dll/shaders"
     SRC_INCLUDE_DIR=L"${project_src_dir}/demo-dll/inc"
-    CONTENT_DIR="${project_root_dir}/content")
+    CONTENT_DIR="${project_content_dir}")
 
 # Generate a unique name
 string(TIMESTAMP seed %s)
