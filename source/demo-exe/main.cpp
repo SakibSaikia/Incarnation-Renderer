@@ -201,9 +201,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	AddDllDirectory(DXC_BIN_DIR);
 	AddDllDirectory(PIX_BIN_DIR);
 
-	const uint32_t windowWidth = 1920;
-	const uint32_t windowHeight = 1080;
-
 	HMODULE demoDll = {};
 	FILETIME lastWriteTimestamp = {};
 	MSG msg = {};
@@ -212,6 +209,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
 	LARGE_INTEGER counterFrequency, startTime, endTime;
 	float elapsedSeconds = 0.016;
 	QueryPerformanceFrequency(&counterFrequency);
+
+	// Display resolution & window size
+	DEVMODE displaySettings;
+	EnumDisplaySettings(nullptr, ENUM_CURRENT_SETTINGS, &displaySettings);
+	const uint32_t windowWidth = 0.75f * displaySettings.dmPelsWidth;
+	const uint32_t windowHeight = 0.75f * displaySettings.dmPelsHeight;
 
 	InitializeWindow(hInstance, windowHandle, windowWidth, windowHeight);
 	CleanTempFiles(PROJECT_BIN_DIR, LIB_DEMO_NAME L"_");
