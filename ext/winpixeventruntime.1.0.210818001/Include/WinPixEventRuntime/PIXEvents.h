@@ -1,5 +1,3 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-
 /*==========================================================================;
  *
  *  Copyright (C) Microsoft Corporation.  All Rights Reserved.
@@ -59,7 +57,7 @@ namespace PIXEventsDetail
     };
 
     template<>
-    struct PIXEventTypeInferer<>
+    struct PIXEventTypeInferer<void>
     {
         static constexpr PIXEventType Begin() { return PIXEvent_BeginEvent_NoArgs; }
         static constexpr PIXEventType SetMarker() { return PIXEvent_SetMarker_NoArgs; }
