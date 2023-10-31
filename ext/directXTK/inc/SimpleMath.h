@@ -1,7 +1,7 @@
 //-------------------------------------------------------------------------------------
 // SimpleMath.h -- Simplified C++ Math wrapper for DirectXMath
 //
-// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 //
 // http://go.microsoft.com/fwlink/?LinkId=248929
@@ -10,14 +10,18 @@
 
 #pragma once
 
-#if !(defined(_XBOX_ONE) && defined(_TITLE)) && !defined(_GAMING_XBOX)
+#if (defined(_WIN32) || defined(WINAPI_FAMILY)) && !(defined(_XBOX_ONE) && defined(_TITLE)) && !defined(_GAMING_XBOX)
 #include <dxgi1_2.h>
 #endif
 
+#include <cassert>
+#include <cstddef>
+#include <cstring>
 #include <functional>
 
-#include <assert.h>
-#include <memory.h>
+#if (__cplusplus >= 202002L)
+#include <compare>
+#endif
 
 #include <DirectXMath.h>
 #include <DirectXPackedVector.h>
@@ -26,6 +30,8 @@
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wfloat-equal"
+#pragma clang diagnostic ignored "-Wunknown-warning-option"
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
 #endif
 
 
@@ -65,10 +71,14 @@ namespace DirectX
         #endif
 
             // Comparison operators
+        #if (__cplusplus >= 202002L)
+            bool operator == (const Rectangle&) const = default;
+            auto operator <=> (const Rectangle&) const = default;
+        #else
             bool operator == (const Rectangle& r) const noexcept { return (x == r.x) && (y == r.y) && (width == r.width) && (height == r.height); }
-            bool operator == (const RECT& rct) const noexcept { return (x == rct.left) && (y == rct.top) && (width == (rct.right - rct.left)) && (height == (rct.bottom - rct.top)); }
-
             bool operator != (const Rectangle& r) const noexcept { return (x != r.x) || (y != r.y) || (width != r.width) || (height != r.height); }
+        #endif
+            bool operator == (const RECT& rct) const noexcept { return (x == rct.left) && (y == rct.top) && (width == (rct.right - rct.left)) && (height == (rct.bottom - rct.top)); }
             bool operator != (const RECT& rct) const noexcept { return (x != rct.left) || (y != rct.top) || (width != (rct.right - rct.left)) || (height != (rct.bottom - rct.top)); }
 
             // Assignment operators
@@ -403,7 +413,7 @@ namespace DirectX
 
             static void Barycentric(const Vector4& v1, const Vector4& v2, const Vector4& v3, float f, float g, Vector4& result) noexcept;
             static Vector4 Barycentric(const Vector4& v1, const Vector4& v2, const Vector4& v3, float f, float g) noexcept;
-             
+
             static void CatmullRom(const Vector4& v1, const Vector4& v2, const Vector4& v3, const Vector4& v4, float t, Vector4& result) noexcept;
             static Vector4 CatmullRom(const Vector4& v1, const Vector4& v2, const Vector4& v3, const Vector4& v4, float t) noexcept;
 
@@ -453,28 +463,36 @@ namespace DirectX
         {
             Matrix() noexcept
                 : XMFLOAT4X4(1.f, 0, 0, 0,
-                            0, 1.f, 0, 0,
-                            0, 0, 1.f, 0,
-                            0, 0, 0, 1.f) {}
+                    0, 1.f, 0, 0,
+                    0, 0, 1.f, 0,
+                    0, 0, 0, 1.f)
+            {
+            }
             constexpr Matrix(float m00, float m01, float m02, float m03,
-                             float m10, float m11, float m12, float m13,
-                             float m20, float m21, float m22, float m23,
-                             float m30, float m31, float m32, float m33) noexcept
+                float m10, float m11, float m12, float m13,
+                float m20, float m21, float m22, float m23,
+                float m30, float m31, float m32, float m33) noexcept
                 : XMFLOAT4X4(m00, m01, m02, m03,
-                             m10, m11, m12, m13,
-                             m20, m21, m22, m23,
-                             m30, m31, m32, m33) {}
+                    m10, m11, m12, m13,
+                    m20, m21, m22, m23,
+                    m30, m31, m32, m33)
+            {
+            }
             explicit Matrix(const Vector3& r0, const Vector3& r1, const Vector3& r2) noexcept
                 : XMFLOAT4X4(r0.x, r0.y, r0.z, 0,
-                             r1.x, r1.y, r1.z, 0,
-                             r2.x, r2.y, r2.z, 0,
-                             0, 0, 0, 1.f) {}
+                    r1.x, r1.y, r1.z, 0,
+                    r2.x, r2.y, r2.z, 0,
+                    0, 0, 0, 1.f)
+            {
+            }
             explicit Matrix(const Vector4& r0, const Vector4& r1, const Vector4& r2, const Vector4& r3) noexcept
                 : XMFLOAT4X4(r0.x, r0.y, r0.z, r0.w,
-                             r1.x, r1.y, r1.z, r1.w,
-                             r2.x, r2.y, r2.z, r2.w,
-                             r3.x, r3.y, r3.z, r3.w) {}
-            Matrix(const XMFLOAT4X4& M) noexcept { memcpy_s(this, sizeof(float) * 16, &M, sizeof(XMFLOAT4X4)); }
+                    r1.x, r1.y, r1.z, r1.w,
+                    r2.x, r2.y, r2.z, r2.w,
+                    r3.x, r3.y, r3.z, r3.w)
+            {
+            }
+            Matrix(const XMFLOAT4X4& M) noexcept { memcpy(this, &M, sizeof(XMFLOAT4X4)); }
             Matrix(const XMFLOAT3X3& M) noexcept;
             Matrix(const XMFLOAT4X3& M) noexcept;
 
@@ -542,6 +560,9 @@ namespace DirectX
 
             float Determinant() const noexcept;
 
+            // Computes rotation about y-axis (y), then x-axis (x), then z-axis (z)
+            Vector3 ToEuler() const noexcept;
+
             // Static functions
             static Matrix CreateBillboard(
                 const Vector3& object, const Vector3& cameraPosition, const Vector3& cameraUp, _In_opt_ const Vector3* cameraForward = nullptr) noexcept;
@@ -574,7 +595,11 @@ namespace DirectX
 
             static Matrix CreateFromQuaternion(const Quaternion& quat) noexcept;
 
+            // Rotates about y-axis (yaw), then x-axis (pitch), then z-axis (roll)
             static Matrix CreateFromYawPitchRoll(float yaw, float pitch, float roll) noexcept;
+
+            // Rotates about y-axis (angles.y), then x-axis (angles.x), then z-axis (angles.z)
+            static Matrix CreateFromYawPitchRoll(const Vector3& angles) noexcept;
 
             static Matrix CreateShadow(const Vector3& lightDir, const Plane& plane) noexcept;
 
@@ -706,9 +731,21 @@ namespace DirectX
 
             float Dot(const Quaternion& Q) const noexcept;
 
+            void RotateTowards(const Quaternion& target, float maxAngle) noexcept;
+            void __cdecl RotateTowards(const Quaternion& target, float maxAngle, Quaternion& result) const noexcept;
+
+            // Computes rotation about y-axis (y), then x-axis (x), then z-axis (z)
+            Vector3 ToEuler() const noexcept;
+
             // Static functions
             static Quaternion CreateFromAxisAngle(const Vector3& axis, float angle) noexcept;
+
+            // Rotates about y-axis (yaw), then x-axis (pitch), then z-axis (roll)
             static Quaternion CreateFromYawPitchRoll(float yaw, float pitch, float roll) noexcept;
+
+            // Rotates about y-axis (angles.y), then x-axis (angles.x), then z-axis (angles.z)
+            static Quaternion CreateFromYawPitchRoll(const Vector3& angles) noexcept;
+
             static Quaternion CreateFromRotationMatrix(const Matrix& M) noexcept;
 
             static void Lerp(const Quaternion& q1, const Quaternion& q2, float t, Quaternion& result) noexcept;
@@ -719,6 +756,14 @@ namespace DirectX
 
             static void Concatenate(const Quaternion& q1, const Quaternion& q2, Quaternion& result) noexcept;
             static Quaternion Concatenate(const Quaternion& q1, const Quaternion& q2) noexcept;
+
+            static void __cdecl FromToRotation(const Vector3& fromDir, const Vector3& toDir, Quaternion& result) noexcept;
+            static Quaternion FromToRotation(const Vector3& fromDir, const Vector3& toDir) noexcept;
+
+            static void __cdecl LookRotation(const Vector3& forward, const Vector3& up, Quaternion& result) noexcept;
+            static Quaternion LookRotation(const Vector3& forward, const Vector3& up) noexcept;
+
+            static float Angle(const Quaternion& q1, const Quaternion& q2) noexcept;
 
             // Constants
             static const Quaternion Identity;
@@ -746,11 +791,11 @@ namespace DirectX
             Color(const XMFLOAT4& c) noexcept { this->x = c.x; this->y = c.y; this->z = c.z; this->w = c.w; }
             explicit Color(const XMVECTORF32& F) noexcept { this->x = F.f[0]; this->y = F.f[1]; this->z = F.f[2]; this->w = F.f[3]; }
 
+            // BGRA Direct3D 9 D3DCOLOR packed color
             explicit Color(const DirectX::PackedVector::XMCOLOR& Packed) noexcept;
-                // BGRA Direct3D 9 D3DCOLOR packed color
 
+            // RGBA XNA Game Studio packed color
             explicit Color(const DirectX::PackedVector::XMUBYTEN4& Packed) noexcept;
-                // RGBA XNA Game Studio packed color
 
             Color(const Color&) = default;
             Color& operator=(const Color&) = default;
@@ -871,21 +916,29 @@ namespace DirectX
             float maxDepth;
 
             Viewport() noexcept :
-                x(0.f), y(0.f), width(0.f), height(0.f), minDepth(0.f), maxDepth(1.f) {}
+                x(0.f), y(0.f), width(0.f), height(0.f), minDepth(0.f), maxDepth(1.f)
+            {
+            }
             constexpr Viewport(float ix, float iy, float iw, float ih, float iminz = 0.f, float imaxz = 1.f) noexcept :
-                x(ix), y(iy), width(iw), height(ih), minDepth(iminz), maxDepth(imaxz) {}
+                x(ix), y(iy), width(iw), height(ih), minDepth(iminz), maxDepth(imaxz)
+            {
+            }
             explicit Viewport(const RECT& rct) noexcept :
                 x(float(rct.left)), y(float(rct.top)),
                 width(float(rct.right - rct.left)),
                 height(float(rct.bottom - rct.top)),
-                minDepth(0.f), maxDepth(1.f) {}
+                minDepth(0.f), maxDepth(1.f)
+            {
+            }
 
         #if defined(__d3d11_h__) || defined(__d3d11_x_h__)
             // Direct3D 11 interop
             explicit Viewport(const D3D11_VIEWPORT& vp) noexcept :
                 x(vp.TopLeftX), y(vp.TopLeftY),
                 width(vp.Width), height(vp.Height),
-                minDepth(vp.MinDepth), maxDepth(vp.MaxDepth) {}
+                minDepth(vp.MinDepth), maxDepth(vp.MaxDepth)
+            {
+            }
 
             operator D3D11_VIEWPORT() noexcept { return *reinterpret_cast<const D3D11_VIEWPORT*>(this); }
             const D3D11_VIEWPORT* Get11() const noexcept { return reinterpret_cast<const D3D11_VIEWPORT*>(this); }
@@ -897,7 +950,9 @@ namespace DirectX
             explicit Viewport(const D3D12_VIEWPORT& vp) noexcept :
                 x(vp.TopLeftX), y(vp.TopLeftY),
                 width(vp.Width), height(vp.Height),
-                minDepth(vp.MinDepth), maxDepth(vp.MaxDepth) {}
+                minDepth(vp.MinDepth), maxDepth(vp.MaxDepth)
+            {
+            }
 
             operator D3D12_VIEWPORT() noexcept { return *reinterpret_cast<const D3D12_VIEWPORT*>(this); }
             const D3D12_VIEWPORT* Get12() const noexcept { return reinterpret_cast<const D3D12_VIEWPORT*>(this); }
@@ -911,8 +966,13 @@ namespace DirectX
             Viewport& operator=(Viewport&&) = default;
 
             // Comparison operators
+        #if (__cplusplus >= 202002L)
+            bool operator == (const Viewport&) const = default;
+            auto operator <=> (const Viewport&) const = default;
+        #else
             bool operator == (const Viewport& vp) const noexcept;
             bool operator != (const Viewport& vp) const noexcept;
+        #endif
 
             // Assignment operators
             Viewport& operator= (const RECT& rct) noexcept;
@@ -927,7 +987,9 @@ namespace DirectX
             void Unproject(const Vector3& p, const Matrix& proj, const Matrix& view, const Matrix& world, Vector3& result) const noexcept;
 
             // Static methods
+        #if defined(__dxgi1_2_h__) || defined(__d3d11_x_h__) || defined(__d3d12_x_h__) || defined(__XBOX_D3D12_X__)
             static RECT __cdecl ComputeDisplayArea(DXGI_SCALING scaling, UINT backBufferWidth, UINT backBufferHeight, int outputWidth, int outputHeight) noexcept;
+        #endif
             static RECT __cdecl ComputeTitleSafeArea(UINT backBufferWidth, UINT backBufferHeight) noexcept;
         };
 
@@ -947,9 +1009,9 @@ namespace std
         bool operator()(const DirectX::SimpleMath::Rectangle& r1, const DirectX::SimpleMath::Rectangle& r2) const noexcept
         {
             return ((r1.x < r2.x)
-                    || ((r1.x == r2.x) && (r1.y < r2.y))
-                    || ((r1.x == r2.x) && (r1.y == r2.y) && (r1.width < r2.width))
-                    || ((r1.x == r2.x) && (r1.y == r2.y) && (r1.width == r2.width) && (r1.height < r2.height)));
+                || ((r1.x == r2.x) && (r1.y < r2.y))
+                || ((r1.x == r2.x) && (r1.y == r2.y) && (r1.width < r2.width))
+                || ((r1.x == r2.x) && (r1.y == r2.y) && (r1.width == r2.width) && (r1.height < r2.height)));
         }
     };
 
@@ -966,8 +1028,8 @@ namespace std
         bool operator()(const DirectX::SimpleMath::Vector3& V1, const DirectX::SimpleMath::Vector3& V2) const noexcept
         {
             return ((V1.x < V2.x)
-                    || ((V1.x == V2.x) && (V1.y < V2.y))
-                    || ((V1.x == V2.x) && (V1.y == V2.y) && (V1.z < V2.z)));
+                || ((V1.x == V2.x) && (V1.y < V2.y))
+                || ((V1.x == V2.x) && (V1.y == V2.y) && (V1.z < V2.z)));
         }
     };
 
@@ -976,9 +1038,9 @@ namespace std
         bool operator()(const DirectX::SimpleMath::Vector4& V1, const DirectX::SimpleMath::Vector4& V2) const noexcept
         {
             return ((V1.x < V2.x)
-                    || ((V1.x == V2.x) && (V1.y < V2.y))
-                    || ((V1.x == V2.x) && (V1.y == V2.y) && (V1.z < V2.z))
-                    || ((V1.x == V2.x) && (V1.y == V2.y) && (V1.z == V2.z) && (V1.w < V2.w)));
+                || ((V1.x == V2.x) && (V1.y < V2.y))
+                || ((V1.x == V2.x) && (V1.y == V2.y) && (V1.z < V2.z))
+                || ((V1.x == V2.x) && (V1.y == V2.y) && (V1.z == V2.z) && (V1.w < V2.w)));
         }
     };
 
@@ -1012,9 +1074,9 @@ namespace std
         bool operator()(const DirectX::SimpleMath::Plane& P1, const DirectX::SimpleMath::Plane& P2) const noexcept
         {
             return ((P1.x < P2.x)
-                    || ((P1.x == P2.x) && (P1.y < P2.y))
-                    || ((P1.x == P2.x) && (P1.y == P2.y) && (P1.z < P2.z))
-                    || ((P1.x == P2.x) && (P1.y == P2.y) && (P1.z == P2.z) && (P1.w < P2.w)));
+                || ((P1.x == P2.x) && (P1.y < P2.y))
+                || ((P1.x == P2.x) && (P1.y == P2.y) && (P1.z < P2.z))
+                || ((P1.x == P2.x) && (P1.y == P2.y) && (P1.z == P2.z) && (P1.w < P2.w)));
         }
     };
 
@@ -1023,9 +1085,9 @@ namespace std
         bool operator()(const DirectX::SimpleMath::Quaternion& Q1, const DirectX::SimpleMath::Quaternion& Q2) const noexcept
         {
             return ((Q1.x < Q2.x)
-                    || ((Q1.x == Q2.x) && (Q1.y < Q2.y))
-                    || ((Q1.x == Q2.x) && (Q1.y == Q2.y) && (Q1.z < Q2.z))
-                    || ((Q1.x == Q2.x) && (Q1.y == Q2.y) && (Q1.z == Q2.z) && (Q1.w < Q2.w)));
+                || ((Q1.x == Q2.x) && (Q1.y < Q2.y))
+                || ((Q1.x == Q2.x) && (Q1.y == Q2.y) && (Q1.z < Q2.z))
+                || ((Q1.x == Q2.x) && (Q1.y == Q2.y) && (Q1.z == Q2.z) && (Q1.w < Q2.w)));
         }
     };
 
@@ -1034,9 +1096,9 @@ namespace std
         bool operator()(const DirectX::SimpleMath::Color& C1, const DirectX::SimpleMath::Color& C2) const noexcept
         {
             return ((C1.x < C2.x)
-                    || ((C1.x == C2.x) && (C1.y < C2.y))
-                    || ((C1.x == C2.x) && (C1.y == C2.y) && (C1.z < C2.z))
-                    || ((C1.x == C2.x) && (C1.y == C2.y) && (C1.z == C2.z) && (C1.w < C2.w)));
+                || ((C1.x == C2.x) && (C1.y < C2.y))
+                || ((C1.x == C2.x) && (C1.y == C2.y) && (C1.z < C2.z))
+                || ((C1.x == C2.x) && (C1.y == C2.y) && (C1.z == C2.z) && (C1.w < C2.w)));
         }
     };
 
