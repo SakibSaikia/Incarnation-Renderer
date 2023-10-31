@@ -39,7 +39,7 @@ include_directories(
     "${project_ext_dir}/tinygltf"
     "${project_ext_dir}/json"
     "${project_ext_dir}/directXTK/inc"
-    "${project_ext_dir}/winpixeventruntime.1.0.210818001/Include/WinPixEventRuntime"
+    "${project_ext_dir}/winpixeventruntime.1.0.231030001/Include/WinPixEventRuntime"
     "${project_ext_dir}/directXTex/inc"
     "${project_ext_dir}/d3d12.1.611.0/include"
     "${project_ext_dir}/tracy/public/tracy")
@@ -84,7 +84,7 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
         PRIVATE "${project_bin_dir}"
         PRIVATE "${project_ext_dir}/spookyhash/lib"
         PRIVATE "${project_ext_dir}/dxc/lib/x64"
-        PRIVATE "${project_ext_dir}/winpixeventruntime.1.0.210818001/bin/x64"
+        PRIVATE "${project_ext_dir}/winpixeventruntime.1.0.231030001/bin/x64"
         PRIVATE "${project_ext_dir}/directXTex/lib/x64/debug")
 else()
     target_link_directories(
@@ -92,7 +92,7 @@ else()
         PRIVATE "${project_bin_dir}"
         PRIVATE "${project_ext_dir}/spookyhash/lib"
         PRIVATE "${project_ext_dir}/dxc/lib/x64"
-        PRIVATE "${project_ext_dir}/winpixeventruntime.1.0.210818001/bin/x64"
+        PRIVATE "${project_ext_dir}/winpixeventruntime.1.0.231030001/bin/x64"
         PRIVATE "${project_ext_dir}/directXTex/lib/x64/release")
 
 endif()
