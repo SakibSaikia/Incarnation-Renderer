@@ -1,6 +1,6 @@
-﻿cmake_minimum_required (VERSION 3.18)
+﻿cmake_minimum_required (VERSION 3.26)
 
-project(demo VERSION 0.0)
+project(demo VERSION 0.1)
 
 # Project path definitions
 set(project_root_dir "${CMAKE_SOURCE_DIR}")

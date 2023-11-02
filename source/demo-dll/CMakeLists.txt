@@ -1,6 +1,6 @@
-﻿cmake_minimum_required (VERSION 3.18)
+﻿cmake_minimum_required (VERSION 3.26)
 
-project(libdemo VERSION 0.0)
+project(libdemo)
 
 set(module_name "libdemo")
 
