@@ -216,6 +216,69 @@ namespace
         return a.second > b.second;
     }
 
+    // Compute number of triangle vertices already exist in the meshlet
+    uint32_t ComputeReuse(const FInlineMeshlet& meshlet, uint32_t(&triIndices)[3])
+    {
+        uint32_t count = 0;
+
+        for (uint32_t i = 0; i < static_cast<uint32_t>(meshlet.m_uniqueVertexIndices.size()); ++i)
+        {
+            for (uint32_t j = 0; j < 3u; ++j)
+            {
+                if (meshlet.m_uniqueVertexIndices[i] == triIndices[j])
+                {
+                    ++count;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    XMVECTOR ComputeNormal(XMFLOAT3* tri)
+    {
+        XMVECTOR p0 = XMLoadFloat3(&tri[0]);
+        XMVECTOR p1 = XMLoadFloat3(&tri[1]);
+        XMVECTOR p2 = XMLoadFloat3(&tri[2]);
+
+        XMVECTOR v01 = p0 - p1;
+        XMVECTOR v02 = p0 - p2;
+
+        return XMVector3Normalize(XMVector3Cross(v01, v02));
+    }
+
+    // Computes a candidacy score based on spatial locality, orientational coherence, and vertex re-use within a meshlet.
+    float ComputeScore(const FInlineMeshlet& meshlet, XMVECTOR sphere, XMVECTOR normal, uint32_t(&triIndices)[3], XMFLOAT3* triVerts)
+    {
+        const float reuseWeight = 0.334f;
+        const float locWeight = 0.333f;
+        const float oriWeight = 0.333f;
+
+        // Vertex reuse
+        uint32_t reuse = ComputeReuse(meshlet, triIndices);
+        XMVECTOR reuseScore = g_XMOne - (XMVectorReplicate(float(reuse)) / 3.0f);
+
+        // Distance from center point
+        XMVECTOR maxSq = g_XMZero;
+        for (uint32_t i = 0; i < 3u; ++i)
+        {
+            XMVECTOR v = sphere - XMLoadFloat3(&triVerts[i]);
+            maxSq = XMVectorMax(maxSq, XMVector3Dot(v, v));
+        }
+        XMVECTOR r = XMVectorSplatW(sphere);
+        XMVECTOR r2 = r * r;
+        XMVECTOR locScore = XMVectorLog(maxSq / r2 + g_XMOne);
+
+        // Angle between normal and meshlet cone axis
+        XMVECTOR n = ComputeNormal(triVerts);
+        XMVECTOR d = XMVector3Dot(n, normal);
+        XMVECTOR oriScore = (-d + g_XMOne) / 2.0f;
+
+        XMVECTOR b = reuseWeight * reuseScore + locWeight * locScore + oriWeight * oriScore;
+
+        return XMVectorGetX(b);
+    }
+
     template <typename T>
     void BuildAdjacencyList(
         const T* indices, uint32_t indexCount,
@@ -426,6 +489,67 @@ namespace
             }
         }
     }
+
+    // Determines whether a candidate triangle can be added to a specific meshlet; if it can, does so.
+    bool AddToMeshlet(uint32_t maxVerts, uint32_t maxPrims, FInlineMeshlet& meshlet, uint32_t(&tri)[3])
+    {
+        // Are we already full of vertices?
+        if (meshlet.m_uniqueVertexIndices.size() == maxVerts)
+            return false;
+
+        // Are we full, or can we store an additional primitive?
+        if (meshlet.m_primitiveIndices.size() == maxPrims)
+            return false;
+
+        static const uint32_t Undef = uint32_t(-1);
+        uint32_t indices[3] = { Undef, Undef, Undef };
+        uint32_t newCount = 3;
+
+        for (uint32_t i = 0; i < meshlet.m_uniqueVertexIndices.size(); ++i)
+        {
+            for (uint32_t j = 0; j < 3; ++j)
+            {
+                if (meshlet.m_uniqueVertexIndices[i] == tri[j])
+                {
+                    indices[j] = i;
+                    --newCount;
+                }
+            }
+        }
+
+        // Will this triangle fit?
+        if (meshlet.m_uniqueVertexIndices.size() + newCount > maxVerts)
+            return false;
+
+        // Add unique vertex indices to unique vertex index list
+        for (uint32_t j = 0; j < 3; ++j)
+        {
+            if (indices[j] == Undef)
+            {
+                indices[j] = static_cast<uint32_t>(meshlet.m_uniqueVertexIndices.size());
+                meshlet.m_uniqueVertexIndices.push_back(tri[j]);
+            }
+        }
+
+        // Add the new primitive 
+        typename FInlineMeshlet::FPackedTriangle prim = {};
+        prim.i0 = indices[0];
+        prim.i1 = indices[1];
+        prim.i2 = indices[2];
+
+        meshlet.m_primitiveIndices.push_back(prim);
+
+        return true;
+    }
+
+    bool IsMeshletFull(uint32_t maxVerts, uint32_t maxPrims, const FInlineMeshlet& meshlet)
+    {
+        assert(meshlet.m_uniqueVertexIndices.size() <= maxVerts);
+        assert(meshlet.m_primitiveIndices.size() <= maxPrims);
+
+        return meshlet.m_uniqueVertexIndices.size() == maxVerts
+            || meshlet.m_primitiveIndices.size() == maxPrims;
+    }
 }
 
 namespace std
@@ -513,12 +637,11 @@ bool MeshUtils::FixupMeshes(tinygltf::Model& model)
 	return requiresResave;
 }
 
-template <typename T>
 void MeshUtils::Meshletize(
     uint32_t maxVerts, uint32_t maxPrims,
-    const T* indices, uint32_t indexCount,
+    const uint32_t* indices, uint32_t indexCount,
     const XMFLOAT3* positions, uint32_t vertexCount,
-    std::vector<InlineMeshlet<T>>& output
+    std::vector<FInlineMeshlet>& output
 )
 {
     const uint32_t triCount = indexCount / 3;
@@ -556,7 +679,7 @@ void MeshUtils::Meshletize(
         uint32_t index = candidates.back().first;
         candidates.pop_back();
 
-        T tri[3] =
+        uint32_t tri[3] =
         {
             indices[index * 3],
             indices[index * 3 + 1],
@@ -628,7 +751,7 @@ void MeshUtils::Meshletize(
             {
                 uint32_t candidate = candidates[i].first;
 
-                T triIndices[3] =
+                uint32_t triIndices[3] =
                 {
                     indices[candidate * 3],
                     indices[candidate * 3 + 1],
@@ -700,7 +823,7 @@ void MeshUtils::Meshletize(
     }
 
     // The last meshlet may have never had any primitives added to it - in which case we want to remove it.
-    if (output.back().PrimitiveIndices.empty())
+    if (output.back().m_primitiveIndices.empty())
     {
         output.pop_back();
     }

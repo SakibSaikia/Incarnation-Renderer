@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tiny_gltf.h>
+#include <mesh-utils.h>
 
 // Corresponds to GLTF Primitive
 struct FMeshPrimitive
@@ -14,6 +15,7 @@ struct FMeshPrimitive
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	int m_materialIndex;
 	DirectX::BoundingSphere m_boundingSphere;
+	std::vector<FInlineMeshlet> m_meshlets;
 };
 
 // Corresponds to GLTF Mesh
@@ -96,6 +98,7 @@ struct FScene : public FModelLoader
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
+	std::unique_ptr<FShaderBuffer> m_packedMeshlets;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
 	std::unique_ptr<FShaderBuffer> m_packedMeshTransforms;

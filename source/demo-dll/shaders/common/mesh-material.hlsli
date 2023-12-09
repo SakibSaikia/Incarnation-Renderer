@@ -15,11 +15,11 @@ namespace MeshMaterial
 		FMeshBufferView view = viewBuffer.Load<FMeshBufferView>(accessor.m_bufferViewIndex * sizeof(FMeshBufferView));
 		ByteAddressBuffer buffer = ResourceDescriptorHeap[view.m_bufferSrvIndex];
 
-		if (accessor.m_byteStride == 4)
+		if (accessor.m_byteStride == 4) // 32 bit indices
 		{
 			return buffer.Load(accessor.m_byteOffset + view.m_byteOffset + index * 4);
 		}
-		else if (accessor.m_byteStride == 2)
+		else if (accessor.m_byteStride == 2) // 16 bit indices
 		{
 			// Raw address buffer addressing needs to be clamped to a 4 byte boundary
 			uint byteOffset = index * 2;
