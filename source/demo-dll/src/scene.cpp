@@ -360,6 +360,44 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		DirectX::BoundingBox primitiveBounds = CalcBounds(posIt->second);
 		DirectX::BoundingBox::CreateMerged(meshBounds, meshBounds, primitiveBounds);
 		DirectX::BoundingSphere::CreateFromBoundingBox(outPrimitive.m_boundingSphere, primitiveBounds);
+
+		// Construct index buffer for generating meshlets
+		std::vector<uint32_t> indices;
+		indices.reserve(indexAccessor.count);
+		const tinygltf::BufferView indexBufferView = model.bufferViews[indexAccessor.bufferView];
+		const tinygltf::Buffer indexBuffer = model.buffers[indexBufferView.buffer];
+		const unsigned char* pIndexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+		const size_t indexByteStride = indexAccessor.ByteStride(indexBufferView);
+		for (int i = 0; i < indexAccessor.count; ++i)
+		{
+			// Read 16-bit or 32-bit indices. In either case, we convert to 32-bit.
+			uint32_t indexData = indexByteStride == 2 ? *(uint16_t*)pIndexData : *(uint32_t*)pIndexData;
+			indices.push_back(indexData);
+			pIndexData += indexByteStride;
+		}
+
+		// Construct position buffer for generating meshlets
+		const tinygltf::Accessor& positionAccessor = model.accessors[outPrimitive.m_positionAccessor];
+		std::vector<XMFLOAT3> positions;
+		positions.reserve(positionAccessor.count);
+		const tinygltf::BufferView positionBufferView = model.bufferViews[positionAccessor.bufferView];
+		const tinygltf::Buffer positionBuffer = model.buffers[positionBufferView.buffer];
+		const unsigned char* pPositionData = &positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset];
+		const size_t positionByteStride = positionAccessor.ByteStride(positionBufferView);
+		for (int i = 0; i < positionAccessor.count; ++i)
+		{
+			positions.push_back(XMFLOAT3((float*)pPositionData));
+			pPositionData += positionByteStride;
+		}
+
+		// Generate meshlets
+		constexpr uint32_t MAX_VERTS = 64;
+		constexpr uint32_t MAX_PRIMITIVES = 126;
+		MeshUtils::Meshletize(
+			MAX_VERTS, MAX_PRIMITIVES, 
+			indices.data(), indices.size(),
+			positions.data(), positions.size(),
+			outPrimitive.m_meshlets);
 	}
 
 	sceneCollection->m_entityList.push_back(newMesh);
