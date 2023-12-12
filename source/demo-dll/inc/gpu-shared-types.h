@@ -71,14 +71,6 @@ struct FMeshAccessor
 	uint32_t m_byteStride;
 };
 
-struct FMeshlet
-{
-	uint32_t m_vertexCount;
-	uint32_t m_triangleCount;
-	uint32_t m_vertexBegin;
-	uint32_t m_triangleBegin;
-};
-
 struct FGpuPrimitive
 {
 	Vector4 m_boundingSphere;
@@ -95,6 +87,11 @@ struct FGpuPrimitive
 
 struct FGpuMeshlet
 {
+	uint32_t m_vertexBegin;
+	uint32_t m_vertexCount;
+	uint32_t m_triangleBegin;
+	uint32_t m_triangleCount;
+
 	Vector4 m_boundingSphere;
 	int m_meshIndex;
 	int m_positionAccessor;
@@ -102,15 +99,6 @@ struct FGpuMeshlet
 	int m_normalAccessor;
 	int m_tangentAccessor;
 	int m_materialIndex;
-
-	// Accessor for the deduplicated index buffer
-	int m_uniqueIndexAccessor;
-
-	// Accessor for the meshlet-local triangle/primitive buffer
-	int m_triangleAccessor;
-
-	// Used to reconstruct SV_PrimitiveID 
-	uint32_t m_startPrimitiveId;
 };
 
 struct FMaterial

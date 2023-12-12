@@ -98,7 +98,6 @@ struct FScene : public FModelLoader
 	std::vector<FCamera> m_cameras;
 
 	// Scene geo
-	std::unique_ptr<FShaderBuffer> m_packedMeshlets;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitives;
 	std::unique_ptr<FShaderBuffer> m_packedPrimitiveCounts;
 	std::unique_ptr<FShaderBuffer> m_packedMeshTransforms;
@@ -108,6 +107,10 @@ struct FScene : public FModelLoader
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
 	size_t m_primitiveCount;
+	// See: https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/
+	std::unique_ptr<FShaderBuffer> m_packedMeshletVertexIndexBuffer;
+	std::unique_ptr<FShaderBuffer> m_packedMeshletPrimitiveIndexBuffer;
+	std::unique_ptr<FShaderBuffer> m_packedMeshlets;
 
 	// Lights
 	std::vector<FLight> m_globalLightList;

@@ -520,9 +520,17 @@ void FScene::CreateGpuGeometryBuffers()
 {
 	FCommandList* cmdList = RenderBackend12::FetchCommandlist(L"upload_primitives", D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-	// Packed buffer that contains an array of FGpuPrimitive(s)
+	// Primitive and Meshlet buffers
 	{
+		// Packed buffer that contains an array of FGpuPrimitive(s)
 		std::vector<FGpuPrimitive> primitives;
+		// Packed buffer that contains an array of FGpuMeshlet(s)
+		std::vector<FGpuMeshlet> meshlets;
+		// Packed array of meshlet vertex indices
+		std::vector<uint32_t> meshletVertexIndices;
+		// Packed array of meshlet triangle indices
+		std::vector<FInlineMeshlet::FPackedTriangle> meshletTriangleIndices;
+
 		for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
 		{
 			const FMesh& mesh = m_sceneMeshes.m_entityList[meshIndex];
@@ -541,10 +549,36 @@ void FScene::CreateGpuGeometryBuffers()
 				newPrimitive.m_indexCount = primitive.m_indexCount;
 				newPrimitive.m_indicesPerTriangle = 3;
 				primitives.push_back(newPrimitive);
+
+				for (const FInlineMeshlet& meshlet : primitive.m_meshlets)
+				{
+					const DirectX::BoundingSphere& bounds = meshlet.m_boundingSphere;
+					FGpuMeshlet newMeshlet = {};
+					newMeshlet.m_meshIndex = meshIndex;
+					newMeshlet.m_boundingSphere = Vector4(bounds.Center.x, bounds.Center.y, bounds.Center.z, bounds.Radius);
+					newMeshlet.m_positionAccessor = primitive.m_positionAccessor;
+					newMeshlet.m_uvAccessor = primitive.m_uvAccessor;
+					newMeshlet.m_normalAccessor = primitive.m_normalAccessor;
+					newMeshlet.m_tangentAccessor = primitive.m_tangentAccessor;
+					newMeshlet.m_materialIndex = primitive.m_materialIndex;
+					newMeshlet.m_vertexBegin = meshletVertexIndices.size();
+					newMeshlet.m_vertexCount = meshlet.m_uniqueVertexIndices.size();
+					newMeshlet.m_triangleBegin = meshletTriangleIndices.size();
+					newMeshlet.m_triangleCount = meshlet.m_primitiveIndices.size();
+					meshlets.push_back(newMeshlet);
+
+					// Append the meshlet information into the packed buffers
+					meshletVertexIndices.insert(meshletVertexIndices.end(), meshlet.m_uniqueVertexIndices.cbegin(), meshlet.m_uniqueVertexIndices.cend());
+					meshletTriangleIndices.insert(meshletTriangleIndices.end(), meshlet.m_primitiveIndices.cbegin(), meshlet.m_primitiveIndices.cend());
+				}
 			}
 		}
 
-		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive);
+		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive)
+			+ meshlets.size() * sizeof(FGpuMeshlet)
+			+ meshletVertexIndices.size() * sizeof(uint32_t)
+			+ meshletTriangleIndices.size() * sizeof(FInlineMeshlet::FPackedTriangle);
+
 		FResourceUploadContext uploader{ bufferSize };
 
 		m_packedPrimitives.reset(RenderBackend12::CreateNewShaderBuffer({
@@ -552,17 +586,53 @@ void FScene::CreateGpuGeometryBuffers()
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadOnly,
 			.alloc = FResource::Allocation::Persistent(),
-			.size = bufferSize,
+			.size = primitives.size() * sizeof(FGpuPrimitive),
 			.upload = {
 				.pData = (const uint8_t*)primitives.data(),
 				.context = &uploader 
 			}
 		}));
 
+		m_packedMeshlets.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"scene_meshlets",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = meshlets.size() * sizeof(FGpuMeshlet),
+			.upload = {
+				.pData = (const uint8_t*)meshlets.data(),
+				.context = &uploader
+			}
+			}));
+
+		m_packedMeshletVertexIndexBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"meshlet_vertex_index_buffer",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = meshletVertexIndices.size() * sizeof(uint32_t),
+			.upload = {
+				.pData = (const uint8_t*)meshletVertexIndices.data(),
+				.context = &uploader
+			}
+			}));
+
+		m_packedMeshletPrimitiveIndexBuffer.reset(RenderBackend12::CreateNewShaderBuffer({
+			.name = L"meshlet_primitive_index_buffer",
+			.type = FShaderBuffer::Type::Raw,
+			.accessMode = FResource::AccessMode::GpuReadOnly,
+			.alloc = FResource::Allocation::Persistent(),
+			.size = meshletTriangleIndices.size() * sizeof(uint32_t),
+			.upload = {
+				.pData = (const uint8_t*)meshletTriangleIndices.data(),
+				.context = &uploader
+			}
+			}));
+
 		uploader.SubmitUploads(cmdList);
 	}
 
-	// Buffer that contains primitive count for each mesh. This is used to calculate an offset to read from the above buffer
+	// Buffer that contains primitive count for each mesh. This is used to calculate an offset to read from the packed primitives buffer
 	{
 		std::vector<uint32_t> primitiveCounts;
 		for (const auto& mesh : m_sceneMeshes.m_entityList)

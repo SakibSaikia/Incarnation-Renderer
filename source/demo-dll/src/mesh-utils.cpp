@@ -787,6 +787,11 @@ void MeshUtils::Meshletize(
                     candidateCheck.insert(candidates[0].first);
                 }
 
+                // SRS - Cache the bounding sphere for visibility checks
+                XMFLOAT4 currBounds;
+                XMStoreFloat4(&currBounds, psphere);
+                curr->m_boundingSphere = BoundingSphere(XMFLOAT3{ currBounds.x, currBounds.y, currBounds.z }, currBounds.w);
+
                 output.emplace_back();
                 curr = &output.back();
             }

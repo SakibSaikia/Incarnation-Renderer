@@ -19,6 +19,8 @@ struct FInlineMeshlet
 
 	// Primitive indices are local per meshlet. For the above example, primitive indices are { 0,1,2,  3,0,2, ...}
 	std::vector<FPackedTriangle> m_primitiveIndices;
+
+	DirectX::BoundingSphere m_boundingSphere;
 };
 
 namespace MeshUtils
