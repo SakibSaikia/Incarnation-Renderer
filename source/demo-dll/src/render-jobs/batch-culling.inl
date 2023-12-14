@@ -7,7 +7,7 @@ namespace RenderJob::BatchCullingPass
 		FShaderBuffer* batchCountsBuffer;
 		FSystemBuffer* sceneConstantBuffer;
 		FSystemBuffer* viewConstantBuffer;
-		size_t primitiveCount;
+		size_t drawCount;
 		FConfig renderConfig;
 	};
 
@@ -48,10 +48,12 @@ namespace RenderJob::BatchCullingPass
 				L"THREAD_GROUP_SIZE_X=128 FRUSTUM_CULLING=%d",
 				passDesc.renderConfig.FrustumCulling ? 1 : 0);
 
+			std::wstring shaderEntryPoint = passDesc.renderConfig.UseMeshlets ? L"cs_meshlet_cull_main" : L"cs_primitive_cull_main";
+
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"culling/batch-culling.hlsl",
-				L"cs_main",
+				shaderEntryPoint,
 				shaderMacros,
 				L"cs_6_6" });
 
@@ -89,7 +91,7 @@ namespace RenderJob::BatchCullingPass
 				clearValue, 0, nullptr);
 
 			// Dispatch
-			size_t threadGroupCountX = GetDispatchSize(passDesc.primitiveCount, 128);
+			size_t threadGroupCountX = GetDispatchSize(passDesc.drawCount, 128);
 			d3dCmdList->Dispatch(threadGroupCountX, 1, 1);
 
 			return cmdList;

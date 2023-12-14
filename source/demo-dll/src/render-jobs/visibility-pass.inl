@@ -12,7 +12,7 @@ namespace RenderJob::VisibilityPass
 		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;
-		size_t scenePrimitiveCount;
+		size_t drawCount;
 	};
 
 	Result Execute(Sync* jobSync, const Desc& passDesc)
@@ -159,7 +159,7 @@ namespace RenderJob::VisibilityPass
 				const size_t defaultArgsCountOffset = 0;
 				d3dCmdList->ExecuteIndirect(
 					commandSignature,
-					passDesc.scenePrimitiveCount,
+					passDesc.drawCount,
 					passDesc.indirectArgsBuffer_Default->m_resource->m_d3dResource,
 					0,
 					passDesc.indirectCountsBuffer->m_resource->m_d3dResource,
@@ -176,7 +176,7 @@ namespace RenderJob::VisibilityPass
 				SCOPED_COMMAND_LIST_EVENT(cmdList, "double_sided", 0);
 				d3dCmdList->ExecuteIndirect(
 					commandSignature,
-					passDesc.scenePrimitiveCount,
+					passDesc.drawCount,
 					passDesc.indirectArgsBuffer_DoubleSided->m_resource->m_d3dResource,
 					0,
 					passDesc.indirectCountsBuffer->m_resource->m_d3dResource,

@@ -187,11 +187,17 @@ void FScene::ReloadModel(const std::wstring& filename)
 		DirectX::BoundingBox::CreateMerged(m_sceneBounds, m_sceneBounds, bb);
 	}
 
-	// Primitive counts
+	// Primitive & meshlet counts
 	m_primitiveCount = 0;
+	m_meshletCount = 0;
 	for (const FMesh& mesh : m_sceneMeshes.m_entityList)
 	{
 		m_primitiveCount += mesh.m_primitives.size();
+
+		for (const FMeshPrimitive& primitive : mesh.m_primitives)
+		{
+			m_meshletCount += primitive.m_meshlets.size();
+		}
 	}
 
 	// Cache the sun transform in the model
@@ -1527,6 +1533,7 @@ void FScene::LoadLights(const tinygltf::Model& model)
 void FScene::Clear()
 {
 	m_primitiveCount = 0;
+	m_meshletCount = 0;
 
 	m_cameras.clear();
 	m_meshBuffers.clear();

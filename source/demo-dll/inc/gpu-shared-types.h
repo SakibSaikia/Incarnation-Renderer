@@ -147,6 +147,10 @@ struct FSceneConstants
 	uint32_t m_packedScenePrimitivesBufferIndex;
 	uint32_t m_packedSceneMeshTransformsBufferIndex;
 	uint32_t m_packedSceneMeshVisibilityBufferIndex;
+	uint32_t m_meshletCount;
+	uint32_t m_packedMeshletVertexIndexBufferIndex;
+	uint32_t m_packedMehsletPrimitiveIndexBufferIndex;
+	uint32_t m_packedSceneMeshletsBufferIndex;
 	uint32_t m_sceneMaterialBufferIndex;
 	uint32_t m_lightCount;
 	uint32_t m_packedLightIndicesBufferIndex;
