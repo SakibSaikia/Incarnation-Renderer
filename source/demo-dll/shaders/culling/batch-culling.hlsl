@@ -145,7 +145,7 @@ void cs_meshlet_cull_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         {
 #if FRUSTUM_CULLING
             ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
-            float4x4 meshTransform = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+            float4x4 meshTransform = meshTransformsBuffer.Load<float4x4>(meshlet.m_meshIndex * sizeof(float4x4));
             
             if (FrustumCull(meshlet.m_boundingSphere, meshTransform))
 #else
