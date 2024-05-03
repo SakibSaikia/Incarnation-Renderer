@@ -533,9 +533,9 @@ void FScene::CreateGpuGeometryBuffers()
 		// Packed buffer that contains an array of FGpuMeshlet(s)
 		std::vector<FGpuMeshlet> meshlets;
 		// Packed array of meshlet vertex indices
-		std::vector<uint32_t> meshletVertexIndices;
+		std::vector<uint32_t> packedMeshletVertexIndices;
 		// Packed array of meshlet triangle indices
-		std::vector<FInlineMeshlet::FPackedTriangle> meshletTriangleIndices;
+		std::vector<FInlineMeshlet::FPackedTriangle> packedMeshletTriangleIndices;
 
 		for (int meshIndex = 0; meshIndex < m_sceneMeshes.GetCount(); ++meshIndex)
 		{
@@ -567,23 +567,23 @@ void FScene::CreateGpuGeometryBuffers()
 					newMeshlet.m_normalAccessor = primitive.m_normalAccessor;
 					newMeshlet.m_tangentAccessor = primitive.m_tangentAccessor;
 					newMeshlet.m_materialIndex = primitive.m_materialIndex;
-					newMeshlet.m_vertexBegin = meshletVertexIndices.size();
+					newMeshlet.m_vertexBegin = packedMeshletVertexIndices.size();
 					newMeshlet.m_vertexCount = meshlet.m_uniqueVertexIndices.size();
-					newMeshlet.m_triangleBegin = meshletTriangleIndices.size();
+					newMeshlet.m_triangleBegin = packedMeshletTriangleIndices.size();
 					newMeshlet.m_triangleCount = meshlet.m_primitiveIndices.size();
 					meshlets.push_back(newMeshlet);
 
 					// Append the meshlet information into the packed buffers
-					meshletVertexIndices.insert(meshletVertexIndices.end(), meshlet.m_uniqueVertexIndices.cbegin(), meshlet.m_uniqueVertexIndices.cend());
-					meshletTriangleIndices.insert(meshletTriangleIndices.end(), meshlet.m_primitiveIndices.cbegin(), meshlet.m_primitiveIndices.cend());
+					packedMeshletVertexIndices.insert(packedMeshletVertexIndices.end(), meshlet.m_uniqueVertexIndices.cbegin(), meshlet.m_uniqueVertexIndices.cend());
+					packedMeshletTriangleIndices.insert(packedMeshletTriangleIndices.end(), meshlet.m_primitiveIndices.cbegin(), meshlet.m_primitiveIndices.cend());
 				}
 			}
 		}
 
 		const size_t bufferSize = primitives.size() * sizeof(FGpuPrimitive)
 			+ meshlets.size() * sizeof(FGpuMeshlet)
-			+ meshletVertexIndices.size() * sizeof(uint32_t)
-			+ meshletTriangleIndices.size() * sizeof(FInlineMeshlet::FPackedTriangle);
+			+ packedMeshletVertexIndices.size() * sizeof(uint32_t)
+			+ packedMeshletTriangleIndices.size() * sizeof(FInlineMeshlet::FPackedTriangle);
 
 		FResourceUploadContext uploader{ bufferSize };
 
@@ -616,9 +616,9 @@ void FScene::CreateGpuGeometryBuffers()
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadOnly,
 			.alloc = FResource::Allocation::Persistent(),
-			.size = meshletVertexIndices.size() * sizeof(uint32_t),
+			.size = packedMeshletVertexIndices.size() * sizeof(uint32_t),
 			.upload = {
-				.pData = (const uint8_t*)meshletVertexIndices.data(),
+				.pData = (const uint8_t*)packedMeshletVertexIndices.data(),
 				.context = &uploader
 			}
 			}));
@@ -628,9 +628,9 @@ void FScene::CreateGpuGeometryBuffers()
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadOnly,
 			.alloc = FResource::Allocation::Persistent(),
-			.size = meshletTriangleIndices.size() * sizeof(uint32_t),
+			.size = packedMeshletTriangleIndices.size() * sizeof(uint32_t),
 			.upload = {
-				.pData = (const uint8_t*)meshletTriangleIndices.data(),
+				.pData = (const uint8_t*)packedMeshletTriangleIndices.data(),
 				.context = &uploader
 			}
 			}));
