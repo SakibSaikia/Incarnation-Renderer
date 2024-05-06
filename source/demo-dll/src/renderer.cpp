@@ -1613,7 +1613,7 @@ void Renderer::Render(const FRenderState& renderState)
 				cb->m_packedSceneMeshVisibilityBufferIndex = meshVisibilityBuf->m_descriptorIndices.SRV;
 				cb->m_meshletCount = totalMeshlets;
 				cb->m_packedMeshletVertexIndexBufferIndex = scene->m_packedMeshletVertexIndexBuffer->m_descriptorIndices.SRV;
-				cb->m_packedMehsletPrimitiveIndexBufferIndex = scene->m_packedMeshletPrimitiveIndexBuffer->m_descriptorIndices.SRV;
+				cb->m_packedMeshletPrimitiveIndexBufferIndex = scene->m_packedMeshletPrimitiveIndexBuffer->m_descriptorIndices.SRV;
 				cb->m_packedSceneMeshletsBufferIndex = scene->m_packedMeshlets->m_descriptorIndices.SRV;
 				cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_descriptorIndices.SRV;
 				cb->m_lightCount = scene->m_sceneLights.GetCount();
@@ -1756,6 +1756,7 @@ void Renderer::Render(const FRenderState& renderState)
 			visDesc.resX = resX;
 			visDesc.resY = resY;
 			visDesc.drawCount = numDraws;
+			visDesc.renderConfig = c;
 
 			RenderJob::Result visibilityJob = RenderJob::VisibilityPass::Execute(s_jobSync.get(), visDesc);
 			sceneRenderJobs.push_back(visibilityJob.m_task);
