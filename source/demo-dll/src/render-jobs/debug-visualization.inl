@@ -68,8 +68,9 @@ namespace RenderJob::DebugVizPass
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
+				std::wstring shaderMacros = PrintString(L"VIEWMODE=%d USING_MESHLETS=%d", passDesc.renderConfig.Viewmode, passDesc.renderConfig.UseMeshlets ? 1 : 0);
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"ps_main", PrintString(L"VIEWMODE=%d", passDesc.renderConfig.Viewmode), L"ps_6_6"});
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"ps_main", shaderMacros, L"ps_6_6"});
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -140,13 +141,14 @@ namespace RenderJob::DebugVizPass
 				int sceneMeshAccessorsIndex;
 				int sceneMeshBufferViewsIndex;
 				int scenePrimitivesIndex;
+				int sceneMeshletsIndex;
 				int viewmode;
 				uint32_t resX;
 				uint32_t resY;
 				uint32_t mouseX;
 				uint32_t mouseY;
 				uint32_t lightClusterSlices;
-				uint32_t __padding[3];
+				uint32_t __padding[2];
 				Matrix invProjectionTransform;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_descriptorIndices.SRV,
@@ -160,13 +162,14 @@ namespace RenderJob::DebugVizPass
 					(int)passDesc.scene->m_packedMeshAccessors->m_descriptorIndices.SRV,
 					(int)passDesc.scene->m_packedMeshBufferViews->m_descriptorIndices.SRV,
 					(int)passDesc.scene->m_packedPrimitives->m_descriptorIndices.SRV,
+					(int)passDesc.scene->m_packedMeshlets->m_descriptorIndices.SRV,
 					passDesc.renderConfig.Viewmode,
 					passDesc.resX,
 					passDesc.resY,
 					passDesc.mouseX,
 					passDesc.mouseY,
 					passDesc.renderConfig.LightClusterDimZ,
-					0,0,0,
+					0,0,
 					(passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert()
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
