@@ -199,7 +199,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
             // Use object id to retrieve the primitive info
             ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
-            const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+            const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(primitiveId * sizeof(FGpuPrimitive));
 
             // Fill the vertex data for the triangle
             FTriangleData tri = GetPrimitiveTriangleData(triangleId, primitive);
