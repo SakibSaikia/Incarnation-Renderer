@@ -1775,6 +1775,7 @@ void Renderer::Render(const FRenderState& renderState)
 			gbufferComputeDesc.resX = resX;
 			gbufferComputeDesc.resY = resY;
 			gbufferComputeDesc.scene = renderState.m_scene;
+			gbufferComputeDesc.renderConfig = c;
 
 			RenderJob::Result gbufferComputeJob = RenderJob::GBufferComputePass::Execute(s_jobSync.get(), gbufferComputeDesc);
 			sceneRenderJobs.push_back(gbufferComputeJob.m_task);

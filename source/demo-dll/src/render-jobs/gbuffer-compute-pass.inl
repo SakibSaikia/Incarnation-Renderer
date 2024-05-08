@@ -11,6 +11,7 @@ namespace RenderJob::GBufferComputePass
 		uint32_t resX;
 		uint32_t resY;
 		const FScene* scene;
+		FConfig renderConfig;
 	};
 
 	Result Execute(Sync* jobSync, const Desc& passDesc)
@@ -52,11 +53,13 @@ namespace RenderJob::GBufferComputePass
 
 			d3dCmdList->SetComputeRootSignature(rootsig->m_rootsig);
 
+			std::wstring shaderMacros = PrintString(L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16 USING_MESHLETS=%d", passDesc.renderConfig.UseMeshlets ? 1 : 0);
+
 			// PSO
 			IDxcBlob* csBlob = RenderBackend12::CacheShader({
 				L"geo-raster/gbuffer-compute.hlsl",
 				L"cs_main",
-				L"THREAD_GROUP_SIZE_X=16 THREAD_GROUP_SIZE_Y=16",
+				shaderMacros,
 				L"cs_6_6" });
 
 			D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};

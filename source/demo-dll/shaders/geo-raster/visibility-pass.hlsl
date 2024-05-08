@@ -32,10 +32,12 @@ struct vs_to_ps
 vs_to_ps vs_primitive_main(uint invocationIndex : SV_VertexID)
 {
 	vs_to_ps o;
+	
+    uint primitiveId = g_passCb.id;
 
 	// Load the primitive from the packed primitives buffer using the primitive id
 	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
-	FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_passCb.id * sizeof(FGpuPrimitive));
+    FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(primitiveId * sizeof(FGpuPrimitive));
 
 	ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
 	float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
@@ -46,7 +48,7 @@ vs_to_ps vs_primitive_main(uint invocationIndex : SV_VertexID)
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	o.pos = mul(worldPos, g_viewCb.m_viewProjTransform);
 	o.uv = MeshMaterial::GetFloat2(vertIndex, primitive.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-	o.objectId = g_passCb.id;
+    o.objectId = primitiveId;
 	o.materialId = primitive.m_materialIndex;
 
 	return o;
@@ -55,10 +57,12 @@ vs_to_ps vs_primitive_main(uint invocationIndex : SV_VertexID)
 vs_to_ps vs_meshlet_main(uint invocationIndex : SV_VertexID)
 {
     vs_to_ps o;
+	
+    uint meshletId = g_passCb.id;
 
 	// Load the meshlet from the packed meshlets buffer using the meshlet id
     ByteAddressBuffer meshletsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshletsBufferIndex];
-    FGpuMeshlet meshlet = meshletsBuffer.Load<FGpuMeshlet> (g_passCb.id * sizeof(FGpuMeshlet));
+    FGpuMeshlet meshlet = meshletsBuffer.Load < FGpuMeshlet > (meshletId * sizeof(FGpuMeshlet));
 	
 	// Meshlet transform
     ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
@@ -82,19 +86,29 @@ vs_to_ps vs_meshlet_main(uint invocationIndex : SV_VertexID)
     float4 worldPos = mul(float4(position, 1.f), localToWorld);
     o.pos = mul(worldPos, g_viewCb.m_viewProjTransform);
     o.uv = MeshMaterial::GetFloat2(uniqueVertIndex, meshlet.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-    o.objectId = meshlet.m_meshIndex;
+    o.objectId = meshletId;
     o.materialId = meshlet.m_materialIndex;
 
     return o;
 	
 }
 
-uint ps_main(vs_to_ps interpolants, uint triangleId : SV_PrimitiveID) : SV_Target
+uint ps_primitive_main(vs_to_ps interpolants, uint triangleId : SV_PrimitiveID) : SV_Target
 {
 	// Evaluate Material
 	FMaterial material = MeshMaterial::GetMaterial(interpolants.materialId, g_sceneCb.m_sceneMaterialBufferIndex);
 	FMaterialProperties matInfo = EvaluateMaterialProperties(material, interpolants.uv, g_anisoSampler);
 	clip(matInfo.opacity - 0.5f);
 
-	return EncodeVisibilityBuffer(interpolants.objectId, triangleId);
+	return EncodePrimitiveVisibility(interpolants.objectId, triangleId);
+}
+
+uint ps_meshlet_main(vs_to_ps interpolants, uint triangleId : SV_PrimitiveID) : SV_Target
+{
+	// Evaluate Material
+    FMaterial material = MeshMaterial::GetMaterial(interpolants.materialId, g_sceneCb.m_sceneMaterialBufferIndex);
+    FMaterialProperties matInfo = EvaluateMaterialProperties(material, interpolants.uv, g_anisoSampler);
+    clip(matInfo.opacity - 0.5f);
+
+    return EncodeMeshletVisibility(interpolants.objectId, triangleId);
 }

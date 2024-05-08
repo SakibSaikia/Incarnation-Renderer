@@ -94,8 +94,9 @@ namespace RenderJob::VisibilityPass
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
 				const std::wstring vsEntrypoint = passDesc.renderConfig.UseMeshlets ? L"vs_meshlet_main" : L"vs_primitive_main";
+				const std::wstring psEntrypoint = passDesc.renderConfig.UseMeshlets ? L"ps_meshlet_main" : L"ps_primitive_main";
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", vsEntrypoint, L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", psEntrypoint, L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
