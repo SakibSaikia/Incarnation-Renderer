@@ -166,14 +166,6 @@ void FScene::ReloadModel(const std::wstring& filename)
 		}
 	}
 
-	// If the model required fixup during load, resave a cached copy so that 
-	// subsequent loads are faster.
-	/*if (requiresResave && Config::g_useContentCache)
-	{
-		ok = loader.WriteGltfSceneToFile(&model, cachedFilepath.string(), false, false, true, false);
-		DebugAssert(ok, "Failed to save cached glTF model");
-	}*/
-
 	// Scene bounds
 	std::vector<DirectX::BoundingBox> meshWorldBounds(m_sceneMeshes.m_objectSpaceBoundsList.size());
 	for (int i = 0; i < meshWorldBounds.size(); ++i)
@@ -185,19 +177,6 @@ void FScene::ReloadModel(const std::wstring& filename)
 	for (const auto& bb : meshWorldBounds)
 	{
 		DirectX::BoundingBox::CreateMerged(m_sceneBounds, m_sceneBounds, bb);
-	}
-
-	// Primitive & meshlet counts
-	m_primitiveCount = 0;
-	m_meshletCount = 0;
-	for (const FMesh& mesh : m_sceneMeshes.m_entityList)
-	{
-		m_primitiveCount += mesh.m_primitives.size();
-
-		for (const FMeshPrimitive& primitive : mesh.m_primitives)
-		{
-			m_meshletCount += primitive.m_meshlets.size();
-		}
 	}
 
 	// Cache the sun transform in the model
@@ -215,9 +194,23 @@ void FScene::ReloadModel(const std::wstring& filename)
 		UpdateDynamicSky();
 	}
 
+	GenerateMeshlets(model);
 	CreateAccelerationStructures(model);
 	CreateGpuGeometryBuffers();
 	CreateGpuLightBuffers();
+
+	// Primitive & meshlet counts
+	m_primitiveCount = 0;
+	m_meshletCount = 0;
+	for (const FMesh& mesh : m_sceneMeshes.m_entityList)
+	{
+		m_primitiveCount += mesh.m_primitives.size();
+
+		for (const FMeshPrimitive& primitive : mesh.m_primitives)
+		{
+			m_meshletCount += primitive.m_meshlets.size();
+		}
+	}
 
 	// Wait for all loading jobs to finish
 	auto joinTask = concurrency::when_all(std::begin(m_loadingJobs), std::end(m_loadingJobs));
@@ -366,44 +359,6 @@ void FScene::LoadMesh(int meshIndex, const tinygltf::Model& model, const Matrix&
 		DirectX::BoundingBox primitiveBounds = CalcBounds(posIt->second);
 		DirectX::BoundingBox::CreateMerged(meshBounds, meshBounds, primitiveBounds);
 		DirectX::BoundingSphere::CreateFromBoundingBox(outPrimitive.m_boundingSphere, primitiveBounds);
-
-		// Construct index buffer for generating meshlets
-		std::vector<uint32_t> indices;
-		indices.reserve(indexAccessor.count);
-		const tinygltf::BufferView indexBufferView = model.bufferViews[indexAccessor.bufferView];
-		const tinygltf::Buffer indexBuffer = model.buffers[indexBufferView.buffer];
-		const unsigned char* pIndexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-		const size_t indexByteStride = indexAccessor.ByteStride(indexBufferView);
-		for (int i = 0; i < indexAccessor.count; ++i)
-		{
-			// Read 16-bit or 32-bit indices. In either case, we convert to 32-bit.
-			uint32_t indexData = indexByteStride == 2 ? *(uint16_t*)pIndexData : *(uint32_t*)pIndexData;
-			indices.push_back(indexData);
-			pIndexData += indexByteStride;
-		}
-
-		// Construct position buffer for generating meshlets
-		const tinygltf::Accessor& positionAccessor = model.accessors[outPrimitive.m_positionAccessor];
-		std::vector<XMFLOAT3> positions;
-		positions.reserve(positionAccessor.count);
-		const tinygltf::BufferView positionBufferView = model.bufferViews[positionAccessor.bufferView];
-		const tinygltf::Buffer positionBuffer = model.buffers[positionBufferView.buffer];
-		const unsigned char* pPositionData = &positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset];
-		const size_t positionByteStride = positionAccessor.ByteStride(positionBufferView);
-		for (int i = 0; i < positionAccessor.count; ++i)
-		{
-			positions.push_back(XMFLOAT3((float*)pPositionData));
-			pPositionData += positionByteStride;
-		}
-
-		// Generate meshlets
-		constexpr uint32_t MAX_VERTS = 64;
-		constexpr uint32_t MAX_PRIMITIVES = 126;
-		MeshUtils::Meshletize(
-			MAX_VERTS, MAX_PRIMITIVES, 
-			indices.data(), indices.size(),
-			positions.data(), positions.size(),
-			outPrimitive.m_meshlets);
 	}
 
 	sceneCollection->m_entityList.push_back(newMesh);
@@ -1528,6 +1483,69 @@ void FScene::LoadLights(const tinygltf::Model& model)
 	});
 
 	FScene::s_loadProgress += FScene::s_lightsLoadTimeFrac;
+}
+
+void FScene::GenerateMeshlets(const tinygltf::Model& model)
+{
+	SCOPED_CPU_EVENT("generate_meshlets", PIX_COLOR_DEFAULT);
+
+	// Generate Meshlets
+	int totalCount = 0;
+	std::vector<FMeshPrimitive*> primitiveList;
+	for (FMesh& mesh : m_sceneMeshes.m_entityList)
+	{
+		for (FMeshPrimitive& primitive : mesh.m_primitives)
+		{
+			primitiveList.push_back(&primitive);
+			totalCount++;
+		}
+	}
+
+	concurrency::parallel_for(0, (int)primitiveList.size(), [&](int i)
+		{
+			SCOPED_CPU_EVENT("meshletize", PIX_COLOR_DEFAULT);
+
+			FMeshPrimitive* primitive = primitiveList[i];
+
+			// Construct index buffer for generating meshlets
+			const tinygltf::Accessor& indexAccessor = model.accessors[primitive->m_indexAccessor];
+			std::vector<uint32_t> indices;
+			indices.reserve(indexAccessor.count);
+			const tinygltf::BufferView indexBufferView = model.bufferViews[indexAccessor.bufferView];
+			const tinygltf::Buffer indexBuffer = model.buffers[indexBufferView.buffer];
+			const unsigned char* pIndexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+			const size_t indexByteStride = indexAccessor.ByteStride(indexBufferView);
+			for (int i = 0; i < indexAccessor.count; ++i)
+			{
+				// Read 16-bit or 32-bit indices. In either case, we convert to 32-bit.
+				uint32_t indexData = indexByteStride == 2 ? *(uint16_t*)pIndexData : *(uint32_t*)pIndexData;
+				indices.push_back(indexData);
+				pIndexData += indexByteStride;
+			}
+
+			// Construct position buffer for generating meshlets
+			const tinygltf::Accessor& positionAccessor = model.accessors[primitive->m_positionAccessor];
+			std::vector<XMFLOAT3> positions;
+			positions.reserve(positionAccessor.count);
+			const tinygltf::BufferView positionBufferView = model.bufferViews[positionAccessor.bufferView];
+			const tinygltf::Buffer positionBuffer = model.buffers[positionBufferView.buffer];
+			const unsigned char* pPositionData = &positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset];
+			const size_t positionByteStride = positionAccessor.ByteStride(positionBufferView);
+			for (int i = 0; i < positionAccessor.count; ++i)
+			{
+				positions.push_back(XMFLOAT3((float*)pPositionData));
+				pPositionData += positionByteStride;
+			}
+
+			// Generate meshlets
+			constexpr uint32_t MAX_VERTS = 64;
+			constexpr uint32_t MAX_PRIMITIVES = 126;
+			MeshUtils::Meshletize(
+				MAX_VERTS, MAX_PRIMITIVES, 
+				indices.data(), indices.size(),
+				positions.data(), positions.size(),
+				primitive->m_meshlets);
+		});
 }
 
 void FScene::Clear()

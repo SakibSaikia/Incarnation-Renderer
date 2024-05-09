@@ -144,6 +144,7 @@ struct FScene : public FModelLoader
 private:
 	void LoadLights(const tinygltf::Model& model);
 	void CreateAccelerationStructures(const tinygltf::Model& model);
+	void GenerateMeshlets(const tinygltf::Model& model);
 	void CreateGpuGeometryBuffers();
 	void CreateGpuLightBuffers();
 	void LoadMaterials(const tinygltf::Model& model);
