@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tiny_gltf.h>
+#include <mesh-utils.h>
 
 // Corresponds to GLTF Primitive
 struct FMeshPrimitive
@@ -14,6 +15,7 @@ struct FMeshPrimitive
 	D3D_PRIMITIVE_TOPOLOGY m_topology;
 	int m_materialIndex;
 	DirectX::BoundingSphere m_boundingSphere;
+	std::vector<FInlineMeshlet> m_meshlets;
 };
 
 // Corresponds to GLTF Mesh
@@ -104,7 +106,12 @@ struct FScene : public FModelLoader
 	std::unique_ptr<FShaderBuffer> m_packedMaterials;
 	std::vector<FMaterial> m_materialList;
 	DirectX::BoundingBox m_sceneBounds; // world space
+	// See: https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/
+	std::unique_ptr<FShaderBuffer> m_packedMeshletVertexIndexBuffer;
+	std::unique_ptr<FShaderBuffer> m_packedMeshletPrimitiveIndexBuffer;
+	std::unique_ptr<FShaderBuffer> m_packedMeshlets;
 	size_t m_primitiveCount;
+	size_t m_meshletCount;
 
 	// Lights
 	std::vector<FLight> m_globalLightList;

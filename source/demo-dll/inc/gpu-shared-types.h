@@ -85,6 +85,22 @@ struct FGpuPrimitive
 	int m_indexCount;
 };
 
+struct FGpuMeshlet
+{
+	uint32_t m_vertexBegin;
+	uint32_t m_vertexCount;
+	uint32_t m_triangleBegin;
+	uint32_t m_triangleCount;
+
+	Vector4 m_boundingSphere;
+	int m_meshIndex;
+	int m_positionAccessor;
+	int m_uvAccessor;
+	int m_normalAccessor;
+	int m_tangentAccessor;
+	int m_materialIndex;
+};
+
 struct FMaterial
 {
 	Vector3 m_emissiveFactor;
@@ -131,6 +147,10 @@ struct FSceneConstants
 	uint32_t m_packedScenePrimitivesBufferIndex;
 	uint32_t m_packedSceneMeshTransformsBufferIndex;
 	uint32_t m_packedSceneMeshVisibilityBufferIndex;
+	uint32_t m_meshletCount;
+	uint32_t m_packedMeshletVertexIndexBufferIndex;
+	uint32_t m_packedMeshletPrimitiveIndexBufferIndex;
+	uint32_t m_packedSceneMeshletsBufferIndex;
 	uint32_t m_sceneMaterialBufferIndex;
 	uint32_t m_lightCount;
 	uint32_t m_packedLightIndicesBufferIndex;

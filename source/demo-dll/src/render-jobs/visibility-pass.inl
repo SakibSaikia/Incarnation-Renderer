@@ -12,7 +12,8 @@ namespace RenderJob::VisibilityPass
 		DXGI_FORMAT visBufferFormat;
 		uint32_t resX;
 		uint32_t resY;
-		size_t scenePrimitiveCount;
+		size_t drawCount;
+		FConfig renderConfig;
 	};
 
 	Result Execute(Sync* jobSync, const Desc& passDesc)
@@ -92,8 +93,10 @@ namespace RenderJob::VisibilityPass
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
-				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", L"ps_main", L"" , L"ps_6_6" });
+				const std::wstring vsEntrypoint = passDesc.renderConfig.UseMeshlets ? L"vs_meshlet_main" : L"vs_primitive_main";
+				const std::wstring psEntrypoint = passDesc.renderConfig.UseMeshlets ? L"ps_meshlet_main" : L"ps_primitive_main";
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", vsEntrypoint, L"" , L"vs_6_6" });
+				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/visibility-pass.hlsl", psEntrypoint, L"" , L"ps_6_6" });
 
 				vs.pShaderBytecode = vsBlob->GetBufferPointer();
 				vs.BytecodeLength = vsBlob->GetBufferSize();
@@ -159,7 +162,7 @@ namespace RenderJob::VisibilityPass
 				const size_t defaultArgsCountOffset = 0;
 				d3dCmdList->ExecuteIndirect(
 					commandSignature,
-					passDesc.scenePrimitiveCount,
+					passDesc.drawCount,
 					passDesc.indirectArgsBuffer_Default->m_resource->m_d3dResource,
 					0,
 					passDesc.indirectCountsBuffer->m_resource->m_d3dResource,
@@ -176,7 +179,7 @@ namespace RenderJob::VisibilityPass
 				SCOPED_COMMAND_LIST_EVENT(cmdList, "double_sided", 0);
 				d3dCmdList->ExecuteIndirect(
 					commandSignature,
-					passDesc.scenePrimitiveCount,
+					passDesc.drawCount,
 					passDesc.indirectArgsBuffer_DoubleSided->m_resource->m_d3dResource,
 					0,
 					passDesc.indirectCountsBuffer->m_resource->m_d3dResource,

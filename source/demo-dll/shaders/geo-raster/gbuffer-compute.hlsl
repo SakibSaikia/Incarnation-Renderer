@@ -93,7 +93,7 @@ ConstantBuffer<FViewConstants> g_viewCb : register(b1);
 ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 SamplerState g_anisoSampler : register(s0);
 
-FTriangleData GetTriangleData(int triIndex, FGpuPrimitive primitive)
+FTriangleData GetPrimitiveTriangleData(int triIndex, FGpuPrimitive primitive)
 {
     FTriangleData o;
 
@@ -120,6 +120,47 @@ FTriangleData GetTriangleData(int triIndex, FGpuPrimitive primitive)
     return o;
 }
 
+FTriangleData GetMeshletTriangleData(int meshletTriangleIndex, FGpuMeshlet meshlet)
+{
+    FTriangleData o;
+
+    ByteAddressBuffer packedTriangleIndexBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedMeshletPrimitiveIndexBufferIndex];
+    uint packedMeshletTriangleIndex = packedTriangleIndexBuffer.Load<uint>((meshlet.m_triangleBegin + meshletTriangleIndex) * sizeof(uint));
+    uint meshletTriVertIndices[] =
+    {
+        0xff & (packedMeshletTriangleIndex >> 20),
+        0xff & (packedMeshletTriangleIndex >> 10),
+        0xff & (packedMeshletTriangleIndex)
+    };
+	
+	// Compute the unique vertex index for the current meshlet vert
+    ByteAddressBuffer packedVertexIndexBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedMeshletVertexIndexBufferIndex];
+    uint uniqueVertIndices[] = 
+    {
+        packedVertexIndexBuffer.Load<uint>((meshlet.m_vertexBegin + meshletTriVertIndices[0]) * sizeof(uint)),
+        packedVertexIndexBuffer.Load<uint>((meshlet.m_vertexBegin + meshletTriVertIndices[1]) * sizeof(uint)),
+        packedVertexIndexBuffer.Load<uint>((meshlet.m_vertexBegin + meshletTriVertIndices[2]) * sizeof(uint))
+    };
+
+    o.m_vertices[0].m_position = MeshMaterial::GetFloat3(uniqueVertIndices[0], meshlet.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_position = MeshMaterial::GetFloat3(uniqueVertIndices[1], meshlet.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_position = MeshMaterial::GetFloat3(uniqueVertIndices[2], meshlet.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_uv = MeshMaterial::GetFloat2(uniqueVertIndices[0], meshlet.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_uv = MeshMaterial::GetFloat2(uniqueVertIndices[1], meshlet.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_uv = MeshMaterial::GetFloat2(uniqueVertIndices[2], meshlet.m_uvAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_normal = MeshMaterial::GetFloat3(uniqueVertIndices[0], meshlet.m_normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_normal = MeshMaterial::GetFloat3(uniqueVertIndices[1], meshlet.m_normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_normal = MeshMaterial::GetFloat3(uniqueVertIndices[2], meshlet.m_normalAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+
+    o.m_vertices[0].m_tangentAndSign = MeshMaterial::GetFloat4(uniqueVertIndices[0], meshlet.m_tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[1].m_tangentAndSign = MeshMaterial::GetFloat4(uniqueVertIndices[1], meshlet.m_tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    o.m_vertices[2].m_tangentAndSign = MeshMaterial::GetFloat4(uniqueVertIndices[2], meshlet.m_tangentAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+
+    return o;
+}
+
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, 1)]
 void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
@@ -130,24 +171,44 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         RWTexture2D<float2> gbufferNormals = ResourceDescriptorHeap[g_passCb.m_gbuffer1UavIndex];
         RWTexture2D<float4> gbufferMetallicRoughnessAo = ResourceDescriptorHeap[g_passCb.m_gbuffer2UavIndex];
         RWTexture2D<float3> colorTarget = ResourceDescriptorHeap[g_passCb.m_colorTargetUavIndex];
+        
+        ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
 
         int visBufferValue = visBufferTex[dispatchThreadId.xy];
         if (visBufferValue != 0xFFFE0000)
         {
-            // Retrieve object and triangle id for vis buffer
-            uint objectId, triangleId;
-            DecodeVisibilityBuffer(visBufferValue, objectId, triangleId);
+#if USING_MESHLETS
+             // Retrieve meshlet id and triangle id from vis buffer
+            uint meshletId, triangleId;
+            DecodeMeshletVisibility(visBufferValue, meshletId, triangleId);
+
+            // Use meshlet id to retrieve the meshlet info
+            ByteAddressBuffer packedMeshletsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshletsBufferIndex];
+            const FGpuMeshlet meshlet = packedMeshletsBuffer.Load<FGpuMeshlet>(meshletId * sizeof(FGpuMeshlet));
+
+            // Fill the vertex data for the triangle
+            FTriangleData tri = GetMeshletTriangleData(triangleId, meshlet);
+            
+            float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(meshlet.m_meshIndex * sizeof(float4x4));
+            FMaterial material = MeshMaterial::GetMaterial(meshlet.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
+            
+#else
+            // Retrieve primitive id and triangle id from vis buffer
+            uint primitiveId, triangleId;
+            DecodePrimitiveVisibility(visBufferValue, primitiveId, triangleId);
 
             // Use object id to retrieve the primitive info
             ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
-            const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+            const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(primitiveId * sizeof(FGpuPrimitive));
 
             // Fill the vertex data for the triangle
-            FTriangleData tri = GetTriangleData(triangleId, primitive);
+            FTriangleData tri = GetPrimitiveTriangleData(triangleId, primitive);
+            
+            float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
+#endif
 
             // Transform the triangle verts to ndc space
-            ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
-            float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
             localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
             float4x4 localToClip = mul(localToWorld, g_viewCb.m_viewProjTransform);
             float4 p[3] = {
@@ -176,7 +237,6 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
             float2 UV = BarycentricInterp(tri.m_vertices[0].m_uv, tri.m_vertices[1].m_uv, tri.m_vertices[2].m_uv, lambda);
 
             // Evaluate Material
-            FMaterial material = MeshMaterial::GetMaterial(primitive.m_materialIndex, g_sceneCb.m_sceneMaterialBufferIndex);
             FMaterialProperties matInfo = EvaluateMaterialProperties(material, UV, g_anisoSampler);
 
             if (matInfo.bHasNormalmap)

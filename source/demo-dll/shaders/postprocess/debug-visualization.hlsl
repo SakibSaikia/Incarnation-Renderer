@@ -25,13 +25,14 @@ cbuffer cb : register(b0)
 	int g_sceneMeshAccessorsIndex;
 	int g_sceneMeshBufferViewsIndex;
 	int g_scenePrimitivesIndex;
+    int g_sceneMeshletsIndex;
 	int g_viewmode;
 	uint g_resX;
 	uint g_resY;
 	uint g_mouseX;
 	uint g_mouseY;
 	uint g_lightClusterSlices;
-	uint3 __padding;
+	uint2 __padding;
 	float4x4 g_invProjectionTransform;
 }
 
@@ -75,19 +76,28 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		Texture2D<int> visbufferTex = ResourceDescriptorHeap[g_visbufferTextureIndex];
 		int visbufferValue = visbufferTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
 
+	#if USING_MESHLETS
 		uint objectId, triangleId;
-		DecodeVisibilityBuffer(visbufferValue, objectId, triangleId);
+        DecodeMeshletVisibility(visbufferValue, objectId, triangleId);
+		
+		ByteAddressBuffer packedMeshletsBuffer = ResourceDescriptorHeap[g_sceneMeshletsIndex];
+        const FGpuMeshlet meshlet = packedMeshletsBuffer.Load<FGpuMeshlet>(objectId * sizeof(FGpuMeshlet));
+        const uint vertCount = meshlet.m_triangleCount * 3;
+	#else
+		uint objectId, triangleId;
+        DecodePrimitiveVisibility(visbufferValue, objectId, triangleId);
+		
+        ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
+        const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
+        const uint vertCount = primitive.m_indexCount;
+	#endif
 
 		if (floor(input.uv.x * g_resX) == g_mouseX && floor(input.uv.y * g_resY) == g_mouseY)
 		{
-			// Use object id to retrieve the primitive info
-			ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
-			const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
-
 			FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
 			cmd.m_rootConstants[0] = objectId;
 			cmd.m_rootConstants[1] = 0;
-			cmd.m_drawArguments.m_vertexCount = primitive.m_indexCount;
+			cmd.m_drawArguments.m_vertexCount = vertCount;
 			cmd.m_drawArguments.m_instanceCount = 1;
 			cmd.m_drawArguments.m_startVertexLocation = 0;
 			cmd.m_drawArguments.m_startInstanceLocation = 0;
@@ -104,20 +114,20 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		Texture2D<int> visbufferTex = ResourceDescriptorHeap[g_visbufferTextureIndex];
 		int visbufferValue = visbufferTex.Load(int3(input.uv.x * g_resX, input.uv.y * g_resY, 0));
 
+	#if USING_MESHLETS
 		uint objectId, triangleId;
-		DecodeVisibilityBuffer(visbufferValue, objectId, triangleId);
+        DecodeMeshletVisibility(visbufferValue, objectId, triangleId);
+	#else
+		uint objectId, triangleId;
+        DecodePrimitiveVisibility(visbufferValue, objectId, triangleId);
+	#endif
 
 		if (floor(input.uv.x * g_resX) == g_mouseX && floor(input.uv.y * g_resY) == g_mouseY)
 		{
-			// Use object id to retrieve the primitive info
-			ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_scenePrimitivesIndex];
-			const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(objectId * sizeof(FGpuPrimitive));
-			uint startVertIndex = MeshMaterial::GetUint(0, primitive.m_indexAccessor, g_sceneMeshAccessorsIndex, g_sceneMeshBufferViewsIndex);
-
 			FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
 			cmd.m_rootConstants[0] = objectId;
-			cmd.m_rootConstants[1] = triangleId * 3;
-			cmd.m_drawArguments.m_vertexCount = primitive.m_indicesPerTriangle;
+			cmd.m_rootConstants[1] = triangleId;
+			cmd.m_drawArguments.m_vertexCount = 3;
 			cmd.m_drawArguments.m_instanceCount = 1;
 			cmd.m_drawArguments.m_startVertexLocation = 0;
 			cmd.m_drawArguments.m_startInstanceLocation = 0;

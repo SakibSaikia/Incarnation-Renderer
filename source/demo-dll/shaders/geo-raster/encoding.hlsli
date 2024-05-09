@@ -1,18 +1,30 @@
 #ifndef __ENCODING_HLSLI_
 #define __ENCODING_HLSLI_
 
-#define NUM_TRIANGLE_BITS (20)
-#define TRIANGLE_MASK ((1 << NUM_TRIANGLE_BITS) - 1)
+#define PRIM_TRIANGLE_BIT_COUNT (20)
+#define MESHLET_TRIANGLE_BIT_COUNT (7)
+#define TRIANGLE_MASK(X) ((1 << X) - 1)
 
-uint EncodeVisibilityBuffer(uint objectId, uint triangleId)
+uint EncodePrimitiveVisibility(uint primitiveId, uint triangleId)
 {
-	return objectId << NUM_TRIANGLE_BITS | triangleId;
+    return primitiveId << PRIM_TRIANGLE_BIT_COUNT | triangleId;
 }
 
-void DecodeVisibilityBuffer(uint data, out uint objectId, out uint triangleId)
+void DecodePrimitiveVisibility(uint data, out uint primitiveId, out uint triangleId)
 {
-	objectId = data >> NUM_TRIANGLE_BITS;
-	triangleId = data & TRIANGLE_MASK;
+    primitiveId = data >> PRIM_TRIANGLE_BIT_COUNT;
+    triangleId = data & TRIANGLE_MASK(PRIM_TRIANGLE_BIT_COUNT);
+}
+
+uint EncodeMeshletVisibility(uint meshletId, uint triangleId)
+{
+    return meshletId << MESHLET_TRIANGLE_BIT_COUNT | triangleId;
+}
+
+void DecodeMeshletVisibility(uint data, out uint meshletId, out uint triangleId)
+{
+    meshletId = data >> MESHLET_TRIANGLE_BIT_COUNT;
+    triangleId = data & TRIANGLE_MASK(MESHLET_TRIANGLE_BIT_COUNT);
 }
 
 

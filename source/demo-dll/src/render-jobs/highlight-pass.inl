@@ -76,7 +76,7 @@ namespace RenderJob::HighlightPass
 
 			// PSO - Shaders
 			{
-				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/highlight-pass.hlsl", L"vs_main", L"" , L"vs_6_6" });
+				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"geo-raster/highlight-pass.hlsl", L"vs_main", PrintString(L"USING_MESHLETS=%d", passDesc.renderConfig.UseMeshlets ? 1 : 0) , L"vs_6_6" });
 				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"geo-raster/highlight-pass.hlsl", L"ps_main", L"" , L"ps_6_6"});
 
 				psoDesc.VS.pShaderBytecode = vsBlob->GetBufferPointer();

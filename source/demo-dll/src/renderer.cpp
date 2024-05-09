@@ -1373,7 +1373,9 @@ void Renderer::Render(const FRenderState& renderState)
 
 	// If the scene has no primitives, it means that loading hasn't finished. So, skip rendering the scene.
 	const size_t totalPrimitives = renderState.m_scene->m_primitiveCount;
-	if (totalPrimitives > 0)
+	const size_t totalMeshlets = renderState.m_scene->m_meshletCount;
+	const size_t numDraws = c.UseMeshlets ? totalMeshlets : totalPrimitives;
+	if (numDraws > 0)
 	{
 		// These resources need to be kept alive until all the render jobs have finished and joined
 		FFenceMarker gpuFinishFence = RenderBackend12::GetCurrentFrameFence();
@@ -1469,7 +1471,7 @@ void Renderer::Render(const FRenderState& renderState)
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadWrite,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
-			.size = totalPrimitives * sizeof(FIndirectDrawWithRootConstants) })};
+			.size = numDraws * sizeof(FIndirectDrawWithRootConstants) })};
 
 		// Args buffer for double-sided primitives
 		std::unique_ptr<FShaderBuffer> batchArgsBuffer_DoubleSided{ RenderBackend12::CreateNewShaderBuffer({
@@ -1477,7 +1479,7 @@ void Renderer::Render(const FRenderState& renderState)
 			.type = FShaderBuffer::Type::Raw,
 			.accessMode = FResource::AccessMode::GpuReadWrite,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
-			.size = totalPrimitives * sizeof(FIndirectDrawWithRootConstants) }) };
+			.size = numDraws * sizeof(FIndirectDrawWithRootConstants) }) };
 
 		// Single counts buffer for default and double sided primitives. Respective counts accessed via an offset.
 		std::unique_ptr<FShaderBuffer> batchCountsBuffer{ RenderBackend12::CreateNewShaderBuffer({
@@ -1592,7 +1594,7 @@ void Renderer::Render(const FRenderState& renderState)
 			.accessMode = FResource::AccessMode::CpuWriteOnly,
 			.alloc = FResource::Allocation::Transient(gpuFinishFence),
 			.size = sizeof(FSceneConstants),
-			.uploadCallback = [scene = renderState.m_scene, totalPrimitives, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get(), meshVisibilityBuf = packedMeshVisibilityBuffer.get()](uint8_t* pDest)
+			.uploadCallback = [scene = renderState.m_scene, totalPrimitives, totalMeshlets, lightPropsBuf = packedLightPropertiesBuffer.get(), lightTransformsBuf = packedLightTransformsBuffer.get(), meshVisibilityBuf = packedMeshVisibilityBuffer.get()](uint8_t* pDest)
 			{
 				const size_t lightCount = scene->m_sceneLights.GetCount();
 
@@ -1609,6 +1611,10 @@ void Renderer::Render(const FRenderState& renderState)
 				cb->m_packedScenePrimitivesBufferIndex = scene->m_packedPrimitives->m_descriptorIndices.SRV;
 				cb->m_packedSceneMeshTransformsBufferIndex = scene->m_packedMeshTransforms->m_descriptorIndices.SRV;
 				cb->m_packedSceneMeshVisibilityBufferIndex = meshVisibilityBuf->m_descriptorIndices.SRV;
+				cb->m_meshletCount = totalMeshlets;
+				cb->m_packedMeshletVertexIndexBufferIndex = scene->m_packedMeshletVertexIndexBuffer->m_descriptorIndices.SRV;
+				cb->m_packedMeshletPrimitiveIndexBufferIndex = scene->m_packedMeshletPrimitiveIndexBuffer->m_descriptorIndices.SRV;
+				cb->m_packedSceneMeshletsBufferIndex = scene->m_packedMeshlets->m_descriptorIndices.SRV;
 				cb->m_sceneMaterialBufferIndex = scene->m_packedMaterials->m_descriptorIndices.SRV;
 				cb->m_lightCount = scene->m_sceneLights.GetCount();
 				cb->m_packedLightIndicesBufferIndex = lightCount > 0 ? scene->m_packedLightIndices->m_descriptorIndices.SRV : -1;
@@ -1711,7 +1717,7 @@ void Renderer::Render(const FRenderState& renderState)
 			batchCullDesc.batchCountsBuffer = batchCountsBuffer.get();
 			batchCullDesc.sceneConstantBuffer = cbSceneConstants.get();
 			batchCullDesc.viewConstantBuffer = cbViewConstants.get();
-			batchCullDesc.primitiveCount = totalPrimitives;
+			batchCullDesc.drawCount = numDraws;
 			batchCullDesc.renderConfig = c;
 
 			RenderJob::Result batchCullJob = RenderJob::BatchCullingPass::Execute(s_jobSync.get(), batchCullDesc);
@@ -1749,7 +1755,8 @@ void Renderer::Render(const FRenderState& renderState)
 			visDesc.visBufferFormat = visBufferFormat;
 			visDesc.resX = resX;
 			visDesc.resY = resY;
-			visDesc.scenePrimitiveCount = totalPrimitives;
+			visDesc.drawCount = numDraws;
+			visDesc.renderConfig = c;
 
 			RenderJob::Result visibilityJob = RenderJob::VisibilityPass::Execute(s_jobSync.get(), visDesc);
 			sceneRenderJobs.push_back(visibilityJob.m_task);
@@ -1768,6 +1775,7 @@ void Renderer::Render(const FRenderState& renderState)
 			gbufferComputeDesc.resX = resX;
 			gbufferComputeDesc.resY = resY;
 			gbufferComputeDesc.scene = renderState.m_scene;
+			gbufferComputeDesc.renderConfig = c;
 
 			RenderJob::Result gbufferComputeJob = RenderJob::GBufferComputePass::Execute(s_jobSync.get(), gbufferComputeDesc);
 			sceneRenderJobs.push_back(gbufferComputeJob.m_task);
@@ -2047,7 +2055,7 @@ void Renderer::Render(const FRenderState& renderState)
 	}
 
 	// Render UI
-	RenderJob::UIPass::Desc uiDesc = { RenderBackend12::GetBackBuffer(), c, totalPrimitives == 0 };
+	RenderJob::UIPass::Desc uiDesc = { RenderBackend12::GetBackBuffer(), c, numDraws == 0 };
 	ImDrawData* imguiDraws = ImGui::GetDrawData();
 	if (imguiDraws && imguiDraws->CmdListsCount > 0)
 	{
