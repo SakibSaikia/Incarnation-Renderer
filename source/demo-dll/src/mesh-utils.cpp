@@ -681,9 +681,9 @@ void MeshUtils::Meshletize(
 
         uint32_t tri[3] =
         {
-            indices[index * 3],
-            indices[index * 3 + 1],
             indices[index * 3 + 2],
+            indices[index * 3 + 1],
+            indices[index * 3],
         };
 
         assert(tri[0] < vertexCount);
