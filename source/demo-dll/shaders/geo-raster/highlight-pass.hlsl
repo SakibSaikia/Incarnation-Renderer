@@ -12,7 +12,7 @@
 struct FPassConstants
 {
 	uint m_objectId;
-	uint m_indexOffset;
+	uint m_triangleId;
 };
 
 ConstantBuffer<FPassConstants> g_passCb : register(b0);
@@ -20,21 +20,44 @@ ConstantBuffer<FViewConstants> g_viewCb : register(b1);
 ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 
-float4 vs_main(uint index : SV_VertexID) : SV_POSITION
+float4 vs_main(uint invocationIndex : SV_VertexID) : SV_POSITION
 {
+#if USING_MESHLETS
+	// Use object id to retrieve the meshlet info
+	ByteAddressBuffer meshletsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshletsBufferIndex];
+	const FGpuMeshlet meshlet = meshletsBuffer.Load<FGpuMeshlet>(g_passCb.m_objectId * sizeof(FGpuMeshlet));
+    uint meshIndex = meshlet.m_meshIndex;
+	
+    // MeshletVertIndex is the index of the vertex within the meshlet eg. 0, 1, 2, etc.
+	// The packed triangle index buffer contains one uint for every triangle packed as 10:10:10:2
+    uint meshletTriangleIndex = g_passCb.m_triangleId + invocationIndex / 3;
+    uint triangleVertIndex = invocationIndex % 3;
+    
+	ByteAddressBuffer packedTriangleIndexBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedMeshletPrimitiveIndexBufferIndex];
+    uint packedMeshletTriangleIndex = packedTriangleIndexBuffer.Load<uint>((meshlet.m_triangleBegin + meshletTriangleIndex) * sizeof(uint));
+    uint meshletVertIndex = 0xff & (packedMeshletTriangleIndex >> ((2 - triangleVertIndex) * 10));
+    
+    // Compute the unique vertex index for the current meshlet vert
+    ByteAddressBuffer packedVertexIndexBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedMeshletVertexIndexBufferIndex];
+    uint vertIndex = packedVertexIndexBuffer.Load<uint>((meshlet.m_vertexBegin + meshletVertIndex) * sizeof(uint));
+    
+#else
 	// Use object id to retrieve the primitive info
 	ByteAddressBuffer primitivesBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedScenePrimitivesBufferIndex];
 	const FGpuPrimitive primitive = primitivesBuffer.Load<FGpuPrimitive>(g_passCb.m_objectId * sizeof(FGpuPrimitive));
+    uint meshIndex = primitive.m_meshIndex;
+	
+	// vert index
+    uint indexOffset = g_passCb.m_triangleId * 3;
+    uint vertIndex = MeshMaterial::GetUint(indexOffset + invocationIndex, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+#endif
 
-	ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
-	float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(primitive.m_meshIndex * sizeof(float4x4));
+    ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
+	float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(meshIndex * sizeof(float4x4));
 	localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
-
-	// index
-	uint vertIndex = MeshMaterial::GetUint(g_passCb.m_indexOffset + index, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
-
+    
 	// position
-	float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	return mul(worldPos, g_viewCb.m_viewProjTransform);
 }

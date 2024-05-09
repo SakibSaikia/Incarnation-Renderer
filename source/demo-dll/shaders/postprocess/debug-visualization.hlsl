@@ -126,7 +126,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 		{
 			FIndirectDrawWithRootConstants cmd = (FIndirectDrawWithRootConstants)0;
 			cmd.m_rootConstants[0] = objectId;
-			cmd.m_rootConstants[1] = triangleId * 3;
+			cmd.m_rootConstants[1] = triangleId;
 			cmd.m_drawArguments.m_vertexCount = 3;
 			cmd.m_drawArguments.m_instanceCount = 1;
 			cmd.m_drawArguments.m_startVertexLocation = 0;
