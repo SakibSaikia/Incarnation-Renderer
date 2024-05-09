@@ -40,6 +40,7 @@ float4 vs_main(uint invocationIndex : SV_VertexID) : SV_POSITION
     // Compute the unique vertex index for the current meshlet vert
     ByteAddressBuffer packedVertexIndexBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedMeshletVertexIndexBufferIndex];
     uint vertIndex = packedVertexIndexBuffer.Load<uint>((meshlet.m_vertexBegin + meshletVertIndex) * sizeof(uint));
+    int positionAccessor = meshlet.m_positionAccessor;
     
 #else
 	// Use object id to retrieve the primitive info
@@ -50,6 +51,7 @@ float4 vs_main(uint invocationIndex : SV_VertexID) : SV_POSITION
 	// vert index
     uint indexOffset = g_passCb.m_triangleId * 3;
     uint vertIndex = MeshMaterial::GetUint(indexOffset + invocationIndex, primitive.m_indexAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    int positionAccessor = primitive.m_positionAccessor;
 #endif
 
     ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
@@ -57,7 +59,7 @@ float4 vs_main(uint invocationIndex : SV_VertexID) : SV_POSITION
 	localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
     
 	// position
-    float3 position = MeshMaterial::GetFloat3(vertIndex, primitive.m_positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
+    float3 position = MeshMaterial::GetFloat3(vertIndex, positionAccessor, g_sceneCb.m_sceneMeshAccessorsIndex, g_sceneCb.m_sceneMeshBufferViewsIndex);
 	float4 worldPos = mul(float4(position, 1.f), localToWorld);
 	return mul(worldPos, g_viewCb.m_viewProjTransform);
 }
