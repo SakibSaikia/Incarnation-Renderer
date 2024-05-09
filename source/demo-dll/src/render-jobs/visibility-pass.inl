@@ -68,7 +68,7 @@ namespace RenderJob::VisibilityPass
 			// Clear to max object ID (see encoding.hlsli). G-Buffer pass skips decoding if it encouters this value.
 			// Float clear values are converted to integers if RT format is int/uint. 
 			// See https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#ClearView
-			uint32_t clearValue = 0xFFFE0000;
+			uint32_t clearValue = 0xFFFFF000;
 			float clearColor[] = { clearValue, clearValue, clearValue, clearValue };
 			d3dCmdList->ClearRenderTargetView(rtvs[0], clearColor, 0, nullptr);
 			d3dCmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 0.f, 0xff, 0, nullptr);

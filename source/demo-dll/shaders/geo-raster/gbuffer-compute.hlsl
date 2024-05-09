@@ -175,7 +175,7 @@ void cs_main(uint3 dispatchThreadId : SV_DispatchThreadID)
         ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
 
         int visBufferValue = visBufferTex[dispatchThreadId.xy];
-        if (visBufferValue != 0xFFFE0000)
+        if (visBufferValue != 0xFFFFF000)
         {
 #if USING_MESHLETS
              // Retrieve meshlet id and triangle id from vis buffer
