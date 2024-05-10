@@ -1501,6 +1501,10 @@ void FScene::GenerateMeshlets(const tinygltf::Model& model)
 		}
 	}
 
+	const float beforeProgress = FScene::s_loadProgress;
+	const float progressIncrement = FScene::s_meshletizationTimeFrac / totalCount;
+	std::mutex progressUpdateMutex;
+
 	concurrency::parallel_for(0, (int)primitiveList.size(), [&](int i)
 		{
 			SCOPED_CPU_EVENT("meshletize", PIX_COLOR_DEFAULT);
@@ -1545,7 +1549,12 @@ void FScene::GenerateMeshlets(const tinygltf::Model& model)
 				indices.data(), indices.size(),
 				positions.data(), positions.size(),
 				primitive->m_meshlets);
+
+			std::lock_guard<std::mutex> guard(progressUpdateMutex);
+			FScene::s_loadProgress += progressIncrement;
 		});
+
+	FScene::s_loadProgress = beforeProgress + FScene::s_meshletizationTimeFrac;
 }
 
 void FScene::Clear()
