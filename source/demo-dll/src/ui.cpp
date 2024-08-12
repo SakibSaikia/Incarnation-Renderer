@@ -631,7 +631,8 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 		ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 		FRenderStats stats = Renderer::GetRenderStats();
-		ImGui::Text("Primitive Culling		%.2f%%", 100.f * stats.m_culledPrimitives / (float)scene->m_primitiveCount);
+		const size_t objectCount = settings->UseMeshlets ? scene->m_meshletCount : scene->m_primitiveCount;
+		ImGui::Text("Object Culling		   %.2f%%", 100.f * stats.m_culledObjects / (float)objectCount);
 
 		const size_t numLights = scene->m_sceneLights.GetCount();
 		ImGuiExt::EditCondition(numLights > 0,

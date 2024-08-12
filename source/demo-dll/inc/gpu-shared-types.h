@@ -250,7 +250,7 @@ struct FIndirectDrawWithRootConstants
 
 struct FRenderStats
 {
-	int m_culledPrimitives;
+	int m_culledObjects; // primitives or clusters depending on the context
 	int m_culledLights;
 };
 

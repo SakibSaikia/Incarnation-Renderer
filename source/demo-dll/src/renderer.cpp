@@ -2069,10 +2069,10 @@ void Renderer::Render(const FRenderState& renderState)
 
 	// Read back render stats from the GPU
 	auto renderStatsReadbackContext = std::make_shared<FResourceReadbackContext>(s_renderStatsBuffer->m_resource);
-	FFenceMarker readbackCompleteCompleteMarker = renderStatsReadbackContext->StageSubresources(s_jobSync->GetCpuFence());
-	auto readbackJob = concurrency::create_task([readbackCompleteCompleteMarker]()
+	FFenceMarker readbackCompleteMarker = renderStatsReadbackContext->StageSubresources(s_jobSync->GetCpuFence());
+	auto readbackJob = concurrency::create_task([readbackCompleteMarker]()
 	{
-		readbackCompleteCompleteMarker.Wait();
+		readbackCompleteMarker.Wait();
 	}).then([renderStatsReadbackContext]()
 	{
 		s_renderStats = *renderStatsReadbackContext->GetBufferData<FRenderStats>();
