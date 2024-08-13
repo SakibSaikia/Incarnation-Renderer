@@ -62,11 +62,11 @@ vs_to_ps vs_meshlet_main(uint invocationIndex : SV_VertexID)
 
 	// Load the meshlet from the packed meshlets buffer using the meshlet id
     ByteAddressBuffer meshletsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshletsBufferIndex];
-    FGpuMeshlet meshlet = meshletsBuffer.Load < FGpuMeshlet > (meshletId * sizeof(FGpuMeshlet));
+    FGpuMeshlet meshlet = meshletsBuffer.Load<FGpuMeshlet>(meshletId * sizeof(FGpuMeshlet));
 	
 	// Meshlet transform
     ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
-    float4x4 localToWorld = meshTransformsBuffer.Load <float4x4>(meshlet.m_meshIndex * sizeof(float4x4));
+    float4x4 localToWorld = meshTransformsBuffer.Load<float4x4>(meshlet.m_meshIndex * sizeof(float4x4));
     localToWorld = mul(localToWorld, g_sceneCb.m_sceneRotation);
 	
 	// MeshletVertIndex is the index of the vertex within the meshlet eg. 0, 1, 2, etc.
