@@ -9,10 +9,10 @@ namespace RenderJob::DebugVizPass
 		FShaderSurface* aoBuffer;
 		FShaderSurface* bentNormalsBuffer;
 		FShaderBuffer* indirectArgsBuffer;
+		FSystemBuffer* sceneConstantBuffer;
+		FSystemBuffer* viewConstantBuffer;
 		Vector2 jitter;
 		FConfig renderConfig;
-		uint32_t resX, resY;
-		uint32_t mouseX, mouseY;
 		const FScene* scene;
 		const FView* view;
 	};
@@ -138,18 +138,7 @@ namespace RenderJob::DebugVizPass
 				int aoTextureIndex;
 				int bentNormalsTextureIndex;
 				int indirectArgsBufferIndex;
-				int sceneMeshAccessorsIndex;
-				int sceneMeshBufferViewsIndex;
-				int scenePrimitivesIndex;
-				int sceneMeshletsIndex;
-				int viewmode;
-				uint32_t resX;
-				uint32_t resY;
-				uint32_t mouseX;
-				uint32_t mouseY;
 				uint32_t lightClusterSlices;
-				uint32_t __padding[2];
-				Matrix invProjectionTransform;
 			} rootConstants = {
 					(int)passDesc.visBuffer->m_descriptorIndices.SRV,
 					(int)passDesc.gbuffers[0]->m_descriptorIndices.SRV,
@@ -159,20 +148,11 @@ namespace RenderJob::DebugVizPass
 					(int)passDesc.aoBuffer->m_descriptorIndices.SRV,
 					(int)passDesc.bentNormalsBuffer->m_descriptorIndices.SRV,
 					(int)passDesc.indirectArgsBuffer->m_descriptorIndices.UAV,
-					(int)passDesc.scene->m_packedMeshAccessors->m_descriptorIndices.SRV,
-					(int)passDesc.scene->m_packedMeshBufferViews->m_descriptorIndices.SRV,
-					(int)passDesc.scene->m_packedPrimitives->m_descriptorIndices.SRV,
-					(int)passDesc.scene->m_packedMeshlets->m_descriptorIndices.SRV,
-					passDesc.renderConfig.Viewmode,
-					passDesc.resX,
-					passDesc.resY,
-					passDesc.mouseX,
-					passDesc.mouseY,
-					passDesc.renderConfig.LightClusterDimZ,
-					0,0,
-					(passDesc.view->m_projectionTransform * Matrix::CreateTranslation(passDesc.jitter.x, passDesc.jitter.y, 0.f)).Invert()
+					passDesc.renderConfig.LightClusterDimZ
 			};
 			d3dCmdList->SetGraphicsRoot32BitConstants(0, sizeof(rootConstants) / 4, &rootConstants, 0);
+			d3dCmdList->SetGraphicsRootConstantBufferView(1, passDesc.viewConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
+			d3dCmdList->SetGraphicsRootConstantBufferView(2, passDesc.sceneConstantBuffer->m_resource->m_d3dResource->GetGPUVirtualAddress());
 
 			// Transitions
 			passDesc.visBuffer->m_resource->Transition(cmdList, visBufferTransitionToken, 0, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);

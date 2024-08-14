@@ -24,23 +24,26 @@ ConstantBuffer<FSceneConstants> g_sceneCb : register(b2);
 
 bool FrustumCull(float4 boundingSphere, float4x4 meshTransform)
 {
-    float4x4 localToWorld = mul(meshTransform, g_sceneCb.m_sceneRotation);
-
     // Gribb-Hartmann frustum plane extraction
-    // http://www.cs.otago.ac.nz/postgrads/alexis/planeExtraction.pdf
+    // https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf
     // https://fgiesen.wordpress.com/2012/08/31/frustum-planes-from-the-projection-matrix/
+    
+    float4x4 localToWorld = mul(meshTransform, g_sceneCb.m_sceneRotation);
     float4x4 M = transpose(mul(localToWorld, g_viewCb.m_cullViewProjTransform));
+    
+    // Since M is combined world-view-projection matrix, the resulting plane equations are in object space
     float4 nPlane = M[3] - M[2];
     float4 lPlane = M[3] + M[0];
     float4 rPlane = M[3] - M[0];
     float4 bPlane = M[3] + M[1];
     float4 tPlane = M[3] - M[1];
 
-    // Primitive bounds
+    // Object bounds (primivite or meshlet)
     const float4 boundsCenter = float4(boundingSphere.xyz, 1.f);
     const float boundsRadius = boundingSphere.w;
 
-    // Frustum test - scale the radius by the plane normal instead of normalizing the plane
+    // Frustum test - dot(P,Q) is the signed distance from from point P to plane Q
+    // Scale the bounds radius by the plane normal instead of normalizing the plane
     return (dot(boundsCenter, nPlane) + boundsRadius * length(nPlane.xyz) >= 0)
         && (dot(boundsCenter, lPlane) + boundsRadius * length(lPlane.xyz) >= 0)
         && (dot(boundsCenter, rPlane) + boundsRadius * length(rPlane.xyz) >= 0)

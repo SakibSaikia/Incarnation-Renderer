@@ -1975,12 +1975,10 @@ void Renderer::Render(const FRenderState& renderState)
 				desc.indirectArgsBuffer = meshHighlightIndirectArgs.get();
 				desc.jitter = pixelJitter;
 				desc.renderConfig = c;
-				desc.resX = resX;
-				desc.resY = resY;
-				desc.mouseX = renderState.m_mouseX;
-				desc.mouseY = renderState.m_mouseY;
 				desc.scene = renderState.m_scene;
 				desc.view = &renderState.m_view;
+				desc.sceneConstantBuffer = cbSceneConstants.get();
+				desc.viewConstantBuffer = cbViewConstants.get();
 
 				RenderJob::Result debugVizJob = RenderJob::DebugVizPass::Execute(s_jobSync.get(), desc);
 				sceneRenderJobs.push_back(debugVizJob.m_task);
