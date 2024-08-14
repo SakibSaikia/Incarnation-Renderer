@@ -68,7 +68,11 @@ namespace RenderJob::DebugVizPass
 				D3D12_SHADER_BYTECODE& vs = psoDesc.VS;
 				D3D12_SHADER_BYTECODE& ps = psoDesc.PS;
 
-				std::wstring shaderMacros = PrintString(L"VIEWMODE=%d USING_MESHLETS=%d", passDesc.renderConfig.Viewmode, passDesc.renderConfig.UseMeshlets ? 1 : 0);
+				std::wstring shaderMacros = PrintString(
+					L"VIEWMODE=%d USING_MESHLETS=%d SHOW_OBJECT_BOUNDS=%d", 
+					passDesc.renderConfig.Viewmode, 
+					passDesc.renderConfig.UseMeshlets ? 1 : 0, 
+					passDesc.renderConfig.ShowObjectBounds ? 1 : 0);
 				IDxcBlob* vsBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"vs_main", L"" , L"vs_6_6" });
 				IDxcBlob* psBlob = RenderBackend12::CacheShader({ L"postprocess/debug-visualization.hlsl", L"ps_main", shaderMacros, L"ps_6_6"});
 

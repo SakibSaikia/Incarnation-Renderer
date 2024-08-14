@@ -104,6 +104,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
 			RWByteAddressBuffer argsBuffer = ResourceDescriptorHeap[g_indirectArgsBufferIndex];
 			argsBuffer.Store(0, cmd);
 			
+		#if SHOW_OBJECT_BOUNDS // Render the bounds of the highligted primitive or meshlet
             ByteAddressBuffer meshTransformsBuffer = ResourceDescriptorHeap[g_sceneCb.m_packedSceneMeshTransformsBufferIndex];
             float4x4 meshTransform = meshTransformsBuffer.Load<float4x4>(meshIndex * sizeof(float4x4));
             float4 boundsPos = float4(boundingSphere.x, boundingSphere.y, boundingSphere.z, 1.f);
@@ -116,6 +117,7 @@ float4 ps_main(vs_to_ps input) : SV_Target
                 boundsPos.x, boundsPos.y, boundsPos.z, 1.f
             };
             DrawDebugPrimitive((uint) DebugShape::Sphere, float4(0, 1.f, 0.f, 1.f), scaledBoundsTransform);
+		#endif
         }
 
 		return hsv2rgb(float3(Halton(objectId, 3) * 360.f, 0.85f, 0.95f)).rgbr;

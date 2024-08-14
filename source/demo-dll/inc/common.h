@@ -30,6 +30,7 @@ struct FConfig
 	bool UseMeshlets = true;
 	bool FreezeCulling = false;
 	bool ShowLightBounds = false;
+	bool ShowObjectBounds = false;
 	int LightClusterDimX = 16;
 	int LightClusterDimY = 9;
 	int LightClusterDimZ = 24;

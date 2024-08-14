@@ -599,7 +599,13 @@ void UI::Update(Demo::App* demoApp, const float deltaTime)
 				ImGui::RadioButton("Reflections", &settings->Viewmode, (int)Viewmode::Reflections);
 				ImGui::RadioButton("Ambient Occlusion", &settings->Viewmode, (int)Viewmode::AmbientOcclusion);
 				ImGui::RadioButton("Bent Normals", &settings->Viewmode, (int)Viewmode::BentNormals);
-				ImGui::RadioButton("Object IDs", &settings->Viewmode, (int)Viewmode::ObjectIds);
+				ImGui::RadioButton("Object IDs", &settings->Viewmode, (int)Viewmode::ObjectIds); 
+				ImGui::SameLine();
+				ImGuiExt::EditCondition(settings->Viewmode == (int)Viewmode::ObjectIds,
+				[&]()
+				{
+					ImGui::Checkbox("Show Bounds", &settings->ShowObjectBounds);
+				});
 				ImGui::RadioButton("Triangle IDs", &settings->Viewmode, (int)Viewmode::TriangleIds);
 				ImGui::RadioButton("Light Cluster Slices", &settings->Viewmode, (int)Viewmode::LightClusterSlices);
 				ImGui::TreePop();
